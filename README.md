@@ -4,8 +4,9 @@
 
 <h1 align="center">Ecli</h1>
 <p align="center">
-  <b>The Next-Gen Terminal IDE</b><br/>
+  <b>The Next-Gen Terminal IDE www.ecli.io</b><br/>
   A modern, AI-powered, extensible code editor for the terminal.
+  
 </p>
 
 ---
