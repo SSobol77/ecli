@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/SSobol77/ecli/main/assets/logo.png" alt="Ecli Logo" width="200"/>
+  <img src="https://github.com/SSobol77/ecli/blob/main/img/logo_m.png" alt="Ecli Logo" width="200"/>
 </p>
 
 <h1 align="center">Ecli</h1>
@@ -36,7 +36,7 @@ With pip:
 
 ```bash
 pip install ecli
-
+```
 
 
 
