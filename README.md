@@ -17,6 +17,8 @@
 **Ecli** (short for *Editor CLI*) is a next-generation terminal IDE.  
 It brings the power of modern development tools into your terminal - fast, extensible, AI-ready.
 
+<br>
+
 ### ✨ Key Features
 
 - 🧠 **AI Panel** - integrated assistant for code, docs, and refactoring  
