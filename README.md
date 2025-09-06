@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://github.com/SSobol77/ecli/blob/main/img/logo_m.png" alt="Ecli Logo" width="200"/>
+  <img src="https://github.com/SSobol77/ecli/blob/main/img/logo_m.png" alt="ecli Logo" width="200"/>
 </p>
 
-<h1 align="center">Ecli</h1>
+<h1 align="center">ecli</h1>
 <p align="center">
   <b>The Next-Gen Terminal IDE www.ecli.io</b><br/>
   A modern, AI-powered, extensible code editor for the terminal.
