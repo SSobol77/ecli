@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=ECLI
+Comment=ECLI — fast terminal code editor
+Exec=ecli
+Terminal=true
+Type=Application
+Categories=Development;Utility;

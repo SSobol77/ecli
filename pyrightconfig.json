@@ -1,0 +1,15 @@
+{
+    "include": [
+        "ecli",
+        "tests"
+    ],
+    // ИСПРАВЛЕНО: Переносим настройку проверки типов сюда
+    "typeCheckingMode": "strict",
+    "venvPath": ".",
+    "venv": ".venv",
+    "reportMissingImports": "warning",
+    "reportMissingTypeStubs": "warning",
+    // Вы можете добавить другие правила Pyright здесь, если понадобится
+    "pythonVersion": "3.13",
+    "pythonPlatform": "Linux"
+}

@@ -1,0 +1,245 @@
+# ecli.utils.default_config.toml
+# ECLI Editor Default Configuration
+# This is the default configuration file for ECLI Editor.
+# It contains settings for various features, including colors, editor preferences,
+# keybindings, file icons, supported formats, comments, AI integration, and more.
+# You can modify this file to customize your ECLI Editor experience.
+
+[colors]
+error = "red"
+status = "bright_white"
+green = "green"
+
+[editor]
+use_system_clipboard = true 
+default_new_filename = "new_file.py"
+tab_size = 4
+use_spaces = true
+
+[fonts]
+font_family = "monospace"
+font_size = 12
+
+[keybindings]
+delete = "del"
+paste = "ctrl+v"
+copy = "ctrl+c"
+cut = "ctrl+x"
+undo = "ctrl+z"
+redo = "ctrl+y"
+lint = "f4"
+new_file = "f2"
+open_file = "ctrl+o"
+save_file = "ctrl+s"
+save_as = "f5"
+select_all = "ctrl+a"
+quit = "ctrl+q"
+goto_line = "ctrl+g"
+git_menu = "f9"
+cancel_operation = "esc"
+find = "ctrl+f"
+find_next = "f3"
+search_and_replace = "f6"
+help = "f1"
+extend_selection_left = ["shift+left", "alt-h"] #TTY
+extend_selection_right = ["shift+right", "alt-l"] #TTY
+extend_selection_up = ["shift+up", "alt-k"] #TTY
+extend_selection_down = ["shift+down", "alt-j"] #TTY
+handle_up = ["up"]
+handle_down = ["down"]
+handle_left = ["left"]
+handle_right = ["right"]
+
+[ai]
+default_provider = "gemini"
+
+# Определяем [ai.keys] как таблицу (словарь)
+[ai.keys]
+openai = ""
+gemini = ""
+mistral = ""
+claude = ""
+grok = ""
+huggingface = ""
+
+# Определяем [ai.models] как другую вложенную таблицу
+[ai.models]
+openai = "gpt-4o"
+gemini = "gemini-2.5-pro"
+mistral = "mistral-large-latest"
+claude = "claude-3-opus-20240229"
+grok = "grok-1.5"
+huggingface = "microsoft/DialoGPT-large"
+
+[git]
+enabled = true
+
+[settings]
+auto_save_interval = 5
+show_git_info = true
+
+
+[file_icons]
+docs = "📘" 
+python = "🐍"
+toml = "❄️"
+javascript = "📜"
+typescript = "📑"
+php = "🐘"
+ruby = "♦️"
+css = "🎨"
+html = "🌐"
+json = "📊"
+yaml = "⚙️"
+xml = "📰"
+markdown = "📗"
+text = "📝"
+shell = "💫"
+dart = "🎯"
+go = "🐹"
+c = "🇨"
+cpp = "🇨➕"
+java = "☕"
+julia = "🧮"
+rust = "🦀"
+csharp = "♯"
+scala = "💎"
+r = "📉"
+swift = "🐦"
+dockerfile = "🐳"
+terraform = "🛠️"
+jenkins = "🧑‍✈️"
+puppet = "🎎"
+saltstack = "🧂"
+git = "🔖"
+notebook = "📒"
+diff = "↔️"
+makefile = "🛠️"
+ini = "🔩"
+csv = "🗂️"
+sql = "💾"
+graphql = "📈"
+kotlin = "📱"
+lua = "🌙"
+perl = "🐪"
+powershell = "💻"
+nix = "❄️"
+image = "🖼️"
+audio = "🎵"
+video = "🎞️"
+archive = "📦"
+font = "🖋️"
+binary = "⚙️"
+document = "📄"
+folder = "📁"
+folder_open = "📂"
+default = "❓"
+
+[supported_formats]
+docs = ["readme", "docs", "todo", "changelog", "license", "contributing", "code_of_conduct"] 
+python = ["py", "pyw", "pyc", "pyd"]
+toml = ["toml","tml","nix"]
+javascript = ["js", "mjs", "cjs", "jsx"]
+typescript = ["ts", "tsx", "mts", "cts"]
+php = ["php", "php3", "php4", "php5", "phtml"]
+ruby = ["rb", "erb", "rake", "rbw", "gemspec"]     
+css = ["css"]
+html = ["html", "htm", "xhtml"]
+json = ["json", "jsonc", "geojson", "webmanifest"]
+yaml = ["yaml", "yml"]
+xml = ["xml", "xsd", "xsl", "xslt", "plist", "rss", "atom", "csproj", "svg"]
+markdown = ["md", "markdown", "mdown", "mkd"]
+text = ["txt", "log", "rst", "srt", "sub", "me"]
+shell = ["sh", "bash", "zsh", "fish", "ksh", "csh", "tcsh", "dash", "ash", "cmd", "command", "tool", "bat", "ps1", "psm1"]
+dart = ["dart"]
+go = ["go"]
+c = ["c", "h"]
+cpp = ["cpp", "cxx", "cc", "hpp", "hxx", "hh", "inl", "tpp"]
+java = ["java", "jar", "class"]
+julia = ["jl"]
+rust = ["rs", "rlib"]
+csharp = ["cs"]
+scala = ["scala", "sc"]
+r = ["r", "R", "rds", "rda"]
+swift = ["swift"]
+dockerfile = ["Dockerfile", "dockerfile"]
+terraform = ["tf", "tfvars"]
+jenkins = ["Jenkinsfile","jenkinsfile", "groovy"]
+puppet = ["pp"]
+saltstack = ["sls"]
+git = ["gitignore", "gitattributes", "gitmodules", "gitkeep", "gitconfig", "config"]
+notebook = ["ipynb"]
+diff = ["diff", "patch"]
+makefile = ["Makefile", "makefile", "mk", "mak"]
+ini = ["ini", "cfg", "conf", "properties", "editorconfig"]
+csv = ["csv", "tsv"]
+sql = ["sql"]
+graphql = ["graphql", "gql"]
+kotlin = ["kt", "kts"]
+lua = ["lua"]
+perl = ["pl", "pm", "t", "pod"]
+powershell = ["ps1", "psm1", "psd1"]
+nix = ["nix"]
+image = ["jpg", "jpeg", "png", "gif", "bmp", "ico", "webp", "tiff", "tif", "heic", "heif"]
+audio = ["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"]
+video = ["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]
+archive = ["zip", "tar", "gz", "tgz", "bz2", "rar", "7z", "xz", "iso", "deb", "rpm", "pkg"]
+font = ["ttf", "otf", "woff", "woff2", "eot"]
+binary = ["exe", "dll", "so", "o", "bin", "app", "com", "msi", "dmg"]
+document = ["doc", "docx", "odt", "rtf", "pdf", "ppt", "pptx", "odp", "xls", "xlsx", "ods", "epub", "mobi"]
+
+[comments]
+python = { line_prefix = "# ", docstring_delim = '"""' }
+ruby = { line_prefix = "# ", block_delims = ["=begin", "=end"] }
+perl = { line_prefix = "# ", block_delims = ["=pod", "=cut"] }
+lua = { line_prefix = "-- ", block_delims = ["--[[", "]]"] }
+javascript = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+typescript = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+php = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+html = { block_delims = ["<!--", "-->"] }
+xml = { block_delims = ["<!--", "-->"] }
+css = { block_delims = ["/*", "*/"] }
+scss = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+graphql = { line_prefix = "# " }
+# There are no standard comments for json in TOML, but you can leave them for your parser
+# json = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+c = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+cpp = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+csharp = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+java = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+go = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+rust = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+swift = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+kotlin = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+scala = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+dart = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+haskell = { line_prefix = "-- ", block_delims = ["{-", "-}"] }
+elixir = { line_prefix = "# ", docstring_delim = '"""' }
+erlang = { line_prefix = "% " }
+clojure = { line_prefix = ";; " }
+fsharp = { line_prefix = "// ", block_delims = ["(*", "*)"] }
+ocaml = { block_delims = ["(*", "*)"] }
+shell = { line_prefix = "# " }
+powershell = { line_prefix = "# ", block_delims = ["<#", "#>"] }
+dockerfile = { line_prefix = "# " }
+makefile = { line_prefix = "# " }
+terraform = { line_prefix = "# ", block_delims = ["/*", "*/"] }
+jenkins = { line_prefix = "// ", block_delims = ["/*", "*/"] }
+puppet = { line_prefix = "# " }
+saltstack = { line_prefix = "# " }
+nix = { line_prefix = "# ", block_delims = ["/*", "*/"] }
+vim = { line_prefix = '" ' }
+assembly = { line_prefix = "; " }
+sql = { line_prefix = "-- ", block_delims = ["/*", "*/"] }
+yaml = { line_prefix = "# " }
+toml = { line_prefix = "# " }
+ini = { line_prefix = "; " }
+markdown = { block_delims = ["<!--", "-->"] }
+latex = { line_prefix = "% " }
+r = { line_prefix = "# " }
+julia = { line_prefix = "# ", block_delims = ["#=", "=#"] }
+matlab = { line_prefix = "% ", block_delims = ["%{", "%}"] }
+nim = { line_prefix = "# ", block_delims = ["#[", "]#"] }
+crystal = { line_prefix = "# " }
+zig = { line_prefix = "// " }
+bat = { line_prefix = "REM " }
