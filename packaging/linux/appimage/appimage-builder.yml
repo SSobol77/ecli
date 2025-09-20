@@ -1,0 +1,39 @@
+# Configuration for appimage-builder (https://appimage-builder.readthedocs.io/)
+# Builds an AppImage from a pre-populated AppDir containing the ecli binary.
+version: 1
+
+AppDir:
+  path: packaging/linux/appimage/AppDir # base AppDir folder
+  app_info:
+    id: io.ecli.app
+    name: ECLI
+    icon: ecli # without .png; the file resides in icons
+    version: "0.1.0" # inject the version via sed in CI
+    exec: usr/bin/ecli # path to the executable inside the AppImage
+    exec_args: $@
+  runtime:
+    env:
+      APPDIR: $APPDIR
+
+  files:
+    include:
+      - packaging/linux/appimage/AppDir/usr/bin/ecli
+      - packaging/linux/appimage/AppDir/usr/share/applications/ecli.desktop
+      - packaging/linux/appimage/AppDir/usr/share/icons/hicolor/256x256/apps/ecli.png
+    exclude:
+      - "**/*.pyc"
+
+  apt:
+    arch: amd64
+    sources:
+      - sourceline: "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ noble main universe"
+    include:
+      - libstdc++6
+      - libc6
+      - zlib1g
+      - libgcc-s1
+    exclude: []
+
+AppImage:
+  arch: x86_64
+  update-information: "gh-releases-zsync|SSobol77|ecli|latest|ECLI-*.AppImage.zsync"

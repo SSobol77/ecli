@@ -1,0 +1,13 @@
+{
+    "include": [
+        "ecli",
+        "tests"
+    ],
+    "typeCheckingMode": "strict",
+    "venvPath": ".",
+    "venv": ".venv",
+    "reportMissingImports": "warning",
+    "reportMissingTypeStubs": "warning",
+    "pythonVersion": "3.13",
+    "pythonPlatform": "Linux"
+}

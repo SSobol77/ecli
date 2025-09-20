@@ -1,0 +1,1311 @@
+keybindings = { }
+
+
+[logging]
+file_level = "DEBUG"
+console_level = "WARNING"
+log_to_console = false
+separate_error_log = false
+
+
+[ai]
+default_provider = "openai"
+
+
+[ai.keys]
+openai = "${OPENAI_API_KEY}"
+gemini = "${GEMINI_API_KEY}"
+mistral = "${MISTRAL_API_KEY}"
+grok = "${GROK_API_KEY}"
+claude = "${CLAUDE_API_KEY}"
+huggingface = "${HUGGINGFACE_API_KEY}"
+anthropic_api_key = "${ANTHROPIC_API_KEY}"
+xai_api_key = "${XAI_API_KEY}"
+
+
+[ai.models]
+openai = "gpt-4o"
+gemini = "gemini-1.5-flash-latest"
+mistral = "mistral-7b"
+claude = "claude-sonnet-4-20250514"
+grok = "grok-3-latest"
+huggingface = "microsoft/DialoGPT-large"
+
+
+[colors]
+line_number = "blue"
+cursor = "yellow"
+literal = "magenta"
+decorator = "cyan"
+selector = "magenta"
+property = "cyan"
+punctuation = "white"
+status = "bright_white"
+variable = "white"
+tag = "blue"
+attribute = "cyan"
+magic = "magenta"
+builtin = "yellow"
+exception = "red"
+class = "yellow"
+escape = "cyan"
+background = "#0D1117"
+foreground = "#C9D1D9"
+comment = "#456954"
+keyword = "#D2A8FF"
+string = "#A5D6FF"
+number = "#79C0FF"
+function = "#FFA657"
+constant = "#D29922"
+type = "#F2CC60"
+operator = "#F0F6FC"
+selection_bg = "#264F78"
+search_highlight = "#FF1493"
+status_bg = "#161B22"
+status_fg = "#C9D1D9"
+git_clean = "#79C0FF"
+git_dirty = "#FFAB70"
+error = "#FF7B72"
+
+
+[fonts]
+font_family = "monospace"
+font_size = 16
+
+
+[editor]
+use_system_clipboard = true
+show_line_numbers = true
+tab_size = 4
+use_spaces = true
+word_wrap = false
+auto_indent = true
+auto_brackets = true
+
+
+[settings]
+auto_save_interval = 5
+show_git_info = true
+
+
+[theme]
+name = "dark"
+
+
+[theme.ui]
+background = "#252526"
+foreground = "#CCCCCC"
+accent = "#007ACC"
+selection = "#264F78"
+inactive_selection = "#3A3D41"
+cursor = "#AEAFAD"
+
+
+[linter]
+enabled = true
+auto_install = true
+exclude = [ ".git", "__pycache__", ".venv" ]
+
+
+[file_icons]
+docs = "📘"
+text = "📝"
+code = "💻"
+python = "🐍"
+toml = "❄️"
+javascript = "📜"
+typescript = "📑"
+php = "🐘"
+ruby = "♦️"
+css = "🎨"
+html = "🌐"
+json = "📊"
+yaml = "⚙️"
+xml = "📰"
+markdown = "📗"
+plaintext = "📄"
+shell = "💫"
+dart = "🎯"
+go = "🐹"
+c = "🇨"
+cpp = "🇨➕"
+java = "☕"
+julia = "🧮"
+rust = "🦀"
+csharp = "♯"
+scala = "💎"
+r = "📉"
+swift = "🐦"
+dockerfile = "🐳"
+terraform = "🛠️"
+jenkins = "🧑‍✈️"
+puppet = "🎎"
+saltstack = "🧂"
+git = "🔖"
+notebook = "📒"
+diff = "↔️"
+makefile = "🛠️"
+ini = "⚙️"
+csv = "🔩"
+sql = "💾"
+graphql = "📈"
+kotlin = "📱"
+lua = "🌙"
+perl = "🐪"
+powershell = "💻"
+folder = "📁"
+folder_open = "📂"
+nix = "❄️"
+image = "🖼️"
+audio = "🎵"
+video = "🎞️"
+archive = "📦"
+font = "🖋️"
+binary = "⚙️"
+document = "📄"
+default = "❓"
+
+
+[comments.python]
+line_prefix = "# "
+docstring_delim = '"""'
+
+
+[comments.ruby]
+line_prefix = "# "
+block_delims = [ "=begin", "=end" ]
+
+
+[comments.perl]
+line_prefix = "# "
+block_delims = [ "=pod", "=cut" ]
+
+
+[comments.lua]
+line_prefix = "-- "
+block_delims = [ "--[[", "]]" ]
+
+
+[comments.javascript]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.typescript]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.php]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.html]
+block_delims = [ "<!--", "-->" ]
+
+
+[comments.xml]
+block_delims = [ "<!--", "-->" ]
+
+
+[comments.css]
+block_delims = [ "/*", "*/" ]
+
+
+[comments.scss]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.c]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.cpp]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.csharp]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.java]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.go]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.rust]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.swift]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.kotlin]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.scala]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.dart]
+line_prefix = "// "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.haskell]
+line_prefix = "-- "
+block_delims = [ "{-", "-}" ]
+
+
+[comments.elixir]
+line_prefix = "# "
+docstring_delim = '"""'
+
+
+[comments.erlang]
+line_prefix = "% "
+
+
+[comments.clojure]
+line_prefix = ";; "
+
+
+[comments.fsharp]
+line_prefix = "// "
+block_delims = [ "(*", "*)" ]
+
+
+[comments.ocaml]
+block_delims = [ "(*", "*)" ]
+
+
+[comments.shell]
+line_prefix = "# "
+
+
+[comments.powershell]
+line_prefix = "# "
+block_delims = [ "<#", "#>" ]
+
+
+[comments.dockerfile]
+line_prefix = "# "
+
+
+[comments.makefile]
+line_prefix = "# "
+
+
+[comments.vim]
+line_prefix = '" '
+
+
+[comments.assembly]
+line_prefix = "; "
+
+
+[comments.sql]
+line_prefix = "-- "
+block_delims = [ "/*", "*/" ]
+
+
+[comments.yaml]
+line_prefix = "# "
+
+
+[comments.toml]
+line_prefix = "# "
+
+
+[comments.ini]
+line_prefix = "; "
+
+
+[comments.latex]
+line_prefix = "% "
+
+
+[comments.r]
+line_prefix = "# "
+
+
+[comments.matlab]
+line_prefix = "% "
+block_delims = [ "%{", "%}" ]
+
+
+[comments.nim]
+line_prefix = "# "
+block_delims = [ "#[", "]#" ]
+
+
+[comments.crystal]
+line_prefix = "# "
+
+
+[comments.zig]
+line_prefix = "// "
+
+
+[comments.bat]
+line_prefix = "REM "
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "\\b(and|as|assert|async|await|break|class|continue|def|del|elif|else|except|exec|finally|for|from|global|if|import|in|is|lambda|nonlocal|not|or|pass|print|raise|return|try|while|with|yield)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "@\\w+(?:\\([^)]*?\\))?"
+color = "decorator"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "(?s)(f|r|rf|fr)?('''(\\\\.|[^'])*?'''|\"\"\"(\\\\.|[^\"])*?\"\"\")"
+color = "string"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "(?s)(b|rb|br)?('''(\\\\.|[^'])*?'''|\"\"\"(\\\\.|[^\"])*?\"\"\")"
+color = "string"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "(f|r|rf|fr|b|br|rb)?(['\"])(?:\\\\\\2|.)*?\\2"
+color = "string"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "\\b(?:\\d+\\.\\d+|\\.\\d+|\\d+)(?:e[+-]?\\d+)?j?\\b"
+color = "literal"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "\\b0[bB][01_]+\\b"
+color = "literal"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "\\b0[oO][0-7_]+\\b"
+color = "literal"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "\\b0[xX][0-9a-fA-F_]+\\b"
+color = "literal"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "#.*$"
+color = "comment"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = '""".*?"""'
+color = "comment"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "'''(.*?)'''"
+color = "comment"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "\\b(ArithmeticError|AssertionError|AttributeError|BaseException|BlockingIOError|BrokenPipeError|BufferError|BytesWarning|ChildProcessError|ConnectionAbortedError|ConnectionError|ConnectionRefusedError|ConnectionResetError|DeprecationWarning|EOFError|Ellipsis|EncodingWarning|EnvironmentError|Exception|FileExistsError|FileNotFoundError|FloatingPointError|FutureWarning|GeneratorExit|IOError|ImportError|ImportWarning|IndentationError|IndexError|InterruptedError|IsADirectoryError|KeyError|KeyboardInterrupt|LookupError|MemoryError|ModuleNotFoundError|NameError|NotADirectoryError|NotImplemented|NotImplementedError|OSError|OverflowError|PendingDeprecationWarning|PermissionError|ProcessLookupError|RecursionError|ReferenceError|ResourceWarning|RuntimeError|RuntimeWarning|StopAsyncIteration|StopIteration|SyntaxError|SyntaxWarning|SystemError|SystemExit|TabError|TimeoutError|TypeError|UnboundLocalError|UnicodeDecodeError|UnicodeEncodeError|UnicodeError|UnicodeTranslateError|UnicodeWarning|UserWarning|ValueError|Warning|ZeroDivisionError|__import__|abs|all|any|ascii|bin|bool|breakpoint|bytearray|bytes|callable|chr|classmethod|compile|complex|copyright|credits|delattr|dict|dir|divmod|enumerate|eval|exec|exit|filter|float|format|frozenset|getattr|globals|hasattr|hash|help|hex|id|input|int|isinstance|issubclass|iter|len|license|list|locals|map|max|memoryview|min|next|object|oct|open|ord|pow|print|property|range|repr|reversed|round|set|setattr|slice|sorted|staticmethod|str|sum|super|tuple|type|vars|zip)\\b"
+color = "builtins"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "\\b(List|Dict|Tuple|Set|Optional|Union|Any|Callable|TypeVar|Generic|Iterable|Iterator|Sequence|Mapping|MutableMapping|Awaitable|Coroutine|AsyncIterable|NamedTuple|TypedDict|Final|Literal|Annotated|TypeGuard|Self|Protocol|dataclass|field|classmethod|staticmethod)\\b"
+color = "type"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "r[\"'].*?[\"']"
+color = "regexp"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "\\b(True|False|None|Ellipsis|NotImplemented)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "__(?:init|new|str|repr|enter|exit|getattr|setattr|delattr|getitem|setitem|delitem|iter|next|call|len|contains|add|sub|mul|truediv|floordiv|mod|pow|lshift|rshift|and|or|xor|invert|eq|ne|lt|le|gt|ge|bool|bytes|format|hash|dir|sizeof|getstate|setstate|reduce|reduce_ex|subclasshook|del|doc|name|qualname|module|defaults|kwdefaults|annotations|dict|weakref|slots|class|self|cls)__(?=\\()"
+color = "magic"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "\\bimport\\s+\\w+(?:\\.\\w+)*\\b"
+color = "import"
+
+
+[[syntax_highlighting.python.patterns]]
+pattern = "\\bfrom\\s+\\w+(?:\\.\\w+)*\\s+import\\b"
+color = "import"
+
+
+[[syntax_highlighting.toml.patterns]]
+pattern = "^\\s*\\[\\[.*?\\]\\]"
+color = "keyword"
+
+
+[[syntax_highlighting.toml.patterns]]
+pattern = "^\\s*\\[.*?\\]"
+color = "keyword"
+
+
+[[syntax_highlighting.toml.patterns]]
+pattern = "^\\s*([\\w-]+)\\s*=\\s*"
+color = "property"
+
+
+[[syntax_highlighting.toml.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.toml.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.toml.patterns]]
+pattern = "\\b(true|false)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.toml.patterns]]
+pattern = "\\b(\\d+\\.?\\d*|0x[0-9a-fA-F]+)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.toml.patterns]]
+pattern = "#.*"
+color = "comment"
+
+
+[[syntax_highlighting.toml.patterns]]
+pattern = "\\b(\\w+)\\s*=\\s*(\\[.*?\\])"
+color = "type"
+
+
+[[syntax_highlighting.toml.patterns]]
+pattern = "\\b(\\w+)\\s*=\\s*\\{.*?\\}"
+color = "type"
+
+
+[[syntax_highlighting.javascript.patterns]]
+pattern = "//.*$"
+color = "comment"
+
+
+[[syntax_highlighting.javascript.patterns]]
+pattern = "/\\*[\\s\\S]*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.javascript.patterns]]
+pattern = "\\b(let|const|var|function|return|if|else|for|while|do|switch|case|break|continue|try|catch|finally|new|delete|typeof|instanceof|this|class|extends|super|import|export|from|as|async|await|yield)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.javascript.patterns]]
+pattern = "`[^`]*`"
+color = "string"
+
+
+[[syntax_highlighting.javascript.patterns]]
+pattern = '"[^"]*"'
+color = "string"
+
+
+[[syntax_highlighting.javascript.patterns]]
+pattern = "\\b(\\d+(\\.\\d+)?|true|false|null|undefined|NaN|Infinity)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.javascript.patterns]]
+pattern = "console\\.log"
+color = "keyword"
+
+
+[[syntax_highlighting.javascript.patterns]]
+pattern = "\\$\\{[^}]*\\}"
+color = "literal"
+
+
+[[syntax_highlighting.css.patterns]]
+pattern = "[\\w#.-]+(?=\\s*\\{)"
+color = "selector"
+
+
+[[syntax_highlighting.css.patterns]]
+pattern = "([\\w-]+)(?=:)"
+color = "property"
+
+
+[[syntax_highlighting.css.patterns]]
+pattern = ":\\s*(.*?);"
+color = "string"
+
+
+[[syntax_highlighting.css.patterns]]
+pattern = "!important"
+color = "literal"
+
+
+[[syntax_highlighting.css.patterns]]
+pattern = "/\\*.*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.html.patterns]]
+pattern = "<\\/?[\\w-]+"
+color = "tag"
+
+
+[[syntax_highlighting.html.patterns]]
+pattern = "\\b([\\w-]+)="
+color = "attribute"
+
+
+[[syntax_highlighting.html.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.html.patterns]]
+pattern = "<!--.*?-->"
+color = "comment"
+
+
+[[syntax_highlighting.json.patterns]]
+pattern = '"(\w+)"\s*:'
+color = "keyword"
+
+
+[[syntax_highlighting.json.patterns]]
+pattern = ':\s*(".*?"|[\d.]+|true|false|null)'
+color = "string"
+
+
+[[syntax_highlighting.json.patterns]]
+pattern = "[\\[\\]{}]"
+color = "punctuation"
+
+
+[[syntax_highlighting.yaml.patterns]]
+pattern = "^\\\\s*[\\\\w-]+(?::\\\\s*)?"
+color = "keyword"
+
+
+[[syntax_highlighting.yaml.patterns]]
+pattern = ":\\s*(\".*?\"|'.*?')"
+color = "string"
+
+
+[[syntax_highlighting.yaml.patterns]]
+pattern = "^\\s*-\\s+"
+color = "punctuation"
+
+
+[[syntax_highlighting.yaml.patterns]]
+pattern = "\\b(true|false|yes|no|on|off|\\d+\\.?\\d*)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.yaml.patterns]]
+pattern = "#.*"
+color = "comment"
+
+
+[[syntax_highlighting.markdown.patterns]]
+pattern = "^#{1,6}\\s"
+color = "keyword"
+
+
+[[syntax_highlighting.markdown.patterns]]
+pattern = "\\*{1,2}.*?\\*{1,2}"
+color = "emphasis"
+
+
+[[syntax_highlighting.markdown.patterns]]
+pattern = "`.*?`"
+color = "string"
+
+
+[[syntax_highlighting.markdown.patterns]]
+pattern = "\\[.*?\\]\\(.*?\\)"
+color = "literal"
+
+
+[[syntax_highlighting.markdown.patterns]]
+pattern = "^>\\s.*"
+color = "comment"
+
+
+[[syntax_highlighting.xml.patterns]]
+pattern = "<\\/?[\\w-]+"
+color = "tag"
+
+
+[[syntax_highlighting.xml.patterns]]
+pattern = "\\b([\\w-]+)="
+color = "attribute"
+
+
+[[syntax_highlighting.xml.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.xml.patterns]]
+pattern = "<!--.*?-->"
+color = "comment"
+
+
+[[syntax_highlighting.shell.patterns]]
+pattern = "#.*"
+color = "comment"
+
+
+[[syntax_highlighting.shell.patterns]]
+pattern = "\\$\\{.*?\\}"
+color = "literal"
+
+
+[[syntax_highlighting.shell.patterns]]
+pattern = "\\$\\w+"
+color = "literal"
+
+
+[[syntax_highlighting.shell.patterns]]
+pattern = '".*?"'
+color = "string"
+
+
+[[syntax_highlighting.shell.patterns]]
+pattern = "'.*?'"
+color = "string"
+
+
+[[syntax_highlighting.shell.patterns]]
+pattern = "\\b(if|then|else|elif|fi|for|do|done|while|case|esac|echo|exit|export|source|alias)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.dart.patterns]]
+pattern = "//.*$"
+color = "comment"
+
+
+[[syntax_highlighting.dart.patterns]]
+pattern = "/\\*[\\s\\S]*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.dart.patterns]]
+pattern = "\\b(abstract|as|assert|async|await|break|case|catch|class|const|continue|default|deferred|do|dynamic|else|enum|export|extends|external|factory|final|finally|for|get|if|implements|import|in|is|library|new|null|operator|part|rethrow|return|set|static|super|switch|sync|this|throw|try|typedef|var|void|while|with|yield)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.dart.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.dart.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.dart.patterns]]
+pattern = "\\b(\\d+(\\.\\d+)?|true|false)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.go.patterns]]
+pattern = "//.*$"
+color = "comment"
+
+
+[[syntax_highlighting.go.patterns]]
+pattern = "/\\*[\\s\\S]*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.go.patterns]]
+pattern = "\\b(break|case|chan|const|continue|default|defer|else|fallthrough|for|func|go|goto|if|import|interface|map|package|range|return|select|struct|switch|type|var)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.go.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.go.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.go.patterns]]
+pattern = "\\b(\\d+(\\.\\d+)?|true|false|nil)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.c.patterns]]
+pattern = "//.*$"
+color = "comment"
+
+
+[[syntax_highlighting.c.patterns]]
+pattern = "/\\*[\\s\\S]*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.c.patterns]]
+pattern = "\\b(auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|int|long|register|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|namespace|using|template|class|private|protected|public|virtual|friend|inline|new|delete|try|catch|throw|operator|explicit|export|bool|true|false|nullptr)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.c.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.c.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.c.patterns]]
+pattern = "\\b(\\d+(\\.\\d+)?|NULL)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.c.patterns]]
+pattern = '#include\\s*[<"].*?[>"]'
+color = "decorator"
+
+
+[[syntax_highlighting.c.patterns]]
+pattern = "#\\w+"
+color = "decorator"
+
+
+[[syntax_highlighting.cpp.patterns]]
+pattern = "//.*$"
+color = "comment"
+
+
+[[syntax_highlighting.cpp.patterns]]
+pattern = "/\\*[\\s\\S]*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.cpp.patterns]]
+pattern = "\\b(auto|break|case|char|const|continue|default|do|double|else|enum|extern|float|for|goto|if|int|long|register|return|short|signed|sizeof|static|struct|switch|typedef|union|unsigned|void|volatile|while|namespace|using|template|class|private|protected|public|virtual|friend|inline|new|delete|try|catch|throw|operator|explicit|export|bool|true|false|nullptr)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.cpp.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.cpp.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.cpp.patterns]]
+pattern = "\\b(\\d+(\\.\\d+)?|NULL)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.cpp.patterns]]
+pattern = '#include\\s*[<"].*?[>"]'
+color = "decorator"
+
+
+[[syntax_highlighting.cpp.patterns]]
+pattern = "#\\w+"
+color = "decorator"
+
+
+[[syntax_highlighting.java.patterns]]
+pattern = "//.*$"
+color = "comment"
+
+
+[[syntax_highlighting.java.patterns]]
+pattern = "/\\*[\\s\\S]*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.java.patterns]]
+pattern = "\\b(abstract|assert|boolean|break|byte|case|catch|char|class|const|continue|default|do|double|else|enum|extends|final|finally|float|for|goto|if|implements|import|instanceof|int|interface|long|native|new|package|private|protected|public|return|short|static|strictfp|super|switch|synchronized|this|throw|throws|transient|try|void|volatile|while|true|false|null)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.java.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.java.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.java.patterns]]
+pattern = "\\b(\\d+(\\.\\d+)?)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.java.patterns]]
+pattern = "@\\w+"
+color = "decorator"
+
+
+[[syntax_highlighting.julia.patterns]]
+pattern = "#.*$"
+color = "comment"
+
+
+[[syntax_highlighting.julia.patterns]]
+pattern = "#=.*?=#"
+color = "comment"
+
+
+[[syntax_highlighting.julia.patterns]]
+pattern = "\\b(abstract|baremodule|begin|break|catch|const|continue|do|else|elseif|end|export|false|finally|for|function|global|if|import|in|let|local|macro|module|quote|return|struct|true|try|using|while)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.julia.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.julia.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.julia.patterns]]
+pattern = "\\b(\\d+(\\.\\d+)?|true|false|nothing|missing|Inf|NaN)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.rust.patterns]]
+pattern = "//.*$"
+color = "comment"
+
+
+[[syntax_highlighting.rust.patterns]]
+pattern = "/\\*[\\s\\S]*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.rust.patterns]]
+pattern = "\\b(abstract|alignof|as|async|await|be|box|break|const|continue|crate|do|dyn|else|enum|extern|false|final|fn|for|if|impl|in|let|loop|match|mod|move|mut|offsetof|override|priv|pub|pure|ref|return|sizeof|static|self|Self|struct|super|trait|true|type|typeof|unsafe|unsized|use|virtual|where|while|yield)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.rust.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.rust.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.rust.patterns]]
+pattern = "\\b(\\d+(\\.\\d+)?|true|false|Some|None)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.csharp.patterns]]
+pattern = "//.*$"
+color = "comment"
+
+
+[[syntax_highlighting.csharp.patterns]]
+pattern = "/\\*[\\s\\S]*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.csharp.patterns]]
+pattern = "\\b(abstract|as|base|bool|break|byte|case|catch|char|checked|class|const|continue|decimal|default|delegate|do|double|else|enum|event|explicit|extern|false|finally|fixed|float|for|foreach|goto|if|implicit|in|int|interface|internal|is|lock|long|namespace|new|null|object|operator|out|override|params|private|protected|public|readonly|ref|return|sbyte|sealed|short|sizeof|stackalloc|static|string|struct|switch|this|throw|true|try|typeof|uint|ulong|unchecked|unsafe|ushort|using|virtual|void|volatile|while|add|alias|ascending|async|await|by|descending|dynamic|equals|from|get|global|group|into|join|let|on|orderby|partial|remove|select|set|value|var|where|yield)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.csharp.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.csharp.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.csharp.patterns]]
+pattern = "\\b(\\d+(\\.\\d+)?|true|false|null)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.csharp.patterns]]
+pattern = "@\\w+"
+color = "decorator"
+
+
+[[syntax_highlighting.dockerfile.patterns]]
+pattern = "#.*$"
+color = "comment"
+
+
+[[syntax_highlighting.dockerfile.patterns]]
+pattern = "^(FROM|MAINTAINER|RUN|CMD|LABEL|EXPOSE|ENV|ADD|COPY|ENTRYPOINT|VOLUME|USER|WORKDIR|ARG|ONBUILD|STOPSIGNAL|HEALTHCHECK|SHELL)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.dockerfile.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.dockerfile.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.terraform.patterns]]
+pattern = "#.*$"
+color = "comment"
+
+
+[[syntax_highlighting.terraform.patterns]]
+pattern = "/\\*[\\s\\S]*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.terraform.patterns]]
+pattern = "\\b(resource|data|provider|variable|output|module|locals|terraform)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.terraform.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.terraform.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.terraform.patterns]]
+pattern = "\\b(true|false|null)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.terraform.patterns]]
+pattern = "\\$\\{.*?\\}"
+color = "literal"
+
+
+[[syntax_highlighting.jenkins.patterns]]
+pattern = "//.*$"
+color = "comment"
+
+
+[[syntax_highlighting.jenkins.patterns]]
+pattern = "/\\*[\\s\\S]*?\\*/"
+color = "comment"
+
+
+[[syntax_highlighting.jenkins.patterns]]
+pattern = "\\b(pipeline|agent|stages|steps|sh|node|stage|environment|parameters|when|parallel|script|post|always|success|failure|unstable|changed|echo|dir|withCredentials|withEnv)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.jenkins.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.jenkins.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.jenkins.patterns]]
+pattern = "\\b(true|false|null)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.puppet.patterns]]
+pattern = "#.*$"
+color = "comment"
+
+
+[[syntax_highlighting.puppet.patterns]]
+pattern = "\\b(class|define|node|include|require|contain|inherits|if|elsif|else|case|when|default|and|or|in|true|false|undef)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.puppet.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.puppet.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.puppet.patterns]]
+pattern = "\\$[a-zA-Z0-9_:]+"
+color = "literal"
+
+
+[[syntax_highlighting.puppet.patterns]]
+pattern = "=>"
+color = "punctuation"
+
+
+[[syntax_highlighting.saltstack.patterns]]
+pattern = "#.*$"
+color = "comment"
+
+
+[[syntax_highlighting.saltstack.patterns]]
+pattern = "^\\s*[\\w\\.-]+:"
+color = "keyword"
+
+
+[[syntax_highlighting.saltstack.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.saltstack.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.saltstack.patterns]]
+pattern = "\\b(true|false|null|True|False|None)\\b"
+color = "literal"
+
+
+[[syntax_highlighting.saltstack.patterns]]
+pattern = "\\$\\{.*?\\}"
+color = "literal"
+
+
+[[syntax_highlighting.saltstack.patterns]]
+pattern = "\\{\\{.*?\\}\\}"
+color = "literal"
+
+
+[[syntax_highlighting.git.patterns]]
+pattern = "#.*$"
+color = "comment"
+
+
+[[syntax_highlighting.git.patterns]]
+pattern = "\\[(.*?)\\]"
+color = "keyword"
+
+
+[[syntax_highlighting.git.patterns]]
+pattern = "^\\s*[a-zA-Z0-9]+\\s*="
+color = "property"
+
+
+[[syntax_highlighting.git.patterns]]
+pattern = "=\\s*(.*?)$"
+color = "string"
+
+
+[[syntax_highlighting.notebook.patterns]]
+pattern = "\\b(def|class|for|while|if|else|elif|try|except|finally|with|import|from|as|return|yield|break|continue|pass|raise|assert|del|global|nonlocal|True|False|None)\\b"
+color = "keyword"
+
+
+[[syntax_highlighting.notebook.patterns]]
+pattern = "#.*$"
+color = "comment"
+
+
+[[syntax_highlighting.notebook.patterns]]
+pattern = '"(?:\\"|.)*?"'
+color = "string"
+
+
+[[syntax_highlighting.notebook.patterns]]
+pattern = "'(?:\\\\'|.)*?'"
+color = "string"
+
+
+[[syntax_highlighting.notebook.patterns]]
+pattern = "\\b(\\d+(\\.\\d+)?|True|False|None)\\b"
+color = "literal"
+
+
+[supported_formats]
+docs = [
+"readme",
+"docs",
+"todo",
+"changelog",
+"license",
+"contributing",
+"code_of_conduct"
+]
+python = [ "py", "pyw", "pyc", "pyd" ]
+toml = [ "toml", "tml", "nix" ]
+javascript = [ "js", "mjs", "cjs", "jsx" ]
+code = [ "jl", "dart" ]
+css = [ "css" ]
+nix = [ "nix" ]
+html = [ "html", "htm", "xhtml" ]
+json = [ "json", "jsonc", "geojson", "webmanifest" ]
+yaml = [ "yaml", "yml" ]
+xml = [
+"xml",
+"xsd",
+"xsl",
+"xslt",
+"plist",
+"rss",
+"atom",
+"csproj",
+"svg"
+]
+markdown = [ "md", "markdown", "mdown", "mkd" ]
+text = [ "txt", "log", "rst", "srt", "sub", "me" ]
+shell = [
+"sh",
+"bash",
+"zsh",
+"fish",
+"ksh",
+"csh",
+"tcsh",
+"dash",
+"ash",
+"cmd",
+"command",
+"tool",
+"bat"
+]
+dart = [ "dart" ]
+go = [ "go" ]
+c = [ "c", "h" ]
+cpp = [ "cpp", "cxx", "cc", "hpp", "hxx", "hh", "inl", "tpp" ]
+java = [ "java", "jar", "class" ]
+julia = [ "jl" ]
+rust = [ "rs", "rlib" ]
+csharp = [ "cs" ]
+dockerfile = [ "Dockerfile", "dockerfile" ]
+terraform = [ "tf", "tfvars" ]
+jenkins = [ "Jenkinsfile", "jenkinsfile", "groovy" ]
+puppet = [ "pp" ]
+saltstack = [ "sls" ]
+git = [
+"gitignore",
+"gitattributes",
+"gitmodules",
+"gitkeep",
+"gitconfig",
+"config"
+]
+notebook = [ "ipynb" ]
+typescript = [ "ts", "tsx", "mts", "cts" ]
+php = [ "php", "php3", "php4", "php5", "phtml" ]
+ruby = [ "rb", "erb", "rake", "rbw", "gemspec" ]
+scala = [ "scala", "sc" ]
+r = [ "r", "R", "rds", "rda" ]
+swift = [ "swift" ]
+diff = [ "diff", "patch" ]
+makefile = [ "Makefile", "makefile", "mk", "mak" ]
+ini = [ "ini", "cfg", "conf", "properties", "editorconfig" ]
+csv = [ "csv", "tsv" ]
+sql = [ "sql" ]
+graphql = [ "graphql", "gql" ]
+kotlin = [ "kt", "kts" ]
+lua = [ "lua" ]
+perl = [ "pl", "pm", "t", "pod" ]
+powershell = [ "ps1", "psm1", "psd1" ]
+fortran = [ "f", "F", "f90", "F90", "for" ]
+image = [
+"jpg",
+"jpeg",
+"png",
+"gif",
+"bmp",
+"ico",
+"webp",
+"tiff",
+"tif",
+"heic",
+"heif"
+]
+audio = [ "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma" ]
+video = [ "mp4", "mkv", "avi", "mov", "webm", "flv", "wmv" ]
+archive = [
+"zip",
+"tar",
+"gz",
+"tgz",
+"bz2",
+"rar",
+"7z",
+"xz",
+"iso",
+"deb",
+"rpm",
+"pkg"
+]
+font = [ "ttf", "otf", "woff", "woff2", "eot" ]
+binary = [ "exe", "dll", "so", "o", "bin", "app", "com", "msi", "dmg" ]
+document = [
+"doc",
+"docx",
+"odt",
+"rtf",
+"pdf",
+"ppt",
+"pptx",
+"odp",
+"xls",
+"xlsx",
+"ods",
+"epub",
+"mobi"
+]
