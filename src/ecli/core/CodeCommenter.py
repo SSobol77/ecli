@@ -4,11 +4,11 @@
 This module defines the `CodeCommenter` class, which provides comprehensive logic for toggling comments in source code across multiple programming languages. It is designed as a helper component for the main `Ecli` class, enabling advanced comment manipulation features such as adding, removing, and toggling single-line comments, block comments, and language-specific docstrings.
 Key Features:
 -------------
-- **Language-Aware Commenting:** Automatically detects the active programming language and applies the appropriate comment syntax, including support for line comments, block comments, and docstrings.
-- **Context-Sensitive Docstrings:** Intelligently determines whether a selected code region is suitable for a module, class, or function docstring, adhering to PEP 257 and PEP 8 conventions for Python.
-- **Robust Comment Toggling:** Provides seamless toggling between commented and uncommented states for both line and block comments, ensuring code readability and consistency.
-- **Editor Integration:** Operates directly on the editor's text buffer, maintaining cursor position, selection state, and undo history for a smooth user experience.
-- **Extensible Configuration:** Retrieves comment syntax definitions from the editor's configuration, supporting custom languages and comment styles.
+- Language-Aware Commenting: Automatically detects the active programming language and applies the appropriate comment syntax, including support for line comments, block comments, and docstrings.
+- Context-Sensitive Docstrings: Intelligently determines whether a selected code region is suitable for a module, class, or function docstring, adhering to PEP 257 and PEP 8 conventions for Python.
+- Robust Comment Toggling: Provides seamless toggling between commented and uncommented states for both line and block comments, ensuring code readability and consistency.
+- Editor Integration: Operates directly on the editor's text buffer, maintaining cursor position, selection state, and undo history for a smooth user experience.
+- Extensible Configuration: Retrieves comment syntax definitions from the editor's configuration, supporting custom languages and comment styles.
 Intended Usage:
 ---------------
 The `CodeCommenter` class is intended to be instantiated and managed by the main `Ecli` class. All comment-related actions, such as toggling comments or inserting docstrings, are delegated to this component to ensure consistent and language-appropriate behavior.
@@ -133,18 +133,18 @@ class CodeCommenter:
         # Analyze the code context to check if this is a docstring location.
         comment_context = self._analyze_comment_context(start_y, end_y)
 
-        # --- Dispatch to the appropriate handler based on priority ---
-        # 1. Prioritize docstrings if the context is valid and the language supports it.
+        # Dispatch to the appropriate handler based on priority
+        # Prioritize docstrings if the context is valid and the language supports it.
         if comment_context["is_docstring_context"] and language_info.get(
             "docstring_delim"
         ):
             self._toggle_docstring_pep8(
                 start_y, end_y, language_info["docstring_delim"], comment_context
             )
-        # 2. Fall back to line-by-line comments if available.
+        # Fall back to line-by-line comments if available.
         elif language_info.get("line_prefix"):
             self._toggle_line_comments(start_y, end_y, language_info["line_prefix"])
-        # 3. As a last resort, use block comments if the language supports them.
+        # As a last resort, use block comments if the language supports them.
         elif language_info.get("block_delims"):
             self._toggle_block_comment(start_y, end_y, language_info["block_delims"])
         # If no commenting method is available for the language.
@@ -166,20 +166,20 @@ class CodeCommenter:
             - 'block_delims' (Optional[List[str]]): Delimiters for block comments.
             - 'docstring_delim' (Optional[str]): The delimiter for docstrings.
         """
-        # 1. Ensure the language is detected.
+        # Ensure the language is detected.
         if not self.editor.current_language:
             self.editor.detect_language()
         if not self.editor.current_language or not self.editor._lexer:
             logging.warning("_get_language_comment_info: Language not detected.")
             return None
 
-        # 2. Get the comment configuration section.
+        # Get the comment configuration section.
         comments_config = self.editor.config.get("comments", {})
         if not comments_config:
             logging.warning("No [comments] section found in the configuration.")
             return None
 
-        # 3. Create a list of names to check, starting with the primary name.
+        # Create a list of names to check, starting with the primary name.
         # Pygments lexer names are typically lowercase.
         lang_keys_to_check = [self.editor.current_language.lower()]
         lang_keys_to_check.extend(
@@ -240,7 +240,7 @@ class CodeCommenter:
             "indentation": 0,
         }
 
-        # --- Heuristic 1: Check for a module-level docstring at the top of the file ---
+        # 1 Check for a module-level docstring at the top of the file
         # A module docstring must be the first statement in the file.
         if start_y <= 1:  # Check the first or second line (0-indexed).
             significant_code_before = False
@@ -273,7 +273,7 @@ class CodeCommenter:
                 )
                 return context
 
-        # --- Heuristic 2: Check for a docstring immediately following a definition ---
+        # 2 Check for a docstring immediately following a definition statement.
         definition_info = self._find_preceding_definition(start_y)
         if definition_info:
             context.update(
@@ -448,7 +448,7 @@ class CodeCommenter:
 
         first_line_stripped = self.editor.text[start_y].strip()
 
-        # --- Case 1: Check for a single-line docstring ---
+        # Check for a single-line docstring
         # e.g., """content""" on one line.
         if (
             start_y == end_y
@@ -457,7 +457,7 @@ class CodeCommenter:
         ):
             return True, True
 
-        # --- Case 2: Check for a multi-line docstring ---
+        # Check for a multi-line docstring
         # This requires the first line to be just the opening delimiter
         # and the last line to be just the closing delimiter.
         if (
@@ -485,15 +485,14 @@ class CodeCommenter:
             delim: The delimiter string to use.
             indent_str: The indentation string to prepend to the delimiters.
         """
-        # 1. Remember the original cursor line to restore its position later.
+        # Remember the original cursor line to restore its position later.
         original_cursor_y = self.editor.cursor_y
         final_cursor_y = original_cursor_y
 
         if start_y == end_y:
-            # --- Handle single-line docstring creation ---
+            # Handle single-line docstring creation
             line_content = self.editor.text[start_y].strip()
 
-            # --- SAFETY CHECK ---
             # Prevent creating invalid syntax like """ ""-text-"" """
             if delim in line_content:
                 self.editor._set_status_message(
@@ -505,7 +504,7 @@ class CodeCommenter:
             # The cursor Y position doesn't change in this case.
             # The X position will be set to 0 later.
         else:
-            # --- Handle multi-line docstring creation ---
+            # Handle multi-line docstring creation
             # Insert the closing delimiter first to avoid shifting start_y.
             self.editor.text.insert(end_y + 1, f"{indent_str}{delim}")
             # Insert the opening delimiter. This will shift all subsequent lines down.
@@ -522,12 +521,12 @@ class CodeCommenter:
         self.editor.modified = True
         self.editor._set_status_message(f"Added docstring with {delim}")
 
-        # 3. Reset selection and reposition the cursor.
+        # Reset selection and reposition the cursor.
         self.editor.is_selecting = False
         self.editor.selection_start = None
         self.editor.selection_end = None
 
-        # 4. Set the cursor to the beginning of its (now shifted) original line.
+        # Set the cursor to the beginning of its (now shifted) original line.
         self.editor.cursor_y = min(final_cursor_y, len(self.editor.text) - 1)
         self.editor.cursor_x = 0
 
@@ -551,11 +550,11 @@ class CodeCommenter:
             indent_str: The indentation to preserve for single-line unwrapping.
             is_single_line: True if the docstring occupies a single line.
         """
-        # 1. Remember the original cursor line.
+        # Remember the original cursor line.
         original_cursor_y = self.editor.cursor_y
 
         if is_single_line:
-            # --- Handle single-line docstring removal ---
+            # Handle single-line docstring removal
             line = self.editor.text[start_y]
             content = line.strip()
 
@@ -565,7 +564,7 @@ class CodeCommenter:
             # In this case, no lines are deleted, so the original_cursor_y is still valid.
             final_cursor_y = original_cursor_y
         else:
-            # --- Handle multi-line docstring removal ---
+            # Handle multi-line docstring removal
             lines_deleted_before_cursor = 0
 
             # Remove from the bottom up to keep indices stable during deletion.
@@ -591,7 +590,7 @@ class CodeCommenter:
         self.editor.modified = True
         self.editor._set_status_message("Removed docstring")
 
-        # --- Reset selection and set cursor to the corrected position ---
+        # Reset selection and set cursor to the corrected position
         self.editor.is_selecting = False
         self.editor.selection_start = None
         self.editor.selection_end = None
@@ -605,10 +604,10 @@ class CodeCommenter:
     ) -> None:
         """Smartly toggles line comments for the given line range.
         Its heuristic is:
-        1. If **all** non-blank lines in the selection are already commented,
-        the entire block is **uncommented**.
+        1. If all non-blank lines in the selection are already commented,
+        the entire block is uncommented.
         2. Otherwise (if at least one non-blank line is not commented), the
-        entire block is **commented**. Blank lines within the selection
+        entire block is commented. Blank lines within the selection
         are ignored during this check but are not modified.
         """
         prefix_to_check = comment_prefix.strip()

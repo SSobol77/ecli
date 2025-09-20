@@ -79,7 +79,7 @@ from ecli.utils.logging_config import logger
 from ecli.utils.utils import hex_to_xterm
 
 
-# === CONDITIONAL IMPORT FOR UNIX SYSTEMS ===
+# --- CONDITIONAL IMPORT FOR UNIX SYSTEMS ---
 if sys.platform != "win32":
     import termios
 
@@ -242,9 +242,9 @@ class Ecli:
             Methods for block indentation and unindentation.
         comment_lines(), uncomment_lines():
             Methods for commenting and uncommenting lines.
-
     """
 
+    # --- Status message and lint panel management ---
     def _set_status_message(
         self,
         message_for_statusbar: str,
@@ -277,6 +277,7 @@ class Ecli:
             except Exception as e_fallback:
                 logging.critical(f"Failed to set fallback status message: {e_fallback}")
 
+    # Helper for lint panel management
     def _handle_lint_status(
         self, full_lint_output: Optional[str], activate_lint_panel_if_issues: bool
     ) -> None:
@@ -305,6 +306,7 @@ class Ecli:
         if panel_state_or_content_changed and self.lint_panel_active:
             self._force_full_redraw = True
 
+    # -- Initialization and Setup ---
     def __init__(
         self,
         stdscr: "curses.window",
@@ -315,22 +317,22 @@ class Ecli:
         """Creates and fully initializes a `Ecli` instance.
         Delegates complex setup to private helper methods to reduce complexity.
         """
-        # 1. --- Basic setup ---
+        # Basic setup
         self.stdscr = stdscr
         self.config: dict[str, Any] = config
         self.is_lightweight: bool = lightweight_mode
         self.show_line_numbers: bool = show_line_numbers
 
-        # 2. --- Initialize all state attributes ---
+        # Initialize all state attributes
         self._initialize_state()
 
-        # 3. --- Initialize components ---
+        # Initialize components
         self._initialize_components()
 
-        # 4. --- Setup environment (terminal, clipboard, etc.) ---
+        # Setup environment (terminal, clipboard, etc.)
         self._setup_environment()
 
-        # 5. --- Final setup steps ---
+        # Final setup steps
         self.set_initial_cursor_position()
         self._ensure_trailing_newline()
         logging.info(
@@ -338,6 +340,7 @@ class Ecli:
                 Lightweight: {self.is_lightweight}"
         )
 
+    # --- State Initialization ---
     def _initialize_state(self) -> None:
         """Initializes all editor state attributes to their default values."""
         self.text: list[str] = [""]
@@ -374,6 +377,7 @@ class Ecli:
         self._async_results_q: queue.Queue[dict[str, Any]] = queue.Queue()
         self.internal_clipboard: str = ""
 
+    # --- Component Initialization ---
     def _initialize_components(self) -> None:
         """Initializes all editor components like History, Drawer, Git, etc."""
         self.colors: dict[str, int] = {}
@@ -417,6 +421,7 @@ class Ecli:
         self.keybinder: KeyBinder = KeyBinder(self)
         self.handle_input = self.keybinder.handle_input
 
+    # --- Environment Setup ---
     def _setup_environment(self) -> None:
         """Configures terminal settings, clipboard, and auto-save."""
         self.stdscr.keypad(True)
@@ -464,6 +469,7 @@ class Ecli:
         if self.git:
             self.git.update_git_info()
 
+    # --- Clipboard Availability Check ---
     def close(self) -> None:
         """Gracefully shuts down the editor and releases all associated resources.
 
@@ -483,7 +489,7 @@ class Ecli:
                      to shut down all components."
         )
 
-        # --- 1. Stop background tasks (like auto-save) if they exist ---
+        # Stop background tasks (like auto-save) if they exist
         # This logic remains the same, assuming you have an auto-save mechanism.
         try:
             # Check if the auto-save thread exists and signal it to stop.
@@ -500,7 +506,7 @@ class Ecli:
             # Log any other errors during task shutdown.
             logging.warning(f"Exception while stopping background tasks: {e}")
 
-        # --- 2. Delegate LSP/linter shutdown to the LinterBridge component ---
+        # Delegate LSP/linter shutdown to the LinterBridge component
         # Instead of handling the process and messages directly here, we just call
         # the shutdown method on our dedicated component. LinterBridge now
         # encapsulates all the details of stopping the LSP process and its threads.
@@ -511,7 +517,7 @@ class Ecli:
 
         logging.info("Ecli components have been shut down.")
 
-    # --- switch focus panel ---
+    # ---- Switch focus panel ----
     def toggle_focus(self) -> bool:
         """Switches the input focus between the main editor and the active panel."""
         if not self.panel_manager or not self.panel_manager.is_panel_active():
@@ -531,6 +537,7 @@ class Ecli:
         # Toggling focus or displaying a message always requires a redraw.
         return True
 
+    # ---- Git panel show ----
     def show_git_panel(self) -> bool:
         """Shows the Git panel using its persistent instance."""
         # Add None checks for mypy
@@ -555,7 +562,7 @@ class Ecli:
         # message appears), so a redraw is always required.
         return True
 
-    # ───────────────────── Comment/Uncomment Block - Ecli ─────────────────────
+    # --- Comment/Uncomment Block - Ecli ---
     def _determine_lines_to_toggle_comment(self) -> Optional[tuple[int, int]]:
         """Determines the line range affected by comment or uncomment actions.
 
@@ -584,7 +591,7 @@ class Ecli:
             return start_y, end_y
         return self.cursor_y, self.cursor_y
 
-    # ─── Panel toggles ────────────────────────────────────────────
+    # --- Panel toggles ---
     def toggle_widget_panel(self) -> bool:
         """Keeps original AI widget behaviour (bound to F7).
         Shows widget selection menu and launches the selected one.
@@ -594,6 +601,7 @@ class Ecli:
         logging.debug("toggle_widget_panel -> AI panel request.")
         return self.select_ai_provider_and_ask()
 
+    # --- File Browser Panel ---
     def toggle_file_browser(self) -> bool:
         """Shows the file browser panel using its persistent instance."""
         if self.file_browser_instance and self.panel_manager:
@@ -606,6 +614,7 @@ class Ecli:
         # so a redraw is always required.
         return True
 
+    # --- Comment/Uncomment Block ---
     def toggle_comment_block(self) -> bool:
         """Determines the line range and delegates the commenting operation
         to the CodeCommenter helper class.
@@ -614,7 +623,7 @@ class Ecli:
 
         if line_range is None:
             self._set_status_message("No lines selected to comment/uncomment.")
-            # Просто устанавливаем сообщение и позволяем дойти до конца
+            # Set the message and let it go to the end
         else:
             start_y, end_y = line_range
             # Delegate the call to our new object
@@ -624,7 +633,7 @@ class Ecli:
         # so we always consider that a redraw is needed.
         return True
 
-    # --- lsp -------------------------------------------------
+    # --- LSP --- DevOps module reload ---
     def reload_devops_module(self) -> bool:
         """Delegates the request to hot-reload the DevOps linter module.
 
@@ -643,6 +652,13 @@ class Ecli:
         self._set_status_message("Linter component is not active.")
         return False
 
+    # --- Linting and Linter Panel Management ---
+    # Linting is now fully delegated to the LinterBridge component.
+    # This keeps the Ecli class cleaner and separates concerns.
+    # The LinterBridge handles tool selection (LSP vs. external),
+    # execution, and result processing.
+    # Ecli just provides a simple interface to trigger linting and
+    # manage the panel visibility.
     def run_lint_async(self, code: Optional[str] = None) -> bool:
         """Initiates a linting operation for the current buffer.
 
@@ -664,7 +680,7 @@ class Ecli:
 
         # If linter_bridge does not exist, linting is not possible.
         self._set_status_message("Linter component is not active.")
-        return True  # Возвращаем True, так как изменили статусное сообщение
+        return True  # Return True, as we changed the status message
 
     def show_lint_panel(self) -> bool:
         """Toggles the visibility of the linter panel.
@@ -725,7 +741,7 @@ class Ecli:
 
         return state_changed
 
-    # ----- Clipboard Handling --------------------------------------
+    # ----- Clipboard Handling -------
     def _check_pyclip_availability(self) -> bool:  # Added return type hint
         """Checks the availability of the pyperclip library and underlying
         system clipboard utilities.
@@ -802,16 +818,17 @@ class Ecli:
             return self.text[start_row][start_col:end_col]
         # Multi-line selection
         selected_parts = []
-        # 1. Part of the first line
+        # Part of the first line
         selected_parts.append(self.text[start_row][start_col:])
-        # 2. Full middle lines
+        # Full middle lines
         for i in range(start_row + 1, end_row):
             selected_parts.append(self.text[i])
-        # 3. Part of the last line
+        # Part of the last line
         selected_parts.append(self.text[end_row][:end_col])
 
         return "\n".join(selected_parts)
 
+    # --- Copy selected text ---
     def copy(self) -> bool:
         """Copies the selected text to the internal clipboard and, if enabled/available,
         to the system clipboard. This action does not modify the document.
@@ -993,10 +1010,10 @@ class Ecli:
         if self._lexer is None:
             return [(line_content, self.colors.get("default", curses.A_NORMAL))]
 
-        # --- Создаем две разные палитры ---
+        # --- Create two different palettes ---
 
-        # Палитра для современных терминалов
-        # использует семантические цвета из self.colors
+        # Palette for modern terminals
+        # uses semantic colors from self.colors
         semantic_color_map = {
             Token.Keyword: self.colors.get("keyword"),
             Token.Name.Function: self.colors.get("function"),
@@ -1014,7 +1031,7 @@ class Ecli:
             Token.Error: self.colors.get("error"),
         }
 
-        # Палитра для старых TTY-терминалов (жестко заданные цвета)
+        # Palette for legacy TTY terminals (hardcoded colors)
         tty_color_map = {
             Token.Keyword: curses.color_pair(2),
             Token.Keyword.Constant: curses.color_pair(2),
@@ -1062,7 +1079,7 @@ class Ecli:
             Token.Generic.Output: curses.color_pair(0),
         }
 
-        # --- Выбираем, какую палитру использовать ---
+        # --- Choose which palette to use ---
         token_color_map = (
             semantic_color_map if self.is_256_color_terminal else tty_color_map
         )
@@ -1172,7 +1189,7 @@ class Ecli:
         """Gracefully saves, shuts down background services, restores the terminal,
         and exits the application.
         """
-        # 1. Lightweight call protection (inside panels)
+        # Lightweight call protection (inside panels)
         if self.is_lightweight:
             logging.warning(
                 "exit_editor called on a lightweight instance. This is not allowed."
@@ -1192,7 +1209,7 @@ class Ecli:
         # Removed the first duplicate block `if self.is_dirty:`.
         # Now all logging checks are in one place.
 
-        # 2. Handling unsaved changes
+        # Handling unsaved changes
         if self.modified:
             ans = self.prompt("Save changes before exiting? (y/n): ")
             if ans and ans.lower().startswith("y"):
@@ -1222,7 +1239,7 @@ class Ecli:
         # Set the flag to terminate the main loop.
         self.running = False
 
-        # 3. Stop background services
+        # Stop background services
         logging.info("Shutting down background services...")
 
         # Stop the autosave thread
@@ -1236,7 +1253,7 @@ class Ecli:
         # Give the threads a moment to complete.
         time.sleep(0.1)
 
-        # 4. Restore terminal and exit
+        # Restore terminal and exit
         logging.info("Restoring terminal and exiting.")
 
         try:
@@ -1276,24 +1293,24 @@ class Ecli:
         that the editor is always configured with the correct syntax highlighter for the
 
         The process is as follows:
-        1.  **Determine Lexer (`_determine_lexer`)**: It first attempts to find a suitable
+        1.  Determine Lexer (`_determine_lexer`): It first attempts to find a suitable
             Pygments lexer. The detection follows a strict priority:
-            a.  **By Filename**: Tries to find a lexer based on the file's extension
+            a.  By Filename: Tries to find a lexer based on the file's extension
                 (e.g., `.py` -> Python lexer). This is the most reliable method.
-            b.  **By Content**: If filename detection fails (e.g., for a new buffer or
+            b.  By Content: If filename detection fails (e.g., for a new buffer or
                 an unknown extension), it guesses the language by analyzing a sample
                 of the file's content.
-            c.  **Fallback**: If both methods fail, it defaults to a plain `TextLexer`,
+            c.  Fallback: If both methods fail, it defaults to a plain `TextLexer`,
                 which provides no special highlighting.
 
-        2.  **Load Custom Patterns (`_load_custom_syntax_patterns`)**: After a lexer is
+        2.  Load Custom Patterns (`_load_custom_syntax_patterns`): After a lexer is
             determined and `self.current_language` is set, this method checks the
             editor's configuration (`config.toml`) for a `[syntax_highlighting.<language>]`
             section. It loads any custom regex patterns defined there, compiling them
             for performance. These custom rules can augment or override the default
             Pygments highlighting.
 
-        3.  **Clear Cache if Changed (`_clear_cache_if_changed`)**: Finally, it compares
+        3.  Clear Cache if Changed (`_clear_cache_if_changed`): Finally, it compares
             the newly determined lexer and custom patterns against their previous state.
             If there is any change, it invalidates and clears the `lru_cache` for the
             `_get_tokenized_line` method. This ensures that any subsequent screen redraws
@@ -1302,22 +1319,22 @@ class Ecli:
         old_lexer_id = id(self._lexer) if self._lexer else None
         old_custom_patterns = tuple(self.custom_syntax_patterns)
 
-        # Step 1: Determine the new Pygments lexer
+        # Determine the new Pygments lexer
         new_lexer = self._determine_lexer()
         self._lexer = new_lexer
         self.current_language = new_lexer.name.lower()
 
-        # Step 2: Load custom syntax patterns for the detected language
+        # Load custom syntax patterns for the detected language
         self.custom_syntax_patterns = self._load_custom_syntax_patterns()
 
-        # Step 3: Clear tokenization cache if the lexer or patterns have changed
+        # Clear tokenization cache if the lexer or patterns have changed
         self._clear_cache_if_changed(old_lexer_id, old_custom_patterns)
 
     def _determine_lexer(self) -> TextLexer:
         """Determines the appropriate Pygments lexer based on filename and content.
         Follows a priority: filename > content > fallback to TextLexer.
         """
-        # Priority 1: Detect by filename
+        # Detect by filename
         if self.filename and self.filename != "noname":
             try:
                 lexer = get_lexer_for_filename(self.filename, stripall=True)
@@ -1326,7 +1343,7 @@ class Ecli:
             except Exception:
                 logging.debug(f"Pygments: No lexer for filename '{self.filename}'.")
 
-        # Priority 2: Guess from content
+        # Guess from content
         content_sample = "\n".join(self.text[:200])[:10000]
         if content_sample.strip():
             try:
@@ -1336,11 +1353,11 @@ class Ecli:
             except Exception:
                 logging.debug("Pygments: Content guess failed.")
 
-        # Priority 3: Fallback
+        # Fallback
         logging.debug("Pygments: Falling back to TextLexer.")
         return TextLexer()
 
-    def _load_custom_syntax_patterns(self) -> list[tuple[re.Pattern, str]]:  # noqa: python:S3516
+    def _load_custom_syntax_patterns(self) -> list[tuple[re.Pattern, str]]:
         """Loads and compiles custom regex syntax patterns from the config for the current language."""
         if not self.current_language or not self._lexer:
             return []
@@ -1368,6 +1385,7 @@ class Ecli:
                     break  # Stop after finding the first matching language key
         return patterns
 
+    # --- Cache management ---
     def _clear_cache_if_changed(
         self, old_lexer_id: Optional[int], old_custom_patterns: tuple
     ) -> None:
@@ -1392,25 +1410,25 @@ class Ecli:
 
     def apply_custom_highlighting(self, line: str) -> list[tuple[str, int]]:
         """Applies syntax highlighting to a line using custom regex patterns from config."""
-        # Карта для преобразования имен цветов из конфига в атрибуты curses
+        # Map for converting color names from config to curses attributes
         color_map = self.colors
 
-        # Создаем "карту" цветов для каждого символа в строке
-        # Изначально все символы имеют цвет по умолчанию
+        # Create a "map" of colors for each character in the line
+        # Initially, all characters have the default color
         line_len = len(line)
         char_colors = [color_map.get("default", curses.A_NORMAL)] * line_len
 
-        # Применяем каждое правило
+        # Apply each rule
         for pattern, color_name in self.custom_syntax_patterns:
             color_attr = color_map.get(color_name, color_map["default"])
             for match in pattern.finditer(line):
                 start, end = match.span()
-                # "Раскрашиваем" символы, попавшие в совпадение
+                # "Paint" the characters that matched
                 for i in range(start, end):
                     if i < line_len:
                         char_colors[i] = color_attr
 
-        # Собираем строку обратно в сегменты с одинаковым цветом
+        # Assemble the line back into segments with the same color
         if not line:
             return [("", color_map["default"])]
 
@@ -1431,8 +1449,8 @@ class Ecli:
         return segments
 
     def delete_char_internal(self, row: int, col: int) -> str:
-        """Удаляет **один** символ по (row, col) без записи в history.
-        Возвращает удалённый символ (или '').
+        """Deletes one character at (row, col) without writing to history.
+        Returns the deleted character (or '').
         """
         if not (0 <= row < len(self.text)):
             return ""
@@ -1516,8 +1534,8 @@ class Ecli:
                 width += max(w, 0)
         return width
 
-    # ===================== Курсор и его методы ======================
-    # I. Прямое управление позицией курсора (навигация):
+    # ---------------- Cursor and its methods ------------------------
+    # I. Direct control of cursor position (navigation):
     # handle_up(self)
     # handle_down(self)
     # handle_left(self)
@@ -1527,14 +1545,15 @@ class Ecli:
     # handle_page_up(self)
     # handle_page_down(self)
     # goto_line(self)
-    # _goto_match(self, match_index: int) (вспомогательный для поиска)
-    # set_initial_cursor_position(self) (сброс позиции)
+    # _goto_match(self, match_index: int) (helper for searching)
+    # set_initial_cursor_position(self) (reset position)
     #
-    # ** Вспомогательные методы для курсора и прокрутки:
+    # Helper methods for cursor and scrolling:
     # _ensure_cursor_in_bounds(self)
     # _clamp_scroll(self)
+    # _cancel_selection_if_not_extending(self)
 
-    # 1.`array up`
+    # --- `array up` ---
     def handle_up(self) -> bool:  # noqa: python:S3516
         """Move cursor one line up.
         Returns True if cursor or scroll position changed, False otherwise.
@@ -1549,7 +1568,7 @@ class Ecli:
         if self.cursor_y > 0:
             self.cursor_y -= 1
             self.cursor_x = min(self.cursor_x, len(self.text[self.cursor_y]))
-            # _clamp_scroll будет вызван, и он может изменить scroll_top
+            # _clamp_scroll will be called and it can change scroll_top
 
         self._clamp_scroll()  # Always call to ensure scroll is correct
 
@@ -1612,7 +1631,7 @@ class Ecli:
 
         return changed
 
-    # 2. `array down`
+    # --- `array down` ---
     def handle_down(self) -> bool:
         """Moves the cursor one line down.
         Correctly handles moving between text lines and onto the final empty line.
@@ -1621,20 +1640,20 @@ class Ecli:
         if self._cancel_selection_if_not_extending():
             return True
 
-        # Сохраняем начальное состояние для последующего сравнения
+        # Save the initial state for subsequent comparison
         original_y, original_x = self.cursor_y, self.cursor_x
         original_scroll_top = self.scroll_top
 
-        # Проверяем, можно ли двигаться вниз.
-        # self.text всегда имеет пустую строку в конце, поэтому len(self.text) - 1
-        # это индекс последней (пустой) строки, куда еще можно переместиться.
+        # Check if we can move down.
+        # self.text always has an empty string at the end, so len(self.text) - 1
+        # is the index of the last (empty) line we can still move to.
         if self.cursor_y < len(self.text) - 1:
             self.cursor_y += 1
-            # Подстраиваем self.cursor_x под длину новой строки.
+            # Adjust self.cursor_x to the length of the new line.
             self.cursor_x = min(self.cursor_x, len(self.text[self.cursor_y]))
-            self._clamp_scroll()  # Корректируем скролл под новую позицию
+            self._clamp_scroll()  # Adjust scroll to the new position
 
-        # Определяем, изменилось ли что-то в итоге
+        # Determine if anything changed as a result
         position_changed = (self.cursor_y, self.cursor_x) != (original_y, original_x)
         scroll_changed = self.scroll_top != original_scroll_top
 
@@ -1645,20 +1664,20 @@ class Ecli:
                 self.cursor_x,
                 self.scroll_top,
             )
-            # Сбрасываем временные статусные сообщения, если было движение
+            # Reset temporary status messages if there was movement
             if self.status_message not in [
                 "Ready",
                 "",
             ] and not self.status_message.lower().startswith("error"):
                 self._set_status_message("Ready")
-                return True  # Статус изменился, нужна перерисовка
+                return True  # Status changed, so redraw needed
         else:
             logging.debug("cursor ↓ already at the last line.")
 
-        # Возвращаем True, если изменилась позиция курсора ИЛИ позиция скролла
+        # Return True if the cursor position OR scroll position changed
         return position_changed or scroll_changed
 
-    # 3. `array left (<-) `
+    # --- `array left (<-)` ---
     def handle_left(self) -> bool:  # noqa: python:S3516
         """Move cursor one position to the left.
         Returns True if cursor or scroll position changed, False otherwise.
@@ -1738,7 +1757,7 @@ class Ecli:
                     changed = True
         return changed
 
-    # 4. `array right (->)`
+    # --- `array right (->)` ---
     def handle_right(self) -> bool:  # noqa: python:S3516
         """Move cursor one position to the right.
         Returns True if cursor or scroll position changed, False otherwise.
@@ -1807,7 +1826,7 @@ class Ecli:
             self._set_status_message("Cursor error (see log)")
             return True
 
-    # 5. key HOME
+    # --- key HOME ---
     def handle_home(self) -> bool:
         """Moves the cursor to the beginning of the current line.
         Implements "smart home" behavior:
@@ -1880,7 +1899,7 @@ class Ecli:
 
         return changed_state
 
-    # 6. key END
+    # --- key END ---
     def handle_end(self) -> bool:
         """Moves the cursor to the end of the current line.
         Returns True if the cursor or scroll position changed, False otherwise.
@@ -1938,8 +1957,8 @@ class Ecli:
 
         return changed_state
 
-    # 7. key Page-Up
-    def handle_page_up(self) -> bool:  # noqa: python:S3516
+    # --- key Page-Up ---
+    def handle_page_up(self) -> bool:
         """Moves the cursor and view up by approximately one screen height.
 
         This method scrolls the view upwards by the number of currently visible
@@ -2039,7 +2058,7 @@ class Ecli:
         # OR if the status message itself is different from what it was at the start.
         return changed_state or (self.status_message != original_status)
 
-    # 8. key Page-Down
+    # --- key Page-Down ---
     def handle_page_down(self) -> bool:  # noqa: python:S3516
         """Moves the cursor and view down by approximately one screen height of text.
         The cursor attempts to maintain its horizontal column, clamped by line length.
@@ -2118,7 +2137,7 @@ class Ecli:
 
         return changed_state
 
-    # 9. -- GOTO LINE ------------------------------
+    # --- GOTO LINE ---
     def goto_line(self) -> bool:  # noqa: python:S3516
         """Moves the cursor to a specified line number. Supports absolute numbers,
         relative numbers (+N, -N), and percentages (N%).
@@ -2259,7 +2278,7 @@ class Ecli:
             self._set_status_message(f"Goto error: {str(e)[:60]}...")
             return True  # Status changed due to error message
 
-    # 10. вспомогательный для поиска
+    # --- Auxiliary method for searching ---
     def _goto_match(
         self, match_index: int
     ) -> None:  # Added type hint and English docstring
@@ -2273,7 +2292,7 @@ class Ecli:
         Args:
             match_index (int): The index of the desired match in `self.search_matches`.
         """
-        # 1. Validate the match_index and ensure search_matches is populated.
+        # Validate the match_index and ensure search_matches is populated.
         if not self.search_matches or not (0 <= match_index < len(self.search_matches)):
             logging.warning(
                 f"_goto_match called with invalid index {match_index} for "
@@ -2281,7 +2300,7 @@ class Ecli:
             )
             return  # Invalid index or no matches to go to
 
-        # 2. Get the coordinates of the target match.
+        # Get the coordinates of the target match.
         # search_matches stores tuples: (row_index, column_start_index, column_end_index)
         target_row, target_col_start, _ = self.search_matches[
             match_index
@@ -2292,7 +2311,7 @@ class Ecli:
             f"at (row:{target_row}, col:{target_col_start})."
         )
 
-        # 3. Move the logical cursor to the start of the match.
+        # Move the logical cursor to the start of the match.
         # Ensure target_row and target_col_start are valid within the current text buffer.
         # This is a safeguard; _collect_matches should provide valid indices.
         if target_row >= len(self.text):
@@ -2313,7 +2332,7 @@ class Ecli:
         self.cursor_y = target_row
         self.cursor_x = target_col_start
 
-        # 4. Adjust scroll to ensure the new cursor position is visible.
+        # Adjust scroll to ensure the new cursor position is visible.
         # self._clamp_scroll() handles both vertical and horizontal scrolling
         # to bring self.cursor_y and self.cursor_x into view.
         # It also attempts to center the cursor line if it's far off-screen.
@@ -2356,65 +2375,65 @@ class Ecli:
         # This method modifies editor state (cursor, scroll) but does not directly
         # return a bool for redraw; the caller (find_prompt or find_next) handles that.
 
-    # 11. сброс позиции
+    # --- Reset position ---
     def set_initial_cursor_position(self) -> None:
         """Sets the initial cursor position and scrolling offsets."""
         self.cursor_x = 0
         self.cursor_y = 0
         self.scroll_top = 0
         self.scroll_left = 0
-        # При сбросе позиции курсора, сбрасываем и выделение
+        # When you reset the cursor position, you also reset the selection.
         self.is_selecting = False
         self.selection_start = None
         self.selection_end = None
-        self.highlighted_matches = []  # Сбрасываем подсветку поиска
+        self.highlighted_matches = []  # Reset search highlights
         self.search_matches = []
         self.search_term = ""
         self.current_match_idx = -1
 
-    # Вспомогательные методы для курсора и прокрутки:
-    # 12. ── Курсор: прокрутка и ограничение ────────────────────────────────
+    # Helper methods for cursor and scrolling:
+    # --- Cursor: scrolling and clamping ---
     def _clamp_scroll(self) -> None:
-        """Гарантирует, что scroll_top и scroll_left
-        всегда удерживают курсор в видимой области.
-        Корректно обрабатывает случай, когда курсор находится на
-        виртуальной строке после последней строки текста.
+        """Ensures that scroll_top and scroll_left
+        always keep the cursor in the visible area.
+        Correctly handles the case when the cursor is on
+        the virtual line after the last line of text.
         """
-        # размеры окна
+        # Window dimensions
         height, width = self.stdscr.getmaxyx()
-        # область текста по вертикали (высота окна минус строки номера и статус-бара)
+        # Text area height (window height minus line number and status bar)
         text_height = max(1, height - 2)
 
-        # Вертикальная прокрутка (эта логика остается прежней)
+        # Vertical scrolling (this logic remains the same)
         if self.cursor_y < self.scroll_top:
             self.scroll_top = self.cursor_y
         elif self.cursor_y >= self.scroll_top + text_height:
             self.scroll_top = self.cursor_y - text_height + 1
 
-        # Если курсор находится на виртуальной строке (сразу после последней),
-        # то на ней нет текста для вычисления горизонтального сдвига.
-        # В этом случае scroll_left можно просто оставить как есть или сбросить.
+        # If the cursor is on the virtual line (immediately after the last),
+        # then there is no text to calculate horizontal offset.
+        # In this case, scroll_left can simply be left as is or reset.
         if self.cursor_y >= len(self.text):
-            # Горизонтальная прокрутка не требуется, так как x должен быть 0.
-            # Просто выходим из функции.
+            # Horizontal scrolling is not needed, as x should be 0.
+            # Just exit the function.
             logging.debug(
                 "_clamp_scroll: Cursor on virtual line, skipping horizontal scroll clamp."
             )
             return
 
-        # Горизонтальная прокрутка — считаем дисплейную ширину до курсора
-        # Теперь мы уверены, что self.cursor_y < len(self.text)
+        # Horizontal scrolling - calculate the display width up to the cursor
+        # Now we are sure that self.cursor_y < len(self.text)
         disp_x = self.get_display_width(self.text[self.cursor_y][: self.cursor_x])
         if disp_x < self.scroll_left:
             self.scroll_left = disp_x
         elif disp_x >= self.scroll_left + width:
             self.scroll_left = disp_x - width + 1
 
-        # Гарантируем неотрицательные значения
+        # Ensure non-negative values
         self.scroll_top = max(0, self.scroll_top)
         self.scroll_left = max(0, self.scroll_left)
 
-    # 13. Вспомогательный метод
+    # --- Helper method ---
     def _ensure_cursor_in_bounds(self) -> None:
         """Clamps `cursor_y` and `cursor_x` to valid positions.
         Crucially, allows `cursor_y` to be at `len(self.text)`, which represents
@@ -2423,35 +2442,36 @@ class Ecli:
         if not self.text:
             self.text.append("")
 
-        # Разрешаем курсору быть на одну позицию ПОСЛЕ последней строки
+        # Allow cursor to be one position AFTER the last line
         max_y = len(self.text)
         self.cursor_y = max(0, min(self.cursor_y, max_y))
 
-        # Если курсор на виртуальной строке, X должен быть 0.
+        # If cursor is on the virtual line, X should be 0.
         if self.cursor_y == len(self.text):
             self.cursor_x = 0
         else:
-            # Иначе, ограничиваем X длиной реальной строки.
+            # Otherwise, clamp X to the length of the real line.
             max_x = len(self.text[self.cursor_y])
             self.cursor_x = max(0, min(self.cursor_x, max_x))
 
         logging.debug("Cursor clamped → (%d,%d)", self.cursor_y, self.cursor_x)
 
-    # II. Изменение текста, влияющее на курсор:
+    # ---------- Text modification affecting the cursor: ------------------
     # handle_backspace(self)
     # handle_delete(self)
-    # handle_tab(self) (через insert_text)
-    # handle_smart_tab(self) (через insert_text или handle_block_indent)
-    # handle_enter(self) (через insert_text)
-    # insert_text(self, text: str) (основной метод вставки)
-    # insert_text_at_position(self, text: str, row: int, col: int) (низкоуровневая вставка)
-    # delete_selected_text_internal(self, start_y: int, start_x: int, end_y: int, end_x: int) (низкоуровневое удаление)
-    # paste(self) (включает удаление выделения и вставку)
-    # cut(self) (включает удаление выделения)
-    # search_and_replace(self) (сбрасывает курсор)
+    # handle_tab(self) (via insert_text)
+    # handle_smart_tab(self) (via insert_text or handle_block_indent)
+    # handle_enter(self) (via insert_text)
+    # insert_text(self, text: str) (main insertion method)
+    # insert_text_at_position(self, text: str, row: int, col: int) (low-level insertion)
+    # delete_selected_text_internal(self, start_y: int, start_x: int, end_y: int, end_x: int) (low-level deletion)
+    # paste(self) (includes deletion of selection and insertion)
+    # cut(self) (includes deletion of selection)
+    # search_and_replace(self) (resets cursor)
 
-    # ── Курсор: Backspace и Delete ────────────────────────────────────────
-    # 1. key Backspace
+    # ----------------- Cursor: Backspace and Delete ------------------
+
+    # --- key Backspace ---
     def handle_backspace(self) -> bool:  # noqa: python:S3516
         """Handles the Backspace key with clear, sequential logic.
         1. If a selection is active, deletes the selection.
@@ -2460,16 +2480,16 @@ class Ecli:
         """
         logging.debug("handle_backspace triggered.")
         with self._state_lock:
-            # --- Сценарий 1: Удаление выделения ---
+            # Deleting selection
             if self.is_selecting:
                 logging.debug(
                     "handle_backspace: Active selection found. Deleting selection."
                 )
-                # delete_selected_text() сам обработает историю и флаг modified
+                # delete_selected_text() will handle history and modified flag
                 self.delete_selected_text()
                 return True
 
-            # --- Сценарий 2: Удаление символа слева ---
+            # Deleting char to the left
             if self.cursor_x > 0:
                 logging.debug(
                     f"handle_backspace: Deleting char at ({self.cursor_y}, {self.cursor_x - 1})."
@@ -2491,7 +2511,7 @@ class Ecli:
                 self._set_status_message("Character deleted")
                 return True
 
-            # --- Сценарий 3: Слияние строк ---
+            # Merging lines
             if self.cursor_y > 0:
                 logging.debug(
                     f"handle_backspace: Merging line {self.cursor_y} with {self.cursor_y - 1}."
@@ -2516,12 +2536,12 @@ class Ecli:
                 self._set_status_message("Newline deleted (lines merged)")
                 return True
 
-            # --- Сценарий 4: Ничего не делать (курсор в самом начале файла) ---
+            # No action (cursor at the very beginning of the file)
             logging.debug("handle_backspace: At beginning of file. No action.")
             self._set_status_message("Beginning of file")
             return True
 
-    # 2. key Delete ----------------
+    # --- key Delete ----
     def handle_delete(self) -> bool:
         """Handles the Delete key. Deletes selection, char under cursor, or merges lines."""
         with self._state_lock:
@@ -2561,7 +2581,7 @@ class Ecli:
             self._set_status_message("End of file")
             return True
 
-    # 3. ---- Курсор: smart tab ---------
+    # ---- Cursor: smart tab ----
     def handle_smart_tab(self) -> bool:
         """Handles smart tabbing behavior.
         - If text is selected, indents the selected block.
@@ -2614,7 +2634,7 @@ class Ecli:
         # insert_text handles history, self.modified, and returns True if text was inserted.
         return self.insert_text(text_to_insert)
 
-    # 4. для key TAB вспомогательный метод ---------------------------------
+    # --- for the TAB key helper method ---
     def handle_tab(self) -> bool:
         """Inserts standard tab characters (spaces or a tab char) at the current cursor position.
         Deletes selection if active before inserting.
@@ -2632,26 +2652,26 @@ class Ecli:
         # self.insert_text handles active selection, history, and returns True if changes were made.
         return self.insert_text(text_to_insert_val)
 
-    # 5. key Enter ---------------
+    # ---- key Enter ----
     def handle_enter(self) -> bool:
         """Inserts a newline with smart auto-indentation.
         If a selection is active, it is deleted before the newline is inserted.
         Correctly handles adding a new line when at the end of the buffer.
         """
         with self._state_lock:
-            # Проверяем, что курсор находится в пределах существующих строк.
-            # Это защитит от ошибок, если состояние по какой-то причине стало некорректным.
+            # Check that the cursor is within the existing rows.
+            # This will prevent errors if the state becomes invalid for some reason.
             if self.cursor_y >= len(self.text):
                 logging.error(
                     f"handle_enter: cursor_y ({self.cursor_y}) is out of bounds. Appending a new line as a fallback."
                 )
-                self.text.append("")  # Добавляем строку, чтобы избежать падения
-                # После этого cursor_y становится валидным индексом.
+                self.text.append("")  # Append a new line to avoid crashing
+                # After this, cursor_y becomes a valid index.
 
             current_line_content = self.text[self.cursor_y]
             line_before_cursor = current_line_content[: self.cursor_x]
 
-            # Определяем отступ для новой строки
+            # Determine indentation for the new line
             indent_match = re.match(r"^\s*", current_line_content)
             indent = indent_match.group(0) if indent_match else ""
 
@@ -2661,7 +2681,7 @@ class Ecli:
 
             stripped_line_before_cursor = line_before_cursor.rstrip()
 
-            # Логика "умного" отступа
+            # Logic for "smart" indentation
             if (
                 self.current_language == "python"
                 and stripped_line_before_cursor.endswith(":")
@@ -2681,16 +2701,16 @@ class Ecli:
             } and stripped_line_before_cursor.endswith("{"):
                 indent += extra_indent
 
-            # Формируем текст для вставки: перенос строки + отступ
+            # Form the text to insert: newline + indentation
             text_to_insert = "\n" + indent
 
-            # Делегируем вставку методу insert_text, который обработает выделение, историю и т.д.
-            # insert_text, в свою очередь, вызовет _ensure_trailing_newline,
-            # который и реализует вашу логику добавления пустой строки в конце.
+            # Delegate the insertion to the insert_text method, which will handle selection, history, etc.
+            # insert_text, in turn, will call _ensure_trailing_newline,
+            # which implements your logic for adding an empty line at the end.
             return self.insert_text(text_to_insert)
 
-    # 6. Insert text at position -----------------------------------------------------------
-    def insert_text(self, text: str) -> bool:  # noqa: python:S3516
+    # ---- Insert text at position ----
+    def insert_text(self, text: str) -> bool:
         """Main public method for text insertion.
         Handles active selection by deleting it first. If so, the deletion and
         insertion are grouped as one compound action for undo/redo purposes.
@@ -2709,7 +2729,7 @@ class Ecli:
             # Start a compound action to group deletion and insertion
             self.history.begin_compound_action()
             try:
-                # 1. Handle active selection by deleting it first
+                # Handle active selection by deleting it first
                 if self.is_selecting:
                     normalized_selection = self._get_normalized_selection_range()
                     if normalized_selection:
@@ -2750,7 +2770,7 @@ class Ecli:
                             f"insert_text: Selection processed. Cursor at ({self.cursor_y}, {self.cursor_x})."
                         )
 
-                # 2. Insert the new text (if there is any)
+                # Insert the new text (if there is any)
                 if text:
                     insert_pos_for_history = (effective_insert_y, effective_insert_x)
 
@@ -2765,7 +2785,7 @@ class Ecli:
                             exc_info=True,
                         )
                         self._set_status_message(f"Insertion error: {e}")
-                        # Важно завершить транзакцию даже при ошибке, чтобы очистить стек redo
+                        # It is important to commit the transaction even if there is an error to clear the redo stack.
                         return True
 
                     # Add "insert" action to history
@@ -2782,7 +2802,7 @@ class Ecli:
                 self.history.end_compound_action()
                 self._ensure_trailing_newline()
 
-            # 3. Final status update and logging
+            # Final status update and logging
             if made_change_overall:
                 if self.status_message == original_status:
                     self._set_status_message(
@@ -2798,7 +2818,6 @@ class Ecli:
 
         return made_change_overall
 
-    # 6b.
     def insert_text_at_position(self, text: str, row: int, col: int) -> bool:
         """Low-level insertion of `text` at the logical position (row, col).
         This is the definitive, corrected version that handles both single
@@ -2842,34 +2861,37 @@ class Ecli:
 
         lines_to_insert = text.split("\n")
 
-        # Разделяем текущую строку на две части
+        # Split the current line into two parts
         original_line_prefix = self.text[row][:col]
         original_line_suffix = self.text[row][col:]
 
         if len(lines_to_insert) == 1:
-            # --- Случай 1: Однострочная вставка ---
-            # Собираем строку заново: префикс + вставка + суффикс
+            # Single-line insertion
+            # Reconstruct the line: prefix + insertion + suffix
             self.text[row] = (
                 original_line_prefix + lines_to_insert[0] + original_line_suffix
             )
             self.cursor_y = row
             self.cursor_x = col + len(text)
         else:
-            # --- Случай 2: Многострочная вставка ---
-            # 1. Первая строка: префикс + первая часть вставляемого текста
+            # Multi-line insertion
+            # First line: prefix + first part of the inserted text
             self.text[row] = original_line_prefix + lines_to_insert[0]
 
-            # 2. Последняя строка: последняя часть вставляемого текста + суффикс
+            # Last line: last part of the inserted text + suffix
             last_new_line = lines_to_insert[-1] + original_line_suffix
 
-            # 3. Вставляем все новые строки (средние + последняя)
-            #    Начинаем со вставки последней строки, чтобы не сдвигать индексы для средних
+            # Last line: last part of the inserted text + suffix
+            last_new_line = lines_to_insert[-1] + original_line_suffix
+
+            # Insert all new lines (middle + last)
+            # Start with inserting the last line to avoid shifting indices for the middle ones
             self.text.insert(row + 1, last_new_line)
-            #    Теперь вставляем средние строки в обратном порядке
+            # Now insert the middle lines in reverse order
             for line_content in reversed(lines_to_insert[1:-1]):
                 self.text.insert(row + 1, line_content)
 
-            # Обновляем позицию курсора
+            # Update cursor position
             self.cursor_y = row + len(lines_to_insert) - 1
             self.cursor_x = len(lines_to_insert[-1])
 
@@ -2879,7 +2901,7 @@ class Ecli:
         )
         return True
 
-    # 7. ------------- Delete selected text ---------------------
+    # ------------- Delete selected text ---------------------
     def delete_selected_text_internal(
         self, start_y: int, start_x: int, end_y: int, end_x: int
     ) -> list[str]:  # noqa: python:S3516
@@ -2975,13 +2997,13 @@ class Ecli:
             )
         return deleted_segments
 
-    # 8. Paste ---------------
+    # ------- Paste ---------------
     def paste(self) -> bool:
         """Pastes text from the clipboard at the current cursor position.
         If a selection is active, it is cancelled before pasting, and the text
         is inserted at the current cursor location.
         """
-        # Сначала получаем текст, который будем вставлять
+        # First, we get the text that we will insert
         text_to_paste = ""
         source_of_paste = "internal"
 
@@ -3012,17 +3034,16 @@ class Ecli:
             self._set_status_message("Clipboard is empty")
             return True
 
-        # --- КЛЮЧЕВОЕ ИЗМЕНЕНИЕ ЛОГИКИ ---
-        # Если есть выделение, мы его не удаляем, а просто отменяем.
-        # Вставка всегда происходит в текущей позиции курсора.
+        # If there is a selection, we do not delete it, but simply cancel it.
+        # Insertion always occurs at the current cursor position.
         if self.is_selecting:
             self.is_selecting = False
             self.selection_start = None
             self.selection_end = None
             logging.debug("Paste cancelled active selection before inserting.")
 
-        # Теперь, когда выделение отменено, просто вставляем текст.
-        # Метод insert_text уже не увидит активного выделения.
+        # Now that the selection is cancelled, we simply insert the text.
+        # The insert_text method will no longer see an active selection.
         text_to_paste = text_to_paste.replace("\r\n", "\n").replace("\r", "\n")
 
         if self.insert_text(text_to_paste):
@@ -3047,12 +3068,12 @@ class Ecli:
 
             start_coords, end_coords = norm_range
 
-            # Используем внутренний метод для фактического удаления
+            # Used internal method for actual deletion
             deleted_segments = self.delete_selected_text_internal(
                 start_coords[0], start_coords[1], end_coords[0], end_coords[1]
             )
 
-            # Записываем действие в историю
+            # Record action in history
             if deleted_segments or (start_coords != end_coords):
                 self.history.add_action(
                     {
@@ -3063,14 +3084,14 @@ class Ecli:
                     }
                 )
 
-            # Сбрасываем выделение
+            # Clear selection
             self.is_selecting = False
             self.selection_start = None
             self.selection_end = None
 
             self._set_status_message("Selection deleted")
 
-    # 9. Cut -----------
+    # --------- Cut -----------
     def cut(self) -> bool:
         """Cuts the selected text to the internal and (if enabled) system clipboard.
         The selected text is removed from the document.
@@ -3211,17 +3232,17 @@ class Ecli:
 
             return False  # Should not be reached if cut was successful
 
-    # 10. Undo
+    # ---- Undo ----
     def undo(self) -> bool:
         """Delegates the undo action to the History component."""
         return self.history.undo()
 
-    # 11. Redo
+    # ---- Redo ----
     def redo(self) -> bool:
         """Delegates the redo action to the History component."""
         return self.history.redo()
 
-    # 12. cancel_selection
+    # ---- Cancel Selection ----
     def _cancel_selection_if_not_extending(self) -> bool:
         """Cancels the current selection if it exists.
         This is called by navigation methods to ensure that a simple
@@ -3233,11 +3254,12 @@ class Ecli:
             self.selection_start = None
             self.selection_end = None
             logging.debug("Selection cancelled by cursor movement.")
-            self._set_status_message("Selection cancelled")  # Добавим обратную связь
+            self._set_status_message("Selection cancelled")  # Add feedback
             return True
         return False
 
-    # III. Управление выделением (косвенно связано с видимым курсором, который обычно на конце выделения):
+    # -------------- Selection Management ---------------------
+    # (indirectly related to the visible cursor, which is usually at the end of the selection):
     # extend_selection_right(self)
     # extend_selection_left(self)
     # extend_selection_up(self)
@@ -3245,8 +3267,8 @@ class Ecli:
     # select_to_home(self)
     # select_to_end(self)
     # select_all(self)
-    ############### Selection Handling ####################
-    # 1. Selection Right
+
+    # ---- Selection Right -----
     def extend_selection_right(self) -> bool:
         """Extends the selection one character to the right.
         If no selection is active, starts a new selection from the current cursor position.
@@ -3326,7 +3348,7 @@ class Ecli:
 
         return changed_state
 
-    # 2. Selection Left --------------------
+    # ------------ Selection Left ------------
     def extend_selection_left(self) -> bool:
         """Extends the selection one character to the left.
         If no selection is active, starts a new selection from the current cursor position.
@@ -3409,7 +3431,7 @@ class Ecli:
 
         return changed_state
 
-    # 3. Selection Up
+    # --- Selection Up ----
     def extend_selection_up(self) -> bool:
         """Extends the selection one line upwards.
         If no selection is active, starts a new selection from the current cursor position.
@@ -3471,7 +3493,7 @@ class Ecli:
 
         return changed_state
 
-    # 4. Selection Down
+    # ----- Selection Down -----
     def extend_selection_down(self) -> bool:
         """Extends the selection one line downwards. Correctly handles extending
         onto the virtual line after the last line of text.
@@ -3489,18 +3511,18 @@ class Ecli:
                 self.selection_start = (self.cursor_y, self.cursor_x)
                 self.is_selecting = True
 
-            # Разрешаем курсору двигаться до len(self.text) включительно
+            # Allow the cursor to move up to and including len(self.text)
             if self.cursor_y < len(self.text):
                 self.cursor_y += 1
 
-            # _ensure_cursor_in_bounds теперь критически важен. Он установит
-            # cursor_x в 0, если cursor_y стал равен len(self.text).
+            # _ensure_cursor_in_bounds is now critically important. It will set
+            # cursor_x to 0 if cursor_y has become equal to len(self.text).
             self._ensure_cursor_in_bounds()
 
             self.selection_end = (self.cursor_y, self.cursor_x)
-            self._clamp_scroll()  # _clamp_scroll теперь безопасен
+            self._clamp_scroll()  # _clamp_scroll is now safe
 
-        # Проверяем, изменилось ли что-либо
+        # Check if anything has changed
         if (self.cursor_y, self.cursor_x) != original_cursor_pos or (
             self.is_selecting,
             self.selection_start,
@@ -3515,7 +3537,7 @@ class Ecli:
             )
         return changed_state
 
-    # 5. Selection Home ---------------
+    # ------------ Selection Home ---------------
     def select_to_home(self) -> bool:
         """Extends the selection from the current cursor position to the beginning of the current line.
         If no selection is active, starts a new selection.
@@ -3584,7 +3606,7 @@ class Ecli:
 
         return changed_state
 
-    # 6. Selection End
+    # ------ Selection End --------------
     def select_to_end(self) -> bool:
         """Extends the selection from the current cursor position to the end of the current line.
         If no selection is active, starts a new selection.
@@ -3651,7 +3673,7 @@ class Ecli:
 
         return changed_state
 
-    # 7. Selection ALL
+    # ----- Selection ALL -----
     def select_all(self) -> bool:
         """Selects all text in the document.
         Moves the cursor to the end of the selection.
@@ -3717,15 +3739,14 @@ class Ecli:
 
         return False  # Should technically not be reached if "All text selected" is always set.
 
-    ## ============= Методы блочных отступов/комментирования =============
-    # (также влияют на self.cursor_x/y после изменения выделения)
-    # 1. handle_block_indent(self)
-    # 2. handle_block_unindent(self)
-    # 3. unindent_current_line(self)
-    # 4. comment_lines(self, ...)
-    # 5. uncomment_lines(self, ...)
+    # -------------------- Block Indentation/Commenting Methods --------------------
+    # (also affects self.cursor_x/y after changing the selection)
+    # handle_block_indent(self)
+    # handle_block_unindent(self)
+    # unindent_current_line(self)
+    # comment_lines(self, ...)
+    # uncomment_lines(self, ...)
 
-    # 1.
     def handle_block_indent(self) -> bool:
         """Increases indentation for all lines within the current selection.
         Updates selection, cursor, modified status, and action history.
@@ -3807,14 +3828,14 @@ class Ecli:
                         "end_y": end_y_idx,
                         "selection_before": original_selection_tuple[
                             1:
-                        ],  # Сохраняем (start_coords, end_coords)
-                        "cursor_before_no_selection": None,  # Так как выделение всегда есть
+                        ],  # Save (start_coords, end_coords)
+                        "cursor_before_no_selection": None,  # Since there is always a selection
                         "selection_after": (
                             self.is_selecting,
                             self.selection_start,
                             self.selection_end,
                         ),
-                        "cursor_after_no_selection": None,  # Так как выделение остается
+                        "cursor_after_no_selection": None,  # Since the selection remains
                     }
                 )
                 self._set_status_message(f"Indented {indented_line_count} line(s)")
@@ -3831,7 +3852,6 @@ class Ecli:
         # Default return if somehow lock isn't acquired or other paths missed
         return False
 
-    # 2.
     def handle_block_unindent(self) -> bool:  # noqa: python:S3516
         """Decreases indentation for all lines within the current selection.
         Updates selection, cursor, modified status, and action history.
@@ -3938,7 +3958,6 @@ class Ecli:
                     {
                         "type": "block_unindent",  # Specific type for undo/redo
                         "changes": undo_changes_list,
-                        # "unindent_str_len_map": {y: len_removed for y, len_removed in ...} # Optional, if redo needs it
                         "start_y": start_y_idx,
                         "end_y": end_y_idx,
                         "selection_before": original_selection_tuple[1:],
@@ -3961,8 +3980,7 @@ class Ecli:
                 self._set_status_message("Nothing to unindent in selection.")
             return self.status_message != original_status
 
-    # 3.
-    def unindent_current_line(self) -> bool:  # noqa: python:S3516
+    def unindent_current_line(self) -> bool:
         """Decreases the indentation of the current line if there is no active selection.
 
         This method attempts to unindent the current line by removing either a configured
@@ -4066,7 +4084,7 @@ class Ecli:
                 )
             return self.status_message != original_status
 
-    # 4.  ───────────────────── Commenting lines ─────────────────────
+    # ----------------------- Commenting lines -----------------------
     def comment_lines(self, start_y: int, end_y: int, comment_prefix: str) -> bool:
         """Comments a range of lines by prepending a language-specific prefix.
 
@@ -4076,24 +4094,24 @@ class Ecli:
         for clarity and maintainability.
 
         The process is as follows:
-        1.  **Find Minimum Indent (`_find_min_indent_for_commenting`)**: It first scans
+        1.  Find Minimum Indent (`_find_min_indent_for_commenting`): It first scans
             all non-empty lines within the specified range (`start_y` to `end_y`) to
             determine the shallowest indentation level. This ensures that the
             comment prefix is inserted consistently at the start of the code block,
             not at the beginning of each line.
 
-        2.  **Determine Insert Position (`_determine_comment_insert_pos`)**: For each
+        2.  Determine Insert Position (`_determine_comment_insert_pos`): For each
             line in the range, it calculates the precise column to insert the
             `comment_prefix`. For code lines, this is the minimum indent found in
             step 1. For blank or whitespace-only lines, it inserts the prefix at
             the start of the line's content to preserve alignment.
 
-        3.  **Apply Commenting**: It iterates through each line, prepending the
+        3.  Apply Commenting: It iterates through each line, prepending the
             `comment_prefix` at the calculated position. It skips any line that
             is already commented with the same prefix at that position to prevent
             double-commenting (e.g., `## comment`).
 
-        4.  **Update State**: If any lines were modified, it updates the editor's
+        4.  Update State: If any lines were modified, it updates the editor's
             state:
             - Sets the `modified` flag to True.
             - Adjusts the cursor and selection boundaries to account for the newly
@@ -4223,7 +4241,7 @@ class Ecli:
             ):
                 self.cursor_x += prefix_len
 
-    # 5.  ───────────────────── Uncommenting  lines ─────────────────────
+    # -------------- Uncommenting  lines ----------------------
     def uncomment_lines(self, start_y: int, end_y: int, comment_prefix: str) -> bool:
         """Uncomments a range of lines by removing a language-specific prefix.
 
@@ -4233,7 +4251,7 @@ class Ecli:
         helper methods for clarity and maintainability.
 
         The process is as follows:
-        1.  **Uncomment Each Line (`_uncomment_single_line`)**: The method iterates
+        1.  Uncomment Each Line (`_uncomment_single_line`): The method iterates
             through each line in the specified range (`start_y` to `end_y`). For each
             line, it delegates the actual uncommenting logic to the
             `_uncomment_single_line` helper. This helper intelligently removes
@@ -4242,7 +4260,7 @@ class Ecli:
             trailing spaces (e.g., removing both "# " and "#" from a line).
             It returns the modified line and the number of characters removed.
 
-        2.  **Update State and History**: If any lines were successfully uncommented,
+        2.  Update State and History: If any lines were successfully uncommented,
             this method updates the editor's state:
             - Sets the `modified` flag to True.
             - Adjusts the cursor and selection boundaries to account for the
@@ -4252,7 +4270,7 @@ class Ecli:
               atomic action.
             - Sets a status message indicating how many lines were uncommented.
 
-        3.  **Handle No Changes**: If no lines in the selection were uncommented
+        3.  Handle No Changes: If no lines in the selection were uncommented
             (e.g., they were not commented with the specified prefix), it sets an
             informative status message.
 
@@ -4367,28 +4385,28 @@ class Ecli:
         Uses unicodedata to check if it's a control character.
         """
         if not isinstance(char, str) or len(char) != 1:
-            return 1  # Неожиданный ввод, считаем ширину 1
+            return 1  # Unexpected input, counting width 1
 
-        # Проверка на управляющие символы (кроме известных типа Tab, Enter)
+        # Check for control characters (except known types like Tab, Enter)
         if unicodedata.category(char) in ("Cc", "Cf"):  # Cc: Control, Cf: Format
-            # Здесь можно добавить исключения для символов, которые хотим отображать (например, '\t')
+            # Here we can add exceptions for characters we want to display (e.g., '\t')
             if char == "\t":
-                # Ширина табуляции зависит от позиции курсора и tab_size,
-                # но wcwidth('\t') обычно 0 или 1.
-                # Для отрисовки Pygments токенов лучше вернуть wcwidth или 1.
-                # Реальная отрисовка табов происходит в DrawScreen.
+                # Tab width depends on cursor position and tab_size,
+                # but wcwidth('\t') is usually 0 or 1.
+                # For rendering Pygments tokens, it's better to return wcwidth or 1.
+                # Actual tab rendering happens in DrawScreen.
                 width = wcwidth(char)
                 return width if width >= 0 else 1
-            return 0  # Управляющие символы обычно не отображаются и имеют 0 ширину
-        # Проверка на символы нулевой ширины (например, диакритика)
+            return 0  # Control characters are usually not displayed and have 0 width
+        # Check for zero-width characters (e.g., diacritics)
         if unicodedata.combining(char):
-            return 0  # Объединяющиеся символы имеют нулевую ширину
+            return 0  # Combining characters have zero width
 
         width = wcwidth(char)
-        # wcwidth возвращает -1 для символов, для которых ширина неопределена,
-        # или 0 для символов нулевой ширины (которые мы уже обработали).
-        # Для -1 или 0 (если не объединяющийся), возвращаем 1, чтобы курсор двигался.
-        # Если wcwidth вернул >=0, возвращаем его.
+        # wcwidth returns -1 for characters with undefined width,
+        # or 0 for zero-width characters (which we've already handled).
+        # For -1 or 0 (if not combining), we return 1 to move the cursor.
+        # If wcwidth returned >=0, we return it.
         return width if width >= 0 else 1
 
     def get_string_width(self, text: str) -> int:
@@ -4401,23 +4419,23 @@ class Ecli:
 
         try:
             width = cast(int, wcswidth(text))
-            # Если wcswidth вернул -1 (непечатаемые символы),
-            # мы НЕ возвращаем это значение, а переходим к fallback.
+            # If wcswidth returned -1 (non-printable characters),
+            # we do NOT return this value, but move on to fallback.
             if width != -1:
                 return width
         except Exception as e:
-            # Если wcswidth упал с ошибкой, логируем и переходим к fallback.
+            # If wcswidth raised an error, log it and fall back.
             logging.warning(
                 f"wcswidth failed for '{text[:20]}...': {e}. Falling back to char sum."
             )
 
-        # Fallback: суммируем ширину каждого символа
+        # Fallback: sum the width of each character
         total_width = 0
         for char in text:
             total_width += self.get_char_width(char)
         return total_width
 
-    # Сигнатура №1: для бинарного режима.
+    # Signature #1: for binary mode.
     @overload
     def safe_open(
         self,
@@ -4427,7 +4445,7 @@ class Ecli:
         errors: None = None,
     ) -> BinaryIO: ...
 
-    # Сигнатура №2: для текстового режима.
+    # Signature #2: for text mode.
     @overload
     def safe_open(
         self,
@@ -4439,8 +4457,9 @@ class Ecli:
         errors: str = "replace",
     ) -> TextIO: ...
 
-    # Реализация функции.
-    # Типы encoding и errors сделаны более общими, чтобы соответствовать обеим сигнатурам.
+    # Implementation covering both signatures.
+    # Note: The mode parameter is a union of both signatures.
+    # The encoding and errors types have been made more general to accommodate both signatures.
     def safe_open(
         self,
         filename: str,
@@ -4451,9 +4470,9 @@ class Ecli:
         """Safely open a file in the given mode."""
         try:
             if "b" in mode:
-                # что здесь возвращается именно BinaryIO.
+                # Here we return BinaryIO.
                 return cast(BinaryIO, open(filename, mode))
-            # И здесь тоже используем `cast` для TextIO.
+            # Here we also use `cast` for TextIO.
             return cast(
                 TextIO,
                 open(
@@ -4495,7 +4514,7 @@ class Ecli:
         status_changed_by_interaction = False
 
         try:
-            # 1. Handle unsaved changes in the current buffer
+            # Handle unsaved changes in the current buffer
             if self.modified:
                 status_before_save_prompt = self.status_message
                 ans = self.prompt("Current file has unsaved changes. Save now? (y/n): ")
@@ -4533,7 +4552,7 @@ class Ecli:
                         or status_changed_by_interaction
                     )
 
-            # 2. Determine the filename to open
+            # Determine the filename to open
             actual_filename_to_open = filename_to_open
             if not actual_filename_to_open:
                 status_before_open_prompt = self.status_message
@@ -4554,11 +4573,6 @@ class Ecli:
                     self.status_message != original_status
                     or status_changed_by_interaction
                 )
-
-            # 3. Validate filename and permissions
-            # if not self.validate_filename(actual_filename_to_open):
-            #     # validate_filename sets its own status message
-            #     return True  # Status changed
 
             if not os.path.exists(actual_filename_to_open):
                 self.text = [""]
@@ -4767,13 +4781,13 @@ class Ecli:
 
         redraw_is_needed = False
 
-        # 1. If no filename is set, delegate to save_file_as()
+        # If no filename is set, delegate to save_file_as()
         if not self.filename or self.filename == "noname":
             logging.debug("save_file: Filename not set, invoking save_file_as().")
             # save_file_as() returns True if it made changes requiring a redraw
             return self.save_file_as()
 
-            # 2. Validate existing filename and permissions (precautionary)
+            # Validate existing filename and permissions (precautionary)
         # These checks are more critical for save_file_as, but good for robustness here too.
         if not self.validate_filename(self.filename):
             # validate_filename calls _set_status_message
@@ -4805,7 +4819,7 @@ class Ecli:
             )
             return True  # Status changed
 
-        # 3. Attempt to write the file to the existing path
+        # Attempt to write the file to the existing path
         try:
             # _write_file is the low-level write operation.
             # It updates self.modified to False and calls detect_language/update_git_info.
@@ -4870,7 +4884,7 @@ class Ecli:
             )
         )
 
-        # 1. Prompt for the new filename
+        # Prompt for the new filename
         status_before_filename_prompt = self.status_message
         new_filename_input = self.prompt(f"Save file as ({default_name_for_prompt}): ")
         if self.status_message != status_before_filename_prompt:
@@ -4886,7 +4900,7 @@ class Ecli:
         # Use provided name or default if input was just whitespace
         new_filename_processed = new_filename_input.strip() or default_name_for_prompt
 
-        # 2. Validate the new filename
+        # Validate the new filename
         if not self.validate_filename(new_filename_processed):
             # validate_filename already calls _set_status_message with error
             return True  # Status was changed by validate_filename
@@ -4897,7 +4911,7 @@ class Ecli:
             )
             return True  # Status changed
 
-        # 3. Handle existing file and permissions
+        # Handle existing file and permissions
         if os.path.exists(new_filename_processed):
             if not os.access(new_filename_processed, os.W_OK):
                 self._set_status_message(
@@ -4944,7 +4958,7 @@ class Ecli:
                 )
                 return True  # Status changed
 
-        # 4. Attempt to write the file
+        # Attempt to write the file
         try:
             # _write_file updates self.filename, self.modified, calls detect_language, update_git_info.
             # It does not set a status message itself, allowing this method to do so.
@@ -4993,8 +5007,8 @@ class Ecli:
                 self.modified = original_modified_flag  # Revert modified status
             return True  # Status message changed due to error
 
-    # Метод _write_file является низкоуровневой операцией, предназначенной для фактической записи
-    # содержимого в файл и обновления связанного с этим состояния редактора.
+    # The _write_file method is a low-level operation designed to actually write
+    # the contents of a file and update the associated editor state.
     def _write_file(self, target_filename: str) -> None:
         """Low-level method to write the current buffer content to the specified target file.
         This method updates the editor's internal state related to the file
@@ -5013,15 +5027,15 @@ class Ecli:
         )
 
         content_to_write = ""
-        # Создаем копию для безопасной модификации
+        # Create a copy for safe modification
         lines_to_save = list(self.text)
 
-        # Если последняя строка пустая и предпоследняя не пустая, удаляем ее для сохранения
+        # If the last line is empty and the second-to-last is not, remove it for saving
         if len(lines_to_save) > 1 and not lines_to_save[-1] and lines_to_save[-2]:
             lines_to_save.pop()
         elif len(lines_to_save) == 1 and not lines_to_save[0]:
-            # Если в файле всего одна пустая строка (наша техническая)
-            lines_to_save = []  # Сохраняем как пустой файл
+            # If the file contains only one empty line (our technical one)
+            lines_to_save = []  # Save as an empty file
         content_to_write = os.linesep.join(lines_to_save)
 
         try:
@@ -5173,7 +5187,7 @@ class Ecli:
             return True
 
     # -------------- Auto-save ------------------------------
-    def toggle_auto_save(self) -> bool:  # noqa: python:S3516
+    def toggle_auto_save(self) -> bool:
         """Toggles the auto-save feature on or off.
         The auto-save interval (in minutes) is read from `self.config` or defaults.
         Auto-save only occurs if a filename is set and there are modifications (`self.modified`).
@@ -5270,8 +5284,8 @@ class Ecli:
                                 break
 
                             # Conditions for auto-saving:
-                            # 1. Filename must be set (i.e., not a new, unsaved buffer)
-                            # 2. Document must be modified
+                            # - Filename must be set (i.e., not a new, unsaved buffer)
+                            # - Document must be modified
                             if not self.filename or self.filename == "noname":
                                 logging.debug("Auto-save: Skipped, no filename set.")
                                 continue
@@ -5411,7 +5425,7 @@ class Ecli:
         methods for clarity and maintainability.
 
         The process is as follows:
-        1.  **Handle Unsaved Changes (`_handle_unsaved_changes_before_new_file`)**:
+        1.  Handle Unsaved Changes (`_handle_unsaved_changes_before_new_file`):
             - If the current buffer has no modifications, this step is skipped.
             - If there are unsaved changes, it prompts the user with a "Save changes?"
               dialog (y/n/cancel).
@@ -5421,7 +5435,7 @@ class Ecli:
             - If the user cancels the prompt, the operation is aborted.
             - This helper method returns a boolean indicating whether to proceed.
 
-        2.  **Reset Editor State (`_reset_state_for_new_file`)**: If the previous
+        2.  Reset Editor State (`_reset_state_for_new_file`): If the previous
             step allows proceeding, this method performs a complete reset of the
             editor's state to a clean slate:
             - The text buffer is cleared (`self.text = [""]`).
@@ -5621,12 +5635,12 @@ class Ecli:
         return action_taken_requiring_redraw
 
     def _ensure_trailing_newline(self) -> None:
-        """Гарантирует, что в конце буфера всегда есть одна пустая строка.
-        Это необходимо для корректного выделения последней строки.
+        """Ensures that there is always one blank line at the end of the buffer.
+        This is necessary to correctly select the last line.
         """
         if (
             not self.text or self.text[-1]
-        ):  # Если список пуст или последняя строка не пустая
+        ):  # If the list is empty or the last line is not empty
             self.text.append("")
 
     # ------------------ Prompting for Input ------------------
@@ -5643,7 +5657,7 @@ class Ecli:
 
         original_cursor_visibility = curses.curs_set(1)
 
-        # Устанавливаем блокирующий режим с таймаутом
+        # Setting up blocking mode with a timeout
         self.stdscr.nodelay(False)
         self.stdscr.timeout(timeout_seconds * 1000 if timeout_seconds > 0 else -1)
 
@@ -5655,24 +5669,24 @@ class Ecli:
                 h, w = self.stdscr.getmaxyx()
                 prompt_y = h - 1
 
-                # --- Отрисовка строки prompt ---
-                # Формируем полную строку для вывода
+                # --- Drawing the prompt line ---
+                # Forming the full line for output
                 prompt_line = f"{message}{''.join(input_buffer)}"
 
-                # Очищаем строку и выводим
+                # Clearing the line and outputting
                 self.stdscr.move(prompt_y, 0)
                 self.stdscr.clrtoeol()
                 self.stdscr.addstr(
                     prompt_y, 0, prompt_line, self.colors.get("status", curses.A_NORMAL)
                 )
 
-                # Ставим курсор
+                # Setting the cursor
                 self.stdscr.move(prompt_y, len(message) + cursor_pos)
-                self.stdscr.refresh()  # Обновляем экран немедленно
+                self.stdscr.refresh()  # Refresh the screen immediately
 
                 try:
                     key = self.stdscr.getch()
-                except curses.error:  # Таймаут
+                except curses.error:  # Timeout
                     return None
 
                 if key == curses.KEY_ENTER or key in (10, 13):
@@ -5687,7 +5701,7 @@ class Ecli:
                     cursor_pos = max(0, cursor_pos - 1)
                 elif key == curses.KEY_RIGHT:
                     cursor_pos = min(len(input_buffer), cursor_pos + 1)
-                elif 32 <= key < 256:  # Печатные символы
+                elif 32 <= key < 256:  # Printable characters
                     char = chr(key)
                     if is_yes_no_prompt:
                         if char.lower() in ("y", "n"):
@@ -5696,13 +5710,13 @@ class Ecli:
                         input_buffer.insert(cursor_pos, char)
                         cursor_pos += 1
         finally:
-            # Восстанавливаем неблокирующий режим и видимость курсора
+            # Restoring non-blocking mode and cursor visibility
             self.stdscr.nodelay(True)
-            self.stdscr.timeout(100)  # Возвращаем таймаут для основного цикла
+            self.stdscr.timeout(100)  # Returning timeout for the main loop
             curses.curs_set(original_cursor_visibility)
 
-            # Запрашиваем полную перерисовку после выхода из prompt,
-            # чтобы стереть его следы и восстановить вид редактора.
+            # Requesting a full redraw after exiting the prompt,
+            # to erase its traces and restore the editor's appearance.
             self._force_full_redraw = True
 
     # 2 ========== Search/Replace and Find ======================
@@ -5890,7 +5904,7 @@ class Ecli:
 
                 # Advance the search position to after the current match to find subsequent matches.
                 # If term_length is 0 (empty search term, though handled above),
-                # this prevents an infinite loop by advancing by at least 1.
+                # this prevents an infinite loop by advancing by at least first step
                 current_search_start_column = (
                     match_end_index if term_length > 0 else found_at_index + 1
                 )
@@ -5922,7 +5936,7 @@ class Ecli:
         original_scroll_pos = (self.scroll_top, self.scroll_left)
         # Highlights will be cleared, so that's always a potential change.
 
-        # 1. Clear previous search state and highlights.
+        # Clear previous search state and highlights.
         # This is a visual change if there were previous highlights.
         had_previous_highlights = bool(self.highlighted_matches)
         self.highlighted_matches = []
@@ -5934,7 +5948,7 @@ class Ecli:
             had_previous_highlights  # If highlights were cleared, redraw
         )
 
-        # 2. Prompt for the search term.
+        # Prompt for the search term.
         # The prompt itself temporarily changes the status bar.
         status_before_prompt = (
             self.status_message
@@ -5966,20 +5980,20 @@ class Ecli:
                 self.status_message != original_status
             )
 
-        # 3. A search term was entered.
+        # A search term was entered.
         self.search_term = term_to_search  # Store the new search term
 
-        # 4. Collect all matches for the new term.
+        # Collect all matches for the new term.
         # _collect_matches reads self.text, so no direct visual change from this call itself.
         self.search_matches = self._collect_matches(self.search_term)
 
-        # 5. Update highlights to show the new matches.
+        # Update highlights to show the new matches.
         # This is a visual change if new matches are found or if previous highlights are now gone.
         self.highlighted_matches = list(
             self.search_matches
         )  # Make a copy for highlighting
 
-        # 6. Navigate and set status based on whether matches were found.
+        # Navigate and set status based on whether matches were found.
         if not self.search_matches:
             self._set_status_message(f"'{self.search_term}' not found")
             # Even if no matches, highlights were cleared/updated (to empty), so redraw likely.
@@ -6143,11 +6157,11 @@ class Ecli:
                 return False
 
         try:
-            # Нормализуем путь для надежной проверки
+            # Normalizing the path for reliable verification
             absolute_target_path = os.path.normpath(os.path.abspath(filename))
 
-            # Оставляем только базовую проверку на попытку выхода вверх по директориям,
-            # что является разумной мерой безопасности.
+            # Leaving only the basic check for attempts to go up directories,
+            # which is a reasonable security measure.
             if ".." in absolute_target_path.split(os.sep):
                 self._set_status_message(
                     f"Path appears to traverse upwards ('..'): '{filename}'"
@@ -6174,7 +6188,7 @@ class Ecli:
             return False
 
     # ============= execute shell commands ===============================
-    def _execute_shell_command_async(self, cmd_list: list[str]) -> None:  # noqa: python:S3516
+    def _execute_shell_command_async(self, cmd_list: list[str]) -> None:
         """Executes a shell command in a separate thread and sends the result
         to the self._shell_cmd_q queue in a thread-safe manner.
         The result is a single string message summarizing the outcome.
@@ -6544,7 +6558,7 @@ class Ecli:
 
         return None  # No match found
 
-    def highlight_matching_brackets(self) -> None:  # noqa: python:S3516
+    def highlight_matching_brackets(self) -> None:
         """Highlights the bracket at the cursor and its matching pair.
 
         This method searches for a bracket character at or immediately to the
@@ -6573,7 +6587,7 @@ class Ecli:
         Returns:
             None
         """
-        # 1. Get terminal dimensions and ensure basic conditions are met.
+        # Get terminal dimensions and ensure basic conditions are met.
         _term_height, term_width = self.stdscr.getmaxyx()
         # Bounds check for cursor position
         if not (0 <= self.cursor_y < len(self.text)):
@@ -6604,7 +6618,7 @@ class Ecli:
             )
             return
 
-        # 1.1 Find the bracket at or near the cursor
+        # Find the bracket at or near the cursor
         brackets_map_chars = "(){}[]<>"
         bracket_pos = None
 
@@ -6633,7 +6647,7 @@ class Ecli:
             )
             return
 
-        # 2. Find the matching bracket using the determined position
+        # Find the matching bracket using the determined position
         bracket_char = self.text[bracket_pos[0]][bracket_pos[1]]
         match_coords = self.find_matching_bracket_multiline(
             bracket_pos[0], bracket_pos[1]
@@ -6656,7 +6670,7 @@ class Ecli:
             )
             return
 
-        # 3. Calculate the display width of the line number column
+        # Calculate the display width of the line number column
         line_num_display_width = len(str(max(1, len(self.text)))) + 1
         if (
             hasattr(self.drawer, "_text_start_x")
@@ -6672,7 +6686,7 @@ class Ecli:
 
         def get_screen_coords_for_highlight(
             text_row_idx: int, text_col_idx: int
-        ) -> Optional[tuple[int, int]]:  # noqa: python:S3516
+        ) -> Optional[tuple[int, int]]:
             """Calculates screen (y, x) for a text coordinate.
 
             Args:
@@ -6775,7 +6789,7 @@ class Ecli:
                             f"Curses error highlighting bracket 2 at screen ({scr_y2},{scr_x2}): {e}"
                         )
 
-    def init_colors(self) -> None:  # noqa: python:S3516
+    def init_colors(self) -> None:
         """Initializes curses color pairs with graceful degradation."""
         self.is_256_color_terminal: bool = False
         self.colors = {}  # Start fresh
@@ -6802,7 +6816,7 @@ class Ecli:
                 "status": curses.A_REVERSE,
                 "status_error": curses.A_REVERSE | curses.A_BOLD,
                 "line_number": curses.A_DIM,
-                # --- Добавляем Git цвета даже для монохромного режима ---
+                # --- Adding Git colors even to monochrome mode---
                 "git_info": curses.A_NORMAL,
                 "git_dirty": curses.A_BOLD,
                 "git_added": curses.A_NORMAL,
@@ -6815,7 +6829,7 @@ class Ecli:
         curses.start_color()
         curses.use_default_colors()
 
-        # --- Добавляем новые семантические имена для Git ---
+        # --- Adding new semantic names for Git ---
         color_definitions = {
             # Syntax Highlighting
             "default": ("#C9D1D9", curses.COLOR_WHITE, curses.A_NORMAL),
@@ -6840,9 +6854,9 @@ class Ecli:
                 curses.A_REVERSE | curses.A_BOLD,
             ),
             "line_number": ("#817248", curses.COLOR_YELLOW, curses.A_DIM),
-            # --- Цвета для Git статусов ---
+            # --- Colors for Git statuses ---
             "git_info": (
-                "#7EE787",
+                "#34913C",
                 curses.COLOR_GREEN,
                 curses.A_NORMAL,
             ),  # Untracked, Clean
@@ -6952,9 +6966,20 @@ class Ecli:
             "tab": "Tab",
             "shift_tab": "Shift+Tab",
             "toggle_comment_block": "Ctrl+\\",
+            "ai_assist": "F7",
+            "file_manager": "F10",
         }
         return [
-            "                 ──  Help  ──  ",
+            "                 ──  Ecli Help  ──  ",
+            "",
+            "  Tools & Features:",
+            f"    {_kb('file_manager', defaults['file_manager']):<22}: File Manager",
+            f"    {_kb('lint', defaults['lint']):<22}: Diagnostics (LSP/Linters)",
+            f"    {_kb('git_menu', defaults['git_menu']):<22}: Git menu",
+            f"    {_kb('help', defaults['help']):<22}: This help screen",
+            f"    {_kb('ai_assist', defaults['ai_assist']):<22}: AI Code Assistant",
+            f"    {_kb('cancel_operation', defaults['cancel_operation']):<22}: Cancel / Close Panel",
+            "    Insert Key            : Toggle Insert/Replace mode",
             "",
             "  File Operations:",
             f"    {_kb('new_file', defaults['new_file']):<22}: New file",
@@ -6984,13 +7009,6 @@ class Ecli:
             "    Arrows, Home, End     : Cursor movement",
             "    PageUp, PageDown      : Scroll by page",
             "    Shift+Nav Keys        : Extend selection",
-            "",
-            "  Tools & Features:",
-            f"    {_kb('lint', defaults['lint']):<22}: Diagnostics (LSP/Linters)",
-            f"    {_kb('git_menu', defaults['git_menu']):<22}: Git menu",
-            f"    {_kb('help', defaults['help']):<22}: This help screen",
-            f"    {_kb('cancel_operation', defaults['cancel_operation']):<22}: Cancel / Close Panel",  # Simplified
-            "    Insert Key            : Toggle Insert/Replace mode",
             "",
             "   ────────────────────────────────────────────────────",
             "",
@@ -7209,9 +7227,9 @@ class Ecli:
                     current_scroll_top = min(
                         max_scroll_offset, current_scroll_top + max_lines_on_screen
                     )
-                elif key_press in (curses.KEY_HOME, ord("g")):  # 'g' like in less/vim
+                elif key_press in (curses.KEY_HOME, ord("g")):
                     current_scroll_top = 0
-                elif key_press in (curses.KEY_END, ord("G")):  # 'G' like in less/vim
+                elif key_press in (curses.KEY_END, ord("G")):
                     current_scroll_top = max_scroll_offset
                 elif key_press == curses.KEY_RESIZE:
                     # Re-calculate dimensions and redraw on resize
@@ -7307,24 +7325,24 @@ class Ecli:
 
         This method orchestrates the user interaction for getting AI assistance.
         It performs the following steps:
-        1.  **Get Selected Text**: Retrieves the currently selected text using
+        1.  Get Selected Text: Retrieves the currently selected text using
             `self.get_selected_text()`. If no text is selected, it sets an
             informative status message and aborts.
 
-        2.  **Display Provider Menu**: It constructs and displays a prompt with a
+        2.  Display Provider Menu: It constructs and displays a prompt with a
             list of available AI providers configured in `config.toml`. The user
             can select a provider by entering a corresponding key.
 
-        3.  **Process User Choice**: It validates the user's input. If the choice
+        3.  Process User Choice: It validates the user's input. If the choice
             is invalid or the user cancels the prompt, the operation is aborted
             with a corresponding status message.
 
-        4.  **Submit Async Task**: If a valid provider is selected, it formats a
+        4.  Submit Async Task: If a valid provider is selected, it formats a
             prompt containing the selected code snippet and submits it as a task
             to the `AsyncEngine`. The engine will process the request in the
             background.
 
-        5.  **Update Status**: An immediate status message is set to inform the
+        5.  Update Status: An immediate status message is set to inform the
             user that the request has been sent. The final AI response will be
             handled asynchronously when the result arrives from the `AsyncEngine`.
 
@@ -7332,13 +7350,13 @@ class Ecli:
             bool: True, as this action always involves user interaction (a prompt)
                   or a status message update, thus requiring a UI redraw.
         """
-        # 1. Get text to send
+        # Get text to send
         selected_text = self.get_selected_text()
         if not selected_text:
             self._set_status_message("No text selected to send to AI.")
             return True  # Early exit is fine here as it's a precondition check
 
-        # 2. Form the selection menu
+        # Form the selection menu
         default_provider = self.config.get("ai", {}).get("default_provider", "claude")
         menu_items = {
             "1": "openai",
@@ -7352,12 +7370,12 @@ class Ecli:
         menu_str = " ".join([f"{k}:{v}" for k, v in menu_items.items() if k != "d"])
         prompt_msg = f"Select AI [{menu_str}] (d: default): "
 
-        # 3. Show the menu to the user
+        # Show the menu to the user
         choice = self.prompt(prompt_msg)
         if not choice:
             self._set_status_message("AI request cancelled.")
         else:
-            # 4. Determine the provider
+            # Determine the provider
             provider = menu_items.get(choice.lower())
             if not provider:
                 self._set_status_message(f"Invalid choice '{choice}'.")
@@ -7373,7 +7391,7 @@ class Ecli:
                     "config": self.config,
                 }
 
-                # ИСПРАВЛЕНО: Добавляем проверку на None
+                # Add check for None
                 if self.async_engine:
                     self.async_engine.submit_task(task)
                     self._set_status_message(
@@ -7386,7 +7404,7 @@ class Ecli:
         # so a redraw is always required.
         return True
 
-    # ==================== QUEUE PROCESSING =======================
+    # -------------------- QUEUE PROCESSING --------------------------
     def _process_all_queues(self) -> bool:  # noqa: python:S3516
         """Processes messages from all internal queues (general status, shell commands, etc.)
         and delegates Git-specific queue processing to the GitBridge component.
@@ -7399,13 +7417,13 @@ class Ecli:
                 the editor's state (like self.status_message), thus requiring a redraw.
                 Returns False otherwise.
         """
-        # Если мы в легковесном режиме, очередей и компонентов нет, выходим.
+        # If we are in lightweight mode, there are no queues or components, so we exit
         if self.is_lightweight:
             return False
 
         any_state_changed_by_queues = False
 
-        # --- 1. Shell command results queue (_shell_cmd_q) ---
+        # Shell command results queue (_shell_cmd_q)
         try:
             while True:
                 shell_result_msg = self._shell_cmd_q.get_nowait()
@@ -7418,15 +7436,15 @@ class Ecli:
         except queue.Empty:
             pass
 
-        # --- 2. Delegate Git queue processing ---
+        # Delegate Git queue processing
         if self.git and self.git.process_queues():
             any_state_changed_by_queues = True
 
-        # --- 3. Delegate Linter/LSP queue processing ---
+        # Delegate Linter/LSP queue processing
         if self.linter_bridge and self.linter_bridge.process_lsp_queue():
             any_state_changed_by_queues = True
 
-        # --- 4. For ASYNC ENGINE QUEUE ---
+        # For ASYNC ENGINE QUEUE
         if self.async_engine:
             try:
                 while True:
@@ -7452,7 +7470,7 @@ class Ecli:
 
         return any_state_changed_by_queues
 
-    # =====================  Main editor loop  ============================
+    # ------------------  Main editor loop  ------------------------
     def run(self) -> None:
         """The main event loop of the editor.
 
@@ -7513,11 +7531,11 @@ class Ecli:
         """
         redraw_needed = False
 
-        # 1. Process background events from queues
+        # Process background events from queues
         if self._process_all_queues():
             redraw_needed = True
 
-        # 2. Read user input
+        # Read user input
         key_input = self.keybinder.get_key_input()
 
         if key_input != curses.ERR and key_input != -1:

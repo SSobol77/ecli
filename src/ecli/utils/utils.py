@@ -13,6 +13,7 @@ It includes:
 These utilities are designed to enhance the flexibility, reliability, and user experience of the ECLI editor,
 while ensuring maintainable and reusable code.
 """
+
 import logging
 import os
 import subprocess
@@ -25,15 +26,16 @@ import toml
 # --- Constants for Color Indices ---
 # These constants represent xterm-256 color indices for various purposes.
 # They are used to define colors for text and backgrounds in the terminal.
-CALM_BG_IDX  = 236        # xterm-256 “graphite” ≈ #303030
-WHITE_FG_IDX = 255        # full white
+CALM_BG_IDX = 236  # xterm-256 “graphite” ≈ #303030
+WHITE_FG_IDX = 255  # full white
+
 
 # --- File Icon Retrieval Function ---
 def get_file_icon(filename: Optional[str], config: dict[str, Any]) -> str:
     """Returns an icon string representing the file type based on its name and extension, using the provided
     configuration.
 
-    This function prioritizes exact filename matches (such as "Makefile" or "Dockerfile") before checking 
+    This function prioritizes exact filename matches (such as "Makefile" or "Dockerfile") before checking
     file extensions to determine the appropriate icon. If no match is found, a default or text icon is returned.
 
 
@@ -50,29 +52,39 @@ def get_file_icon(filename: Optional[str], config: dict[str, Any]) -> str:
         '🐍'
     """
     if not config or not isinstance(config, dict):
-        logging.error("get_file_icon: Invalid configuration provided. Using default icon.")
+        logging.error(
+            "get_file_icon: Invalid configuration provided. Using default icon."
+        )
         return "❓"  # Default icon if config is invalid
 
     # Extract file icons and default icon from the configuration
     file_icons = config.get("file_icons", {})
-    default_icon = file_icons.get("default", "❓")  # Default if no specific icon is found
-    text_icon = file_icons.get("text", "📝 ")  # Specific default for text-like or new files
+    default_icon = file_icons.get(
+        "default", "❓"
+    )  # Default if no specific icon is found
+    text_icon = file_icons.get(
+        "text", "📝 "
+    )  # Specific default for text-like or new files
 
     if not filename:  # Handles new, unsaved files or None input
-        # return text_icon # Use text icon for new/untitled files
         return default_icon
 
         # Normalize filename for matching (lowercase)
     filename_lower = filename.lower()
-    base_name_lower = os.path.basename(filename_lower)  # e.g., "myfile.txt" from "/path/to/myfile.txt"
+    base_name_lower = os.path.basename(
+        filename_lower
+    )  # e.g., "myfile.txt" from "/path/to/myfile.txt"
 
     supported_formats: dict[str, list[str]] = config.get("supported_formats", {})
 
     if not file_icons or not supported_formats:
-        logging.warning("get_file_icon: 'file_icons' or 'supported_formats' missing in config. Using default icon.")
+        logging.warning(
+            "get_file_icon: 'file_icons' or 'supported_formats' missing in config. Using default icon."
+        )
         return default_icon
 
-    # 1. Check for direct filename matches (e.g., "Makefile", "Dockerfile", ".gitignore")
+    # CHECK FOR DIRECT FILENAME MATCHES
+    # Check for direct filename matches (e.g., "Makefile", "Dockerfile", ".gitignore")
     # These often don't have typical extensions but are specific file types.
     # The extensions list for these in `supported_formats` might contain the full name.
     for icon_key, extensions_or_names in supported_formats.items():
@@ -80,13 +92,18 @@ def get_file_icon(filename: Optional[str], config: dict[str, Any]) -> str:
             for ext_or_name in extensions_or_names:
                 # If the "extension" is actually a full filename (e.g., "makefile", "dockerfile")
                 # or a name starting with a dot (e.g., ".gitignore")
-                if not ext_or_name.startswith(".") and base_name_lower == ext_or_name.lower():
+                if (
+                    not ext_or_name.startswith(".")
+                    and base_name_lower == ext_or_name.lower()
+                ):
                     return file_icons.get(icon_key, default_icon)
-                if ext_or_name.startswith(
-                        ".") and base_name_lower == ext_or_name.lower():  # Handles .gitignore, .gitattributes
+                if (
+                    ext_or_name.startswith(".")
+                    and base_name_lower == ext_or_name.lower()
+                ):  # Handles .gitignore, .gitattributes
                     return file_icons.get(icon_key, default_icon)
 
-    # 2. Check for extension matches
+    # CHECK FOR EXTENSION MATCHES
     # Handle complex extensions like ".tar.gz" by checking parts of the extension.
     # We can get all "extensions" by splitting by dot.
     # Example: "myfile.tar.gz" -> parts ["myfile", "tar", "gz"]
@@ -102,38 +119,43 @@ def get_file_icon(filename: Optional[str], config: dict[str, Any]) -> str:
             for icon_key, defined_extensions in supported_formats.items():
                 if isinstance(defined_extensions, list):
                     # Convert defined extensions to lowercase for comparison
-                    lower_defined_extensions = [ext.lower() for ext in defined_extensions]
+                    lower_defined_extensions = [
+                        ext.lower() for ext in defined_extensions
+                    ]
                     ext_to_match = current_extension_to_check[1:]  # Remove leading dot
 
                     if ext_to_match in lower_defined_extensions:
                         return file_icons.get(icon_key, default_icon)
 
-    # 3. If no specific match by full name or extension, return the generic text icon
-    #    or a more generic default if text icon is also not found (though unlikely).
-    #    The problem description implied returning text_icon as a final fallback.
-    #    Using `default_icon` might be more appropriate if truly nothing matched.
-    #    Let's stick to text_icon as the ultimate fallback if other logic fails.
-    logging.debug(f"get_file_icon: No specific icon found for '{filename}'. Falling back to text icon.")
+    # If no specific match by full name or extension, return the generic text icon
+    # or a more generic default if text icon is also not found (though unlikely).
+    # The problem description implied returning text_icon as a final fallback.
+    # Using `default_icon` might be more appropriate if truly nothing matched.
+    # Let's stick to text_icon as the ultimate fallback if other logic fails.
+    logging.debug(
+        f"get_file_icon: No specific icon found for '{filename}'. Falling back to text icon."
+    )
     return text_icon
 
-# =============== Configuration Loading (if defined in this file) ===============
+
+# -------- Configuration Loading (if defined in this file) ---------
 def load_config() -> dict[str, Any]:
     """Loads, merges, and validates the application configuration.
 
     This function implements a robust, multi-layered configuration strategy:
-    1.  **Loads Built-in Defaults:** It first loads the base configuration
+    1.  Loads Built-in Defaults: It first loads the base configuration
         from `default_config.toml`, which is shipped with the application.
         This file ensures that the editor has a complete and functional set of
         defaults to operate correctly. This step is critical; if the default
         config is missing or corrupt, the application will exit.
 
-    2.  **Overrides with User Settings:** It then looks for a `config.toml` file
+    2.  Overrides with User Settings: It then looks for a `config.toml` file
         in the current working directory. If found, it loads the user's settings
         and recursively merges them on top of the defaults. This allows users to
         customize any part of the configuration without needing to replicate
         the entire default file.
 
-    3.  **Ensures Integrity:** The merging process is "deep", meaning nested
+    3.  Ensures Integrity: The merging process is "deep", meaning nested
         dictionaries (like `[colors]` or `[keybindings]`) are merged key-by-key,
         rather than being replaced entirely.
 
@@ -148,28 +170,39 @@ def load_config() -> dict[str, Any]:
     Raises:
         SystemExit: If the critical `default_config.toml` file cannot be loaded.
     """
-    # --- 1. Load Built-in Default Configuration ---
+    # Load Built-in Default Configuration
     default_config: dict[str, Any] = {}
     try:
-        # Определяем абсолютный путь к файлу defaults относительно текущего файла (utils.py)
-        # Это гарантирует, что он будет найден независимо от того, откуда запущен редактор.
+        # Define the absolute path to the defaults file relative to the current file (utils.py)
+        # This ensures that it will be found regardless of where the editor is launched from.
         current_script_dir = os.path.dirname(os.path.abspath(__file__))
         default_config_path = os.path.join(current_script_dir, "default_config.toml")
 
         with open(default_config_path, encoding="utf-8") as f:
             default_config = toml.load(f)
-        logging.debug(f"Successfully loaded default configuration from {default_config_path}")
+        logging.debug(
+            f"Successfully loaded default configuration from {default_config_path}"
+        )
 
     except FileNotFoundError:
-        # Это критическая ошибка - приложение не может работать без базовой конфигурации.
-        logging.critical("FATAL: Default configuration file 'default_config.toml' not found. Application cannot start.")
-        sys.exit("Error: Default configuration is missing. Please restore the application files.")
+        # This is a critical error - the application cannot run without basic configuration.
+        logging.critical(
+            "FATAL: Default configuration file 'default_config.toml' not found. Application cannot start."
+        )
+        sys.exit(
+            "Error: Default configuration is missing. Please restore the application files."
+        )
     except Exception as e:
-        logging.critical(f"FATAL: Could not parse 'default_config.toml': {e}. Application cannot start.", exc_info=True)
-        sys.exit("Error: Default configuration is corrupt. Please restore the application files.")
+        logging.critical(
+            f"FATAL: Could not parse 'default_config.toml': {e}. Application cannot start.",
+            exc_info=True,
+        )
+        sys.exit(
+            "Error: Default configuration is corrupt. Please restore the application files."
+        )
 
-    # --- 2. Load and Merge User-Specific Configuration ---
-    user_config_path = "config.toml"  # Ищем в текущей рабочей директории
+    # Load and Merge User-Specific Configuration
+    user_config_path = "config.toml"  # Look for it in the current working directory
     user_config: dict[str, Any] = {}
     if os.path.exists(user_config_path):
         try:
@@ -177,26 +210,34 @@ def load_config() -> dict[str, Any]:
                 user_config = toml.load(f_user)
             logging.debug(f"Loaded user overrides from {user_config_path}")
         except toml.TomlDecodeError as e_toml:
-            logging.error(f"TOML parse error in user config '{user_config_path}': {e_toml}. User settings will be ignored.")
+            logging.error(
+                f"TOML parse error in user config '{user_config_path}': {e_toml}. User settings will be ignored."
+            )
         except Exception as e_user:
-            logging.error(f"Could not read user config '{user_config_path}': {e_user}. User settings will be ignored.", exc_info=True)
+            logging.error(
+                f"Could not read user config '{user_config_path}': {e_user}. User settings will be ignored.",
+                exc_info=True,
+            )
     else:
-        logging.debug(f"No user config file found at '{user_config_path}'. Using default settings.")
+        logging.debug(
+            f"No user config file found at '{user_config_path}'. Using default settings."
+        )
 
-    # --- 3. Perform Deep Merge ---
-    # Пользовательские настройки перекрывают дефолтные.
+    # Perform Deep Merge
+    # User settings override defaults.
     final_config = deep_merge(default_config, user_config)
 
     logging.info("Configuration loaded and merged successfully.")
     return final_config
 
-# =============== Utility Functions ===============
+
+# --------- Utility Functions ---------
 # --- Safe Command Execution Utility ---
 def safe_run(
-        cmd: list[str],
-        cwd: Optional[str] = None,
-        timeout: Optional[float] = None,
-        **kwargs: Any
+    cmd: list[str],
+    cwd: Optional[str] = None,
+    timeout: Optional[float] = None,
+    **kwargs: Any,
 ) -> subprocess.CompletedProcess:
     """This function wraps subprocess.run to execute a command with enhanced safety:
     - Always captures stdout and stderr.
@@ -237,21 +278,34 @@ def safe_run(
         return subprocess.run(cmd, **effective_kwargs)
     except FileNotFoundError as e:
         logging.error(f"safe_run: Command not found: {cmd[0]!r}", exc_info=True)
-        return subprocess.CompletedProcess(cmd, returncode=127, stdout="", stderr=str(e))
+        return subprocess.CompletedProcess(
+            cmd, returncode=127, stdout="", stderr=str(e)
+        )
     except subprocess.TimeoutExpired as e:
-        logging.warning(f"safe_run: Command timed out after {timeout}s: {' '.join(cmd)}")
+        logging.warning(
+            f"safe_run: Command timed out after {timeout}s: {' '.join(cmd)}"
+        )
         return subprocess.CompletedProcess(
             cmd,
             returncode=-9,
             stdout=(e.stdout.decode("utf-8", "replace") if e.stdout else ""),
-            stderr=(e.stderr.decode("utf-8", "replace") if e.stderr else "Process timed out."),
+            stderr=(
+                e.stderr.decode("utf-8", "replace")
+                if e.stderr
+                else "Process timed out."
+            ),
         )
     except OSError as e:
         logging.error(f"safe_run: OS error while running {cmd}: {e}", exc_info=True)
         return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr=str(e))
     except Exception as _:
-        logging.exception(f"safe_run: Unexpected error while executing: {' '.join(cmd)}")
-        return subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr="Unexpected error occurred.")
+        logging.exception(
+            f"safe_run: Unexpected error while executing: {' '.join(cmd)}"
+        )
+        return subprocess.CompletedProcess(
+            cmd, returncode=-1, stdout="", stderr="Unexpected error occurred."
+        )
+
 
 # --- Dictionary Deep Merge Utility ---
 def deep_merge(base: dict[Any, Any], override: dict[Any, Any]) -> dict[Any, Any]:
@@ -278,14 +332,14 @@ def deep_merge(base: dict[Any, Any], override: dict[Any, Any]) -> dict[Any, Any]
     result = dict(base)  # Start with a shallow copy of the base
     for key, override_value in override.items():
         base_value = result.get(key)
-        if (isinstance(base_value, dict) and
-                isinstance(override_value, dict)):
+        if isinstance(base_value, dict) and isinstance(override_value, dict):
             # If both values are dictionaries, recurse
             result[key] = deep_merge(base_value, override_value)
         else:
             # Otherwise, the override value takes precedence
             result[key] = override_value
     return result
+
 
 # --- Hexadecimal to xterm-256 Color Conversion ---
 def hex_to_xterm(hex_color: str) -> int:
@@ -311,7 +365,11 @@ def hex_to_xterm(hex_color: str) -> int:
         return 255  # Default to white on error
 
     try:
-        r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+        r, g, b = (
+            int(hex_color[0:2], 16),
+            int(hex_color[2:4], 16),
+            int(hex_color[4:6], 16),
+        )
     except ValueError:
         return 255
 

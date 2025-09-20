@@ -17,7 +17,7 @@ from .panels import AiResponsePanel, BasePanel, FileBrowserPanel
 
 
 if TYPE_CHECKING:
-    from core.Ecli import Ecli
+    from ecli.core.Ecli import Ecli
 
 
 ## ================= PanelManager Class ===============================
@@ -117,12 +117,12 @@ class PanelManager:
         if not panel_instance:
             return
 
-        # Если эта же панель уже активна, закрываем ее
+        # If this same panel is already active, close it
         if self.active_panel is panel_instance and panel_instance.visible:
             self.close_active_panel()
             return
 
-        # Если активна другая панель, закрываем ее
+        # If another panel is active, close it
         if self.is_panel_active() and self.active_panel is not panel_instance:
             self.close_active_panel()
 

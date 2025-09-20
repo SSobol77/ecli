@@ -9,6 +9,7 @@ It also handles the processing of Git-related queues for commands and informatio
 This module is designed to be used with the Ecli class, which is expected to provide
 the necessary configuration and state management for Git operations.
 """
+
 import functools
 import os
 import queue
@@ -19,19 +20,21 @@ from ecli.utils.utils import safe_run
 
 
 if TYPE_CHECKING:
-    from core.Ecli import Ecli
+    from ecli.core.Ecli import Ecli
+
 
 # ================= GitBridge Class ==============================
 class GitBridge:
     """Manages all Git integration for the editor. This class acts as a "backend"
     service for Git operations, containing no UI-specific code.
     """
+
     def __init__(self, editor: "Ecli"):
         self.editor: Ecli = editor
         self.config: dict = editor.config
         self.info: tuple[str, str, str] = ("", "", "0")
         self.last_filename_context: Optional[str] = None
-        self.info_q: queue.Queue[tuple[str,str,str]] = editor._git_q
+        self.info_q: queue.Queue[tuple[str, str, str]] = editor._git_q
         self.cmd_q: queue.Queue[str] = editor._git_cmd_q
 
     def get_info(self, file_path_context: Optional[str]) -> tuple[str, str, str]:
@@ -55,7 +58,7 @@ class GitBridge:
             target=self._fetch_git_info_async,
             args=(current_file_context,),
             daemon=True,
-            name="GitInfoFetchThread"
+            name="GitInfoFetchThread",
         )
         thread.start()
 
@@ -68,7 +71,7 @@ class GitBridge:
             target=self._run_git_command_async,
             args=(cmd_list, command_name),
             daemon=True,
-            name=f"GitExecThread-{command_name}"
+            name=f"GitExecThread-{command_name}",
         )
         thread.start()
 
@@ -100,7 +103,9 @@ class GitBridge:
         self.info = ("", "", "0")
         self.last_filename_context = None
 
-    def _get_repo_info_sync(self, file_path_context: Optional[str]) -> tuple[str, str, str]:
+    def _get_repo_info_sync(
+        self, file_path_context: Optional[str]
+    ) -> tuple[str, str, str]:
         # (Your original, unchanged code for this method goes here)
         repo_dir = os.getcwd()
         if file_path_context and os.path.isfile(file_path_context):

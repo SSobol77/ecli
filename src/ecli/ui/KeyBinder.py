@@ -30,6 +30,7 @@ to process key events, and get_key_input to read user input from the terminal. T
 ensures that all key events are mapped to the correct editor actions, supporting both
 default and user-defined keybindings.
 """
+
 import curses
 import logging
 from typing import TYPE_CHECKING, Any, Callable, Optional
@@ -39,7 +40,8 @@ from wcwidth import wcswidth
 
 
 if TYPE_CHECKING:
-    from core.Ecli import Ecli
+    from ecli.core.Ecli import Ecli
+
 
 ## ==================== KeyBinder Class ====================
 class KeyBinder:
@@ -67,6 +69,7 @@ class KeyBinder:
         _setup_action_map(): Constructs the mapping from key codes or strings to editor action methods.
         get_key_input(window): Reads a key or key sequence from the terminal, handling ESC/Alt combinations robustly.
     """
+
     def __init__(self, editor: "Ecli"):
         """Initializes the KeyBinder instance.
 
@@ -95,23 +98,25 @@ class KeyBinder:
         """Handles insertion of a printable character into the buffer."""
         char_to_insert = ""
         if isinstance(key, str) and len(key) == 1:
-            # Проверяем, что это не управляющий символ, который должен был быть обработан ранее.
-            # wcswidth > 0 - хороший индикатор того, что это видимый символ.
+            # Check that this isn't a control character that should have been processed earlier.
+            # wcswidth > 0 is a good indicator that this is a visible character.
             if wcswidth(key) > 0:
                 char_to_insert = key
         elif isinstance(key, int) and 32 <= key < 1114112:
             try:
-                # Преобразуем числовой код в символ
+                # Convert numeric code to character
                 char_to_insert = chr(key)
                 if wcswidth(char_to_insert) <= 0:
-                    char_to_insert = "" # Игнорируем невидимые символы
+                    char_to_insert = ""  # Ignore invisible characters
             except ValueError:
                 logging.warning(f"Invalid ordinal for chr(): {key}. Cannot convert.")
                 self.editor._set_status_message(f"Invalid key code: {key}")
                 return True
 
         if char_to_insert:
-            logging.debug(f"handle_input: Treating '{repr(char_to_insert)}' as printable character for insertion.")
+            logging.debug(
+                f"handle_input: Treating '{repr(char_to_insert)}' as printable character for insertion."
+            )
             return self.editor.insert_text(char_to_insert)
 
         return False
@@ -135,30 +140,42 @@ class KeyBinder:
             Exception: Any exception raised during input handling is caught, logged, and a status
                 message is set. The exception is not propagated.
         """
-        logging.debug("handle_input: Received logical key event → %r (type: %s)", key, type(key).__name__)
+        logging.debug(
+            "handle_input: Received logical key event → %r (type: %s)",
+            key,
+            type(key).__name__,
+        )
 
         original_status = self.editor.status_message
         action_caused_visual_change = False
 
         with self.editor._state_lock:
             try:
-                # --- Attempt 1: Direct key lookup (numbers or 'alt-...') ---
+                # 1 Direct key lookup (numbers or 'alt-...')
                 if key in self.action_map:
                     action = self.action_map[key]
-                    logging.debug(f"handle_input: Key '{key}' found in action_map. Calling: {action.__name__}")
+                    logging.debug(
+                        f"handle_input: Key '{key}' found in action_map. Calling: {action.__name__}"
+                    )
                     if action():
                         action_caused_visual_change = True
 
-                # --- Attempt 2: Handle printable characters ---
+                # 2 Handle printable characters
                 # This branch will trigger if the key is, for example, 104 (ord('h')) or the string 'h'
                 elif self._handle_printable_character(key):
                     action_caused_visual_change = True
 
-                # --- Attempt 3: Unhandled input ---
+                # 3 Unhandled input
                 # This branch is for unassigned control characters or non-printable codes.
                 else:
-                    logging.debug("Unhandled input by primary logic: %r (type: %s)", key, type(key).__name__)
-                    self.editor._set_status_message(f"Ignored unhandled input: {repr(key)}")
+                    logging.debug(
+                        "Unhandled input by primary logic: %r (type: %s)",
+                        key,
+                        type(key).__name__,
+                    )
+                    self.editor._set_status_message(
+                        f"Ignored unhandled input: {repr(key)}"
+                    )
 
                 # Final check for status change
                 if self.editor.status_message != original_status:
@@ -167,8 +184,12 @@ class KeyBinder:
                 return action_caused_visual_change
 
             except Exception as e_handler:
-                logging.exception("Input handler critical error. This should be investigated.")
-                self.editor._set_status_message(f"Input handler error: {str(e_handler)[:50]}")
+                logging.exception(
+                    "Input handler critical error. This should be investigated."
+                )
+                self.editor._set_status_message(
+                    f"Input handler error: {str(e_handler)[:50]}"
+                )
                 return True
 
     def _load_keybindings(self) -> dict[str, list[int | str]]:
@@ -183,18 +204,19 @@ class KeyBinder:
             (e.g., "delete", "undo"), and the value is a list of key codes or key strings
             that trigger that action.
         """
+
         # Getting the correct key codes for TTY
         def get_backspace_code():
-                """Determines the correct key codes for the Backspace key depending on the terminal.
+            """Determines the correct key codes for the Backspace key depending on the terminal.
 
-                This helper function returns a list of integer codes that may represent the Backspace key
-                in different terminal environments. It is useful for handling Backspace consistently
-                across various platforms and terminal emulators.
+            This helper function returns a list of integer codes that may represent the Backspace key
+            in different terminal environments. It is useful for handling Backspace consistently
+            across various platforms and terminal emulators.
 
-                Returns:
-                    list[int]: A list of possible key codes for Backspace (e.g., [curses.KEY_BACKSPACE, 8, 127]).
-                """
-                return [curses.KEY_BACKSPACE, 8, 127]
+            Returns:
+                list[int]: A list of possible key codes for Backspace (e.g., [curses.KEY_BACKSPACE, 8, 127]).
+            """
+            return [curses.KEY_BACKSPACE, 8, 127]
 
         def get_ctrl_z_codes():
             """Returns all possible key codes for the Ctrl+Z key combination.
@@ -249,8 +271,7 @@ class KeyBinder:
             "handle_backspace": ["backspace"] + get_backspace_code(),
             "toggle_file_browser": ["f10", 274],
             "toggle_focus": ["f12", 276],
-
-            # Улучшенная поддержка Alt+HJKL для TTY
+            # Improved Alt+HJKL support for TTYs
             "extend_selection_up": [
                 "shift+up",
                 "alt-k",
@@ -271,14 +292,15 @@ class KeyBinder:
                 "alt-l",
                 curses.KEY_SRIGHT,
             ],
-
         }
 
         user_keybindings_config = self.config.get("keybindings", {})
         parsed_keybindings: dict[str, list[int | str]] = {}
 
         for action, default_value_spec in default_keybindings.items():
-            key_value_spec_from_config = user_keybindings_config.get(action, default_value_spec)
+            key_value_spec_from_config = user_keybindings_config.get(
+                action, default_value_spec
+            )
 
             if not key_value_spec_from_config:
                 logging.debug(f"Keybinding for action '{action}' is disabled or empty.")
@@ -288,8 +310,13 @@ class KeyBinder:
             specs_to_process: list[str | int]
             if isinstance(key_value_spec_from_config, list):
                 specs_to_process = key_value_spec_from_config
-            elif isinstance(key_value_spec_from_config, str) and "|" in key_value_spec_from_config:
-                specs_to_process = [s.strip() for s in key_value_spec_from_config.split("|")]
+            elif (
+                isinstance(key_value_spec_from_config, str)
+                and "|" in key_value_spec_from_config
+            ):
+                specs_to_process = [
+                    s.strip() for s in key_value_spec_from_config.split("|")
+                ]
             else:
                 specs_to_process = [key_value_spec_from_config]
 
@@ -308,11 +335,11 @@ class KeyBinder:
                 except Exception as e_unhandled:
                     logging.error(
                         f"Unexpected error parsing keybinding item '{key_spec_item!r}' for action '{action}': {e_unhandled}",
-                        exc_info=True
+                        exc_info=True,
                     )
 
-            if action == "undo":                     # Ctrl+Z / KEY_SUSPEND
-                extra_codes: list[int] = [26, 407]   # 407 == curses.KEY_SUSPEND
+            if action == "undo":  # Ctrl+Z / KEY_SUSPEND
+                extra_codes: list[int] = [26, 407]  # 407 == curses.KEY_SUSPEND
                 if hasattr(curses, "KEY_SUSPEND"):
                     extra_codes.append(curses.KEY_SUSPEND)
                 for code in extra_codes:
@@ -322,9 +349,13 @@ class KeyBinder:
             if key_codes_for_action:
                 parsed_keybindings[action] = key_codes_for_action
             else:
-                logging.warning(f"No valid key codes found for action '{action}' after parsing. It will not be bound.")
+                logging.warning(
+                    f"No valid key codes found for action '{action}' after parsing. It will not be bound."
+                )
 
-        logging.debug(f"Loaded and parsed keybindings (action -> list of key_codes): {parsed_keybindings}")
+        logging.debug(
+            f"Loaded and parsed keybindings (action -> list of key_codes): {parsed_keybindings}"
+        )
         return parsed_keybindings
 
     # Additional method for TTY diagnostics
@@ -342,9 +373,13 @@ class KeyBinder:
         Returns:
             None
         """
-        logging.debug("Entering TTY Debug Mode. Press keys to see their codes (ESC to exit).")
+        logging.debug(
+            "Entering TTY Debug Mode. Press keys to see their codes (ESC to exit)."
+        )
         target = window or self.stdscr
-        self.editor._set_status_message("TTY Debug Mode: Press keys to see codes (ESC to exit)")
+        self.editor._set_status_message(
+            "TTY Debug Mode: Press keys to see codes (ESC to exit)"
+        )
 
         while True:
             try:
@@ -396,7 +431,9 @@ class KeyBinder:
             return key_input
 
         if not isinstance(key_input, str):
-            raise ValueError(f"Invalid key_input type: {type(key_input)}. Expected str or int.")
+            raise ValueError(
+                f"Invalid key_input type: {type(key_input)}. Expected str or int."
+            )
 
         original_key_string = key_input
         s = key_input.strip().lower()
@@ -404,7 +441,9 @@ class KeyBinder:
         if not s:
             raise ValueError("Key string cannot be empty.")
 
-        logging.debug(f"_decode_keystring: Parsing key_input: {original_key_string!r} (initial s: {s!r})")
+        logging.debug(
+            f"_decode_keystring: Parsing key_input: {original_key_string!r} (initial s: {s!r})"
+        )
 
         # Normalize alt+key to alt-key
         if "alt" in s.split("+"):
@@ -421,45 +460,78 @@ class KeyBinder:
                 normalized_s_parts.append(base_key_for_alt)
 
                 s = "".join(normalized_s_parts)
-                logging.debug(f"_decode_keystring: Normalized '{original_key_string}' to '{s}' for Alt processing.")
+                logging.debug(
+                    f"_decode_keystring: Normalized '{original_key_string}' to '{s}' for Alt processing."
+                )
 
         if s.startswith("alt-"):
-            logging.debug(f"_decode_keystring: Interpreted as logical Alt-binding: {s!r}")
+            logging.debug(
+                f"_decode_keystring: Interpreted as logical Alt-binding: {s!r}"
+            )
             return s
 
         # Named keys map for terminal environments
         named_keys_map: dict[str, int] = {
-            "f1": curses.KEY_F1, "f2": curses.KEY_F2, "f3": curses.KEY_F3, "f4": curses.KEY_F4,
-            "f5": curses.KEY_F5, "f6": curses.KEY_F6, "f7": curses.KEY_F7, "f8": curses.KEY_F8,
-            "f9": curses.KEY_F9, "f10": curses.KEY_F10, "f11": curses.KEY_F11, "f12": curses.KEY_F12,
-            "left": curses.KEY_LEFT, "right": curses.KEY_RIGHT,
-            "up": curses.KEY_UP, "down": curses.KEY_DOWN,
-            "home": curses.KEY_HOME, "end": getattr(curses, "KEY_END", curses.KEY_LL),
-            "pageup": curses.KEY_PPAGE, "pgup": curses.KEY_PPAGE,
-            "pagedown": curses.KEY_NPAGE, "pgdn": curses.KEY_NPAGE,
-            "delete": curses.KEY_DC, "del": curses.KEY_DC,
+            "f1": curses.KEY_F1,
+            "f2": curses.KEY_F2,
+            "f3": curses.KEY_F3,
+            "f4": curses.KEY_F4,
+            "f5": curses.KEY_F5,
+            "f6": curses.KEY_F6,
+            "f7": curses.KEY_F7,
+            "f8": curses.KEY_F8,
+            "f9": curses.KEY_F9,
+            "f10": curses.KEY_F10,
+            "f11": curses.KEY_F11,
+            "f12": curses.KEY_F12,
+            "left": curses.KEY_LEFT,
+            "right": curses.KEY_RIGHT,
+            "up": curses.KEY_UP,
+            "down": curses.KEY_DOWN,
+            "home": curses.KEY_HOME,
+            "end": getattr(curses, "KEY_END", curses.KEY_LL),
+            "pageup": curses.KEY_PPAGE,
+            "pgup": curses.KEY_PPAGE,
+            "pagedown": curses.KEY_NPAGE,
+            "pgdn": curses.KEY_NPAGE,
+            "delete": curses.KEY_DC,
+            "del": curses.KEY_DC,
             "backspace": curses.KEY_BACKSPACE,
             "insert": curses.KEY_IC,
             "tab": 9,
-            "enter": curses.KEY_ENTER, "return": curses.KEY_ENTER,
+            "enter": curses.KEY_ENTER,
+            "return": curses.KEY_ENTER,
             "space": ord(" "),
-            "esc": 27, "escape": 27,
-            "shift+left": curses.KEY_SLEFT, "sleft": curses.KEY_SLEFT,
-            "shift+right": curses.KEY_SRIGHT, "sright": curses.KEY_SRIGHT,
-            "shift+up": getattr(curses, "KEY_SR", getattr(curses, "KEY_SPREVIOUS", 337)),
+            "esc": 27,
+            "escape": 27,
+            "shift+left": curses.KEY_SLEFT,
+            "sleft": curses.KEY_SLEFT,
+            "shift+right": curses.KEY_SRIGHT,
+            "sright": curses.KEY_SRIGHT,
+            "shift+up": getattr(
+                curses, "KEY_SR", getattr(curses, "KEY_SPREVIOUS", 337)
+            ),
             "sup": getattr(curses, "KEY_SR", getattr(curses, "KEY_SPREVIOUS", 337)),
             "shift+down": getattr(curses, "KEY_SF", getattr(curses, "KEY_SNEXT", 336)),
             "sdown": getattr(curses, "KEY_SF", getattr(curses, "KEY_SNEXT", 336)),
             "shift+home": curses.KEY_SHOME,
             "shift+end": curses.KEY_SEND,
-            "shift+pageup": getattr(curses, "KEY_SPPAGE", getattr(curses, "KEY_SPREVIOUS", 337)),
-            "shift+pagedown": getattr(curses, "KEY_SNPAGE", getattr(curses, "KEY_SNEXT", 336)),
+            "shift+pageup": getattr(
+                curses, "KEY_SPPAGE", getattr(curses, "KEY_SPREVIOUS", 337)
+            ),
+            "shift+pagedown": getattr(
+                curses, "KEY_SNPAGE", getattr(curses, "KEY_SNEXT", 336)
+            ),
             "shift+tab": getattr(curses, "KEY_BTAB", 353),
-            "/": ord("/"), "?": ord("?"), "\\": ord("\\"),
+            "/": ord("/"),
+            "?": ord("?"),
+            "\\": ord("\\"),
         }
 
         # Add function keys F1-F12
-        named_keys_map.update({f"f{i}": getattr(curses, f"KEY_F{i}", 256 + i) for i in range(1, 13)})
+        named_keys_map.update(
+            {f"f{i}": getattr(curses, f"KEY_F{i}", 256 + i) for i in range(1, 13)}
+        )
 
         if s in named_keys_map:
             code = named_keys_map[s]
@@ -472,7 +544,9 @@ class KeyBinder:
         modifiers = set(p.strip() for p in parts[:-1])
 
         if "alt" in modifiers:
-            logging.error(f"_decode_keystring: 'alt' unexpectedly found in modifiers for '{s}' at a late stage.")
+            logging.error(
+                f"_decode_keystring: 'alt' unexpectedly found in modifiers for '{s}' at a late stage."
+            )
             modifiers.remove("alt")
             remaining_modifiers_part = ""
             if modifiers:
@@ -487,7 +561,9 @@ class KeyBinder:
         elif len(base_key_str) == 1:
             base_code = ord(base_key_str)
         else:
-            raise ValueError(f"Unknown base key '{base_key_str}' in '{original_key_string}'")
+            raise ValueError(
+                f"Unknown base key '{base_key_str}' in '{original_key_string}'"
+            )
 
         # Handle Ctrl modifier
         if "ctrl" in modifiers:
@@ -512,13 +588,21 @@ class KeyBinder:
         # Handle Shift modifier
         if "shift" in modifiers:
             modifiers.remove("shift")
-            if "a" <= base_key_str <= "z" and len(base_key_str) == 1 and base_code == ord(base_key_str):
+            if (
+                "a" <= base_key_str <= "z"
+                and len(base_key_str) == 1
+                and base_code == ord(base_key_str)
+            ):
                 base_code = ord(base_key_str.upper())
 
         if modifiers:
-            raise ValueError(f"Unknown or unhandled modifiers {list(modifiers)} in '{original_key_string}'")
+            raise ValueError(
+                f"Unknown or unhandled modifiers {list(modifiers)} in '{original_key_string}'"
+            )
 
-        logging.debug(f"_decode_keystring: Final resolved integer key code for '{original_key_string}': {base_code}")
+        logging.debug(
+            f"_decode_keystring: Final resolved integer key code for '{original_key_string}': {base_code}"
+        )
         return base_code
 
     def _setup_action_map(self) -> dict[int | str, Callable[..., Any]]:
@@ -555,7 +639,6 @@ class KeyBinder:
             "select_all": self.editor.select_all,
             "delete": self.editor.handle_delete,
             "quit": self.editor.exit_editor,
-
             # --- Navigation and Text Manipulation (Always available) ---
             "handle_home": self.editor.handle_home,
             "handle_end": self.editor.handle_end,
@@ -575,7 +658,6 @@ class KeyBinder:
             "shift_tab": self.editor.handle_smart_unindent,
             "toggle_comment_block": self.editor.toggle_comment_block,
             "toggle_insert_mode": self.editor.toggle_insert_mode,
-
             # --- Core Handlers (Always available) ---
             "handle_up": self.editor.handle_up,
             "handle_down": self.editor.handle_down,
@@ -587,17 +669,14 @@ class KeyBinder:
             "cancel_operation": self.editor.handle_escape,
             "toggle_file_browser": self.editor.toggle_file_browser,
             "toggle_focus": self.editor.toggle_focus,
-
             # --- Git ---
             "git_menu": self.editor.show_git_panel,
-
             # --- AI ---
             "request_ai_explanation": self.editor.toggle_widget_panel,
-
             # --- Debugging (Always available) ---
             "debug_show_lexer": lambda: self.editor._set_status_message(
                 f"Current Lexer: {self.editor._lexer.name if self.editor._lexer else 'None'}"
-            )
+            ),
         }
 
         if not self.editor.is_lightweight:
@@ -606,7 +685,9 @@ class KeyBinder:
                 action_to_method_map["show_lint_panel"] = self.editor.show_lint_panel
 
             if self.editor.async_engine:
-                action_to_method_map["toggle_widget_panel"] = self.editor.toggle_widget_panel
+                action_to_method_map["toggle_widget_panel"] = (
+                    self.editor.toggle_widget_panel
+                )
 
         final_key_action_map: dict[int | str, Callable] = {}
 
@@ -644,8 +725,11 @@ class KeyBinder:
                     )
                     continue
 
-                if (key_code in final_key_action_map and
-                        final_key_action_map[key_code].__name__ != method_callable.__name__):
+                if (
+                    key_code in final_key_action_map
+                    and final_key_action_map[key_code].__name__
+                    != method_callable.__name__
+                ):
                     logging.warning(
                         f"Keybinding for action '{action_name}' (key: {key_code}) is overwriting "
                         f"an existing mapping for method '{final_key_action_map[key_code].__name__}'."
@@ -679,18 +763,17 @@ class KeyBinder:
             logging.debug(f"get_key_input: Using provided window: {window}")
         target = window or self.stdscr
         try:
-
             # Use getch() for reliability; it returns an int
             key = target.getch()
 
-            if key != 27: # If this is not ESC, just return the code
+            if key != 27:  # If this is not ESC, just return the code
                 return key
 
             # If this is ESC, it might be the start of an Alt combination.
             # Make ONE non-blocking attempt to read the next character.
             target.nodelay(True)
             next_key = target.getch()
-            target.nodelay(False) # Immediately return to blocking mode
+            target.nodelay(False)  # Immediately return to blocking mode
 
             if next_key == curses.ERR:
                 # If nothing was read after ESC, it was just the Escape key
@@ -704,7 +787,9 @@ class KeyBinder:
                 if "a" <= char_after_esc.lower() <= "z":
                     # This is the classic Alt + letter
                     alt_key_str = f"alt-{char_after_esc.lower()}"
-                    logging.debug(f"TTY: Parsed ESC sequence as logical key: {alt_key_str}")
+                    logging.debug(
+                        f"TTY: Parsed ESC sequence as logical key: {alt_key_str}"
+                    )
                     return alt_key_str
             except ValueError:
                 # next_key is not a valid character, ignoring
@@ -736,12 +821,12 @@ class KeyBinder:
             The name of the action (e.g., "save_file") or None if not found.
         """
         try:
-            # Сначала декодируем строку/число в канонический вид
+            # First, we decode the string/number into canonical form
             decoded_key = self._decode_keystring(key_spec)
         except ValueError:
-            return None # Невалидная строка для клавиши
+            return None  # Invalid key string
 
-        # Ищем действие, которому принадлежит этот декодированный ключ
+        # Look up the action associated with this decoded key
         for action_name, key_list in self.keybindings.items():
             if decoded_key in key_list:
                 return action_name

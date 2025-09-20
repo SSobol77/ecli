@@ -45,11 +45,11 @@ from wcwidth import wcswidth
 
 from ecli.integrations.GitBridge import GitBridge
 from ecli.utils.logging_config import logger
-from src.ecli.utils.utils import safe_run
+from ecli.utils.utils import safe_run
 
 
 if TYPE_CHECKING:
-    from core.Ecli import Ecli
+    from ecli.core.Ecli import Ecli
 
 CursesWindow = Any
 
@@ -664,8 +664,7 @@ class AiResponsePanel(BasePanel):
             text = self.lines[self.cursor_y]
 
         try:
-            import pyperclip
-
+            # Try to copy to system clipboard
             pyperclip.copy(text)
             self.editor._set_status_message("Copied selection → system clipboard")
         except Exception:
@@ -682,8 +681,7 @@ class AiResponsePanel(BasePanel):
         txt = getattr(self.editor, "internal_clipboard", "")
         if not txt:
             try:
-                import pyperclip
-
+                # Try to paste from system clipboard
                 txt = pyperclip.paste()
             except Exception:
                 pass
@@ -1049,12 +1047,12 @@ class FileBrowserPanel(BasePanel):
         path = Path(entry.path)
         if entry.is_dir(follow_symlinks=False):
             try:
-                # Проверяем доступ к директории. Если нет прав,
-                # os.scandir выбросит PermissionError.
+                # Check access to the directory. If there are no rights,
+                # os.scandir will throw a PermissionError.
                 with os.scandir(path):
-                    pass  # Нам не нужно итерироваться, только проверить открытие
+                    pass  # Don't need to iterate, just check opening
 
-                # Если проверка прошла, меняем директорию
+                # If the check passed, change the directory
                 self.cwd = path.resolve()
                 self._refresh_entries()
 
@@ -1231,16 +1229,16 @@ class FileBrowserPanel(BasePanel):
             return
 
         entry = self.entries[self.idx]
-        if entry is None:  # Проверяем ".." запись
+        if entry is None:  # Checking the ".." entry
             return
 
-        # Теперь `entry` точно os.DirEntry, и доступ к .path и .name безопасен
+        # Now `entry` is definitely os.DirEntry, and access to .path and .name is safe
         src = Path(entry.path)
         stem, ext = os.path.splitext(entry.name)
         dst_name = self._unique_name(stem, "_copy", ext)
         dst = self.cwd / dst_name
 
-        # Правильная проверка результата _prompt, который может вернуть None
+        # Correctly check the result of _prompt, which may return None
         response = self._prompt(f"Copy '{entry.name}' to '{dst_name}'? (y/n)")
         if not response or response.lower() != "y":
             return
@@ -1261,12 +1259,12 @@ class FileBrowserPanel(BasePanel):
             return
 
         entry = self.entries[self.idx]
-        if entry is None:  # Проверяем ".." запись
+        if entry is None:  # Checking the ".." entry
             return
 
-        # Теперь `entry` точно os.DirEntry
+        # Now `entry` is definitely os.DirEntry
         new_name = self._prompt("Rename to:", entry.name)
-        # `if not new_name` проверяет и None, и пустую строку ""
+        # `if not new_name` checks for both None and empty string ""
         if not new_name or new_name == entry.name:
             return
 
@@ -1283,13 +1281,13 @@ class FileBrowserPanel(BasePanel):
             return
 
         entry = self.entries[self.idx]
-        if entry is None:  # Проверяем ".." запись
+        if entry is None:  # Checking the ".." entry
             return
 
-        # Теперь `entry` точно os.DirEntry
+        # Now `entry` is definitely os.DirEntry
         path = Path(entry.path)
 
-        # Правильная проверка результата _prompt
+        # Correctly check the result of _prompt
         response = self._prompt(f"DELETE '{path.name}'? (y/n)")
         if not response or response.lower() != "y":
             return
@@ -1456,7 +1454,7 @@ class GitPanel(BasePanel):
         self.attr_title = self.editor.colors.get("function", curses.A_BOLD)
         self.attr_branch = self.editor.colors.get("keyword", curses.A_BOLD)
         self.attr_output_error = self.editor.colors.get("error", curses.A_NORMAL)
-        # Цвета для статусов теперь тоже берутся из editor.colors
+        # Colors for statuses are now also taken from editor.colors
         self.attr_status_modified = self.editor.colors.get("git_dirty", curses.A_NORMAL)
         self.attr_status_new = self.editor.colors.get("git_added", curses.A_NORMAL)
         self.attr_status_deleted = self.editor.colors.get(
@@ -1470,25 +1468,27 @@ class GitPanel(BasePanel):
     def _run_command_async(
         self, cmd_list: list[str], show_running: bool = True
     ) -> None:
-        """Запускает команду в отдельном потоке (для долгих, неинтерактивных операций)."""
+        """Runs a command in a separate thread (for long, non-interactive operations)."""
 
         def worker() -> None:
             self.is_busy = True
             try:
+                # If the check passed, change the directory
                 if show_running:
                     self.output_lines = [f"Running: {' '.join(cmd_list)}..."]
                 result = self._run_git_command(cmd_list)
+                # Update output based on result
                 if result.returncode == 0:
                     output = result.stdout.strip()
                     self.output_lines = output.splitlines() or [
-                        "Command successful (no output)."
+                        "Command successful (no output)"
                     ]
-                else:
+                else:  # Error occurred
                     self.output_lines = [f"ERROR (code {result.returncode}):"] + (
                         result.stderr.strip().splitlines() or ["(no error message)"]
                     )
                 self.git_bridge.update_git_info()
-            finally:
+            finally:  # Ensure busy state is reset
                 self.is_busy = False
 
         threading.Thread(target=worker, daemon=True).start()
@@ -1499,6 +1499,7 @@ class GitPanel(BasePanel):
         # Remove unnecessary redrawing, the prompt will handle it
         try:
             result = self._run_git_command(cmd_list)
+            # Update output based on result
             if result.returncode == 0:
                 output = result.stdout.strip()
                 self.output_lines = output.splitlines() or [
@@ -1507,7 +1508,7 @@ class GitPanel(BasePanel):
                 self.editor._set_status_message(
                     f"Git {cmd_list[1]} successful."
                 )  # Notify about success
-            else:
+            else:  # Error occurred
                 err_summary = (
                     result.stderr.strip().splitlines()[0]
                     if result.stderr.strip()
@@ -1522,7 +1523,7 @@ class GitPanel(BasePanel):
 
             # Update overall information in any case
             self.git_bridge.update_git_info()
-        finally:
+        finally:  # Ensure busy state is reset
             self.is_busy = False
 
     def _start_auto_update(self) -> None:
@@ -1669,7 +1670,7 @@ class GitPanel(BasePanel):
             logger.error(f"Failed to update status for {file_path}: {e}")
 
     def _toggle_auto_update(self) -> None:
-        """Переключает автообновление."""
+        """Toggles auto-update."""
         self.auto_update_enabled = not self.auto_update_enabled
         if self.auto_update_enabled:
             self._start_auto_update()
@@ -1685,10 +1686,10 @@ class GitPanel(BasePanel):
             if result.returncode != 0:
                 return
 
-            # Очищаем старый кэш
+            # Clear the old cache
             self.file_status_cache.clear()
 
-            # Парсим вывод git status --porcelain
+            # Parse the output of git status --porcelain
             for line in result.stdout.strip().splitlines():
                 if len(line) < 3:
                     continue
@@ -1696,7 +1697,7 @@ class GitPanel(BasePanel):
                 status_code = line[:2]
                 file_path = line[3:].strip()
 
-                # Определяем статус файла
+                # Determine file status
                 if status_code[0] == "M" or status_code[1] == "M":
                     status = "M"  # Modified
                 elif status_code[0] == "A" or status_code[1] == "A":
@@ -1710,7 +1711,7 @@ class GitPanel(BasePanel):
                 else:
                     status = status_code.strip()
 
-                # Сохраняем полный путь и относительный
+                # Save both full and relative paths
                 full_path = os.path.join(self._get_repo_dir(), file_path)
                 self.file_status_cache[full_path] = status
                 self.file_status_cache[file_path] = status
@@ -1719,22 +1720,22 @@ class GitPanel(BasePanel):
             logger.error(f"GitPanel: Failed to update file status cache: {e}")
 
     def get_file_git_status(self, file_path: str) -> Optional[str]:
-        """Возвращает git статус файла для интеграции с файловым менеджером.
+        """Returns the git status of a file for integration with the file manager.
 
         Args:
-            file_path: Путь к файлу (абсолютный или относительный)
+            file_path: Path to the file (absolute or relative)
 
         Returns:
-            Статус файла ('M', 'A', 'D', '??', 'R', None)
+            File status ('M', 'A', 'D', '??', 'R', None)
         """
         return self.file_status_cache.get(file_path)
 
     def add_watched_file(self, file_path: str) -> None:
-        """Добавляет файл в список отслеживаемых."""
+        """Adds a file to the list of watched files."""
         self.watched_files.add(file_path)
 
     def remove_watched_file(self, file_path: str) -> None:
-        """Удаляет файл из списка отслеживаемых."""
+        """Removes a file from the list of watched files."""
         self.watched_files.discard(file_path)
 
     def get_watched_files_status(self) -> dict[str, str]:
@@ -1746,15 +1747,15 @@ class GitPanel(BasePanel):
         }
 
     def _handle_log(self) -> None:
-        """Показывает git log с пагинацией."""
+        """Shows git log with pagination."""
         self._show_git_log()
 
     def _show_git_log(self, reset_page: bool = True) -> None:
-        """Показывает git log с возможностью пагинации."""
+        """Shows git log with pagination support."""
         if reset_page:
             self.log_current_page = 0
 
-        # Формируем команду для git log
+        # Form the command for git log
         skip_commits = self.log_current_page * self.log_page_size
         cmd = [
             "git",
@@ -1764,7 +1765,7 @@ class GitPanel(BasePanel):
             f"--skip={skip_commits}",
         ]
 
-        # Добавляем информацию о навигации
+        # Add navigation information
         navigation_info = [
             f"=== Git Log (page {self.log_current_page + 1}, format: {self.log_format}) ===",
             "Navigation: [n] Next page, [p] Previous page, [f] Change format",
@@ -1785,7 +1786,7 @@ class GitPanel(BasePanel):
         self.editor._set_status_message(f"Git log (page {self.log_current_page + 1})")
 
     def _handle_log_navigation(self, key: int) -> bool:
-        """Обрабатывает навигацию по git log."""
+        """Handles navigation through git log."""
         if not self.visible or self.menu_items[self.selected_idx] != "Log":
             return False
 
@@ -1805,7 +1806,7 @@ class GitPanel(BasePanel):
         return False
 
     def _change_log_format(self) -> None:
-        """Изменяет формат вывода git log."""
+        """Changes the format of git log output."""
         formats = ["--oneline", "--short", "--full"]
         current_idx = (
             formats.index(self.log_format) if self.log_format in formats else 0
@@ -1831,7 +1832,7 @@ class GitPanel(BasePanel):
 
     def close(self) -> None:
         """Cleans up the panel upon closing and restores the terminal cursor."""
-        self._stop_auto_update()  # останавливаем автообновление
+        self._stop_auto_update()  # Stop auto-update
         super().close()
         logger.info("GitPanel: Closing panel with auto-update stopped.")
         curses.curs_set(1)
@@ -1950,7 +1951,7 @@ class GitPanel(BasePanel):
         self._draw_info_section()
         self.win.hline(3, 1, curses.ACS_HLINE, self.width - 2, self.attr_border)
 
-        menu_width = 22  # Ширина колонки меню
+        menu_width = 22  # Menu column width
         self.win.vline(
             4, menu_width, curses.ACS_VLINE, self.height - 5, self.attr_border
         )
@@ -2066,7 +2067,7 @@ class GitPanel(BasePanel):
         clean_branch = branch.strip("*")
         has_changes = "*" in branch
 
-        # Статус изменений
+        # Status of changes
         if has_changes:
             status_text = "● Uncommitted changes"
             status_attr = self.attr_status_modified
@@ -2074,26 +2075,26 @@ class GitPanel(BasePanel):
             status_text = "● Clean working tree"
             status_attr = self.attr_status_new
 
-        # Добавляем индикатор автообновления
+        # Add auto-update indicator
         if self.auto_update_enabled:
             status_text += " [AUTO]"
 
         self.win.addnstr(1, 2, status_text, self.width - 4, status_attr)
 
-        # Информация о ветке
+        # Information about the branch
         info_str = f"Branch: {clean_branch} | User: {user} | Commits: {commits}"
         self.win.addnstr(2, 2, info_str, self.width - 4, self.attr_branch)
         self.win.hline(3, 1, curses.ACS_HLINE, self.width - 2, self.attr_border)
 
     def _draw_output_section(self, x: int, width: int) -> None:
-        """Отрисовка вывода команд справа."""
+        """Draws the command output area on the right."""
         y = 4
         viewport_h = self.height - y - 1
 
-        # Индикаторы прокрутки
+        # Scroll indicators
         if len(self.output_lines) > viewport_h:
             scroll_info = f"({self.scroll_offset + 1}-{min(self.scroll_offset + viewport_h, len(self.output_lines))}/{len(self.output_lines)})"
-            # Позиционируем справа в области вывода
+            # Position on the right in the output area
             info_x = x + width - len(scroll_info) - 2
             if info_x > x:
                 self.win.addstr(y, info_x, scroll_info, self.attr_dim)
@@ -2158,7 +2159,7 @@ class GitPanel(BasePanel):
                 attr = self.attr_dim if self.is_busy else self.attr_text
                 if i == self.selected_idx and is_focused:
                     attr = self.attr_selected
-                # Выравниваем текст по левому краю внутри отведенного места
+                # Align the text to the left within the allotted space
                 self.win.addnstr(
                     y, 2, f"  {item.ljust(menu_width - 6)}", menu_width - 4, attr
                 )
@@ -2166,7 +2167,7 @@ class GitPanel(BasePanel):
 
     # --- Action Handlers ---
     def _handle_status(self, run_async=True) -> None:
-        # status можно вызывать и синхронно (из фона), и асинхронно (по кнопке 'r')
+        # Status can be called both synchronously (in the background) and asynchronously (by pressing 'r')
         if run_async:
             self._run_command_async(["git", "status", "-s"])
         else:
@@ -2192,10 +2193,10 @@ class GitPanel(BasePanel):
         self._run_command_sync(["git", "push"])
         if any("no upstream" in line.lower() for line in self.output_lines):
             branch_name = self.git_bridge.info[0].strip("*")
-            # Используем initial
+            # Use initial
             remote_name = self.editor.prompt("Set upstream remote:", initial="origin")
             if remote_name and branch_name:
-                # Используем is_yes_no_prompt
+                # Use is_yes_no_prompt
                 confirm = self.editor.prompt(
                     f"Run 'git push --set-upstream {remote_name} {branch_name}'? (y/n)",
                     is_yes_no_prompt=True,
@@ -2264,13 +2265,13 @@ class GitPanel(BasePanel):
         if not target:
             return
 
-        # Используем initial для значения по умолчанию
+        # Use initial for the default value
         mode = self.editor.prompt("Mode (--soft, --mixed, --hard):", initial="--hard")
         if not mode or mode not in ["--soft", "--mixed", "--hard"]:
             self.output_lines = ["Invalid reset mode. Cancelled."]
             return
 
-        # Используем is_yes_no_prompt для подтверждения
+        # Use is_yes_no_prompt for confirmation
         confirm = self.editor.prompt(
             f"CONFIRM: git reset {mode} {target}? (y/n)", is_yes_no_prompt=True
         )

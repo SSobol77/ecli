@@ -15,23 +15,20 @@ It is responsible for:
 The class ensures proper handling of wide Unicode characters, supports various terminal color modes,
 and implements double buffering for smooth screen updates.
 """
+
 import curses
 import logging
 import os
 import time
+
 from typing import TYPE_CHECKING, Any
-
-# --- Импорты сторонних библиотек ---
 from wcwidth import wcwidth
-
-# --- Импорты из нашего пакета ---
-# Импортируем утилиты и константы из правильного места
 from ecli.utils.utils import CALM_BG_IDX, WHITE_FG_IDX, get_file_icon
 
 
-# --- TYPE_CHECKING для избежания циклического импорта ---
 if TYPE_CHECKING:
-    from core.Ecli import Ecli
+    from ecli.core.Ecli import Ecli
+
 
 ## ================= сlass DrawScreen ==============================
 class DrawScreen:
@@ -81,7 +78,7 @@ class DrawScreen:
         None directly; all curses errors are caught and logged to ensure the editor remains responsive.
     """
 
-    MIN_WINDOW_WIDTH  = 20
+    MIN_WINDOW_WIDTH = 20
     MIN_WINDOW_HEIGHT = 5
     DEFAULT_TAB_WIDTH = 4
 
@@ -105,7 +102,6 @@ class DrawScreen:
         # ensure calm-dark status colour pairs exist
         self._init_status_colors()
 
-
     # Public delegates → make editor helpers available inside this class
 
     def get_string_width(self, text: str) -> int:
@@ -118,44 +114,42 @@ class DrawScreen:
 
     # colors xterm-236/ TTY
     def _init_status_colors(self) -> None:
-        """Создаёт пары для статус-бара с учётом возможностей терминала.
-        • GUI / 256-цветов : белый на xterm-236  (#303030).
-        • 16-цветов       : белый на чёрном.
-        • 8-цветов / TTY  : белый на фоне терминала.
+        """Creates status bar pairs based on terminal capabilities.
+        - GUI / 256-color: white on xterm-236 (#303030).
+        - 16-color: white on black.
+        - 8-color / TTY: white on terminal background.
         """
         try:
-            curses.use_default_colors()          # разрешаем -1 как «фон по умолчанию»
+            curses.use_default_colors()  # allow -1 as the "default background"
         except curses.error:
             pass
 
-        pair_norm, pair_err = 15, 16             # номера пар можно оставить прежними
+        pair_norm, pair_err = 15, 16  # pair numbers can remain the same
         max_colors = curses.COLORS
 
         if max_colors >= 256:
             fg_idx, bg_idx = WHITE_FG_IDX, CALM_BG_IDX
         elif max_colors >= 16:
             fg_idx, bg_idx = curses.COLOR_WHITE, curses.COLOR_BLACK
-        else:                                    # 8-цветный режим
-            fg_idx, bg_idx = curses.COLOR_WHITE, -1   # -1 ⇒ фон терминала
+        else:  # 8-color mode
+            fg_idx, bg_idx = curses.COLOR_WHITE, -1  # -1 - terminal background
 
-        # Убеждаемся, что индексы не выходят за пределы 0‥COLORS-1 (кроме -1)
+        # Ensure indices are within 0..COLORS-1 (except -1)
         fg_idx = fg_idx if fg_idx == -1 or fg_idx < max_colors else curses.COLOR_WHITE
         bg_idx = bg_idx if bg_idx == -1 or bg_idx < max_colors else 0
 
         try:
-            curses.init_pair(pair_norm,  fg_idx, bg_idx)
-            curses.init_pair(pair_err,   fg_idx, bg_idx)
+            curses.init_pair(pair_norm, fg_idx, bg_idx)
+            curses.init_pair(pair_err, fg_idx, bg_idx)
         except curses.error as exc:
             logging.warning("init_pair failed (%s) – откатываемся на A_REVERSE", exc)
-            self.colors["status"]        = curses.A_REVERSE
-            self.colors["status_error"]  = curses.A_REVERSE | curses.A_BOLD
-            return                       # дальше не продолжаем
+            self.colors["status"] = curses.A_REVERSE
+            self.colors["status_error"] = curses.A_REVERSE | curses.A_BOLD
+            return
 
-        # Записываем готовые атрибуты
-        self.colors["status"]        = curses.color_pair(pair_norm)
-        self.colors["status_error"]  = curses.color_pair(pair_err) | curses.A_BOLD
-
-
+        # Write ready-made attributes
+        self.colors["status"] = curses.color_pair(pair_norm)
+        self.colors["status_error"] = curses.color_pair(pair_err) | curses.A_BOLD
 
     def _needs_full_redraw(self) -> bool:
         """Return True when DrawScreen.draw() must call stdscr.erase().
@@ -168,33 +162,34 @@ class DrawScreen:
         force = getattr(self.editor, "_force_full_redraw", False)
         return resized or force
 
-    # ─────────────────────  Безопасное «срезание» слева  ─────────────────────
+    # ---------------------  Safe Left Cut  -------------------
     def _safe_cut_left(self, s: str, cells_to_skip: int) -> str:
-        """Отбрасывает слева ровно cells_to_skip экранных ячеек (а не символов!),
-        гарантируя, что мы НЕ разрезаем двуширинный символ пополам.
-
-        Возвращает оставшийся хвост строки.
+        """Cuts off exactly cells_to_skip screen cells (not characters!) from the left,
+        ensuring that we do NOT cut a wide character in half.
+        Returns the remaining tail of the string.
         """
         skipped = 0
         res = []
         for ch in s:
-            w = self.editor.get_char_width(ch)  # 1 или 2 (wcwidth)
-            if skipped + w <= cells_to_skip:  # всё ещё в зоне «скролла»
+            w = self.editor.get_char_width(ch)  # 1 or 2 (wcwidth)
+            if skipped + w <= cells_to_skip:  # still in the "scroll" zone
                 skipped += w
                 continue
-            if skipped < cells_to_skip < skipped + w:  # граница попала внутрь wide-char
-                skipped += w  # пропускаем его целиком
+            if skipped < cells_to_skip < skipped + w:  # boundary hit inside wide-char
+                skipped += w  # skip it entirely
                 continue
             res.append(ch)
         return "".join(res)
 
     def _should_draw_text(self) -> bool:
-        """Проверяет, следует ли отрисовывать текстовую область.
-        Учитывает видимость строк и минимальные размеры окна.
+        """Checks whether the text area should be drawn.
+        Considers line visibility and minimum window sizes.
         """
         height, width = self.stdscr.getmaxyx()
         if self.editor.visible_lines <= 0:
-            logging.debug("DrawScreen _should_draw_text: No visible lines area (visible_lines <= 0).")
+            logging.debug(
+                "DrawScreen _should_draw_text: No visible lines area (visible_lines <= 0)."
+            )
             return False
         if height < self.MIN_WINDOW_HEIGHT or width < self.MIN_WINDOW_WIDTH:
             logging.debug(
@@ -203,30 +198,37 @@ class DrawScreen:
             )
             return False
 
-        # Дополнительная проверка: есть ли вообще текст для отрисовки
-        if not self.editor.text or (len(self.editor.text) == 1 and not self.editor.text[0]):
-            # Если текст пуст, возможно, все равно нужно очистить область, но сам текст рисовать не нужно.
-            # Для простоты, если нет текста, считаем, что рисовать нечего.
-            # В реальном приложении это может быть сложнее (например, отрисовка пустого буфера).
+        # Additional check: is there any text to draw?
+        if not self.editor.text or (
+            len(self.editor.text) == 1 and not self.editor.text[0]
+        ):
+            # TODO:
+            # If the text is empty, we may still need to clear the area, but we don't need to draw the text itself.
+            # For simplicity, if there's no text, we consider that there's nothing to draw.
+            # This could be more complex (e.g., drawing an empty buffer).
             # logging.debug("DrawScreen _should_draw_text: Text buffer is empty.")
-            # return False # Раскомментировать, если пустой текст не должен вызывать отрисовку
+            # return False # Uncomment if empty text should not trigger rendering
             pass
 
         logging.debug("DrawScreen _should_draw_text: Conditions met for drawing text.")
         return True
 
-    def _get_visible_content_and_highlight(self) -> list[tuple[int, list[tuple[str, int]]]]:
-        """Получает видимые строки и их токены с подсветкой синтаксиса.
-        Возвращает список кортежей: (line_index, tokens_for_this_line).
+    def _get_visible_content_and_highlight(
+        self,
+    ) -> list[tuple[int, list[tuple[str, int]]]]:
+        """Gets visible lines and their tokens with syntax highlighting.
+        Returns a list of tuples: (line_index, tokens_for_this_line).
         """
         start_line = self.editor.scroll_top
-        # self.editor.visible_lines должно быть корректно установлено (например, height - 2)
+        # self.editor.visible_lines must be set correctly (e.g. height - 2)
         num_displayable_lines = self.editor.visible_lines
 
         end_line = min(start_line + num_displayable_lines, len(self.editor.text))
 
         if start_line >= end_line:
-            logging.debug("DrawScreen _get_visible_content: No visible lines to process.")
+            logging.debug(
+                "DrawScreen _get_visible_content: No visible lines to process."
+            )
             return []
 
         visible_lines_content = self.editor.text[start_line:end_line]
@@ -237,43 +239,52 @@ class DrawScreen:
             visible_lines_content, line_indices
         )
 
-        # Собираем результат в формате list[tuple[int, list[tuple[str, int]]]]
+        # Collect the result in the format list[tuple[int, list[tuple[str, int]]]]
         visible_content_data = []
         for i, line_idx in enumerate(line_indices):
             if i < len(highlighted_lines_tokens):
                 tokens_for_line = highlighted_lines_tokens[i]
                 visible_content_data.append((line_idx, tokens_for_line))
             else:
-                # Этого не должно произойти, если apply_syntax_highlighting_with_pygments работает корректно
-                logging.warning(f"Mismatch between line_indices and highlighted_tokens for line_idx {line_idx}")
-                # Добавляем пустые токены для этой строки, чтобы избежать ошибки
+                # This should not happen if apply_syntax_highlighting_with_pygments works correctly.
+                logging.warning(
+                    f"Mismatch between line_indices and highlighted_tokens for line_idx {line_idx}"
+                )
+                # Add empty tokens for this line to avoid an error.
                 visible_content_data.append((line_idx, []))
 
-        logging.debug(f"DrawScreen _get_visible_content: Prepared {len(visible_content_data)} lines for drawing.")
+        logging.debug(
+            f"DrawScreen _get_visible_content: Prepared {len(visible_content_data)} lines for drawing."
+        )
         return visible_content_data
 
-
     def _draw_text_with_syntax_highlighting(self) -> None:
-        """Draws text content, respecting line numbers and internal padding.
-        """
+        """Draws text content, respecting line numbers and internal padding."""
         if not self._should_draw_text():
-            logging.debug("DrawScreen _draw_text_with_syntax_highlighting: Drawing skipped by _should_draw_text.")
-            # Очищаем текстовую область, если не рисуем, чтобы убрать старый текст
-            # Это важно, если _should_draw_text возвращает False из-за маленького окна.
+            logging.debug(
+                "DrawScreen _draw_text_with_syntax_highlighting: Drawing skipped by _should_draw_text."
+            )
+            # Clear the text area when not drawing to remove old text
+            # This is important if _should_draw_text returns False due to a small window.
             try:
                 for r in range(self.editor.visible_lines):
-                    self.stdscr.move(r, self._text_start_x)  # self._text_start_x - начало текстовой области
+                    self.stdscr.move(
+                        r, self._text_start_x
+                    )  # self._text_start_x - beginning of text area
                     self.stdscr.clrtoeol()
             except curses.error as e:
-                logging.warning(f"Curses error clearing text area in _draw_text_with_syntax_highlighting: {e}")
+                logging.warning(
+                    f"Curses error clearing text area in _draw_text_with_syntax_highlighting: {e}"
+                )
             return
 
         visible_content_data = self._get_visible_content_and_highlight()
 
         if not visible_content_data:
             logging.debug(
-                "DrawScreen _draw_text_with_syntax_highlighting: No visible content from _get_visible_content_and_highlight.")
-            # Аналогично, очищаем, если нет контента (например, пустой файл за пределами видимости)
+                "DrawScreen _draw_text_with_syntax_highlighting: No visible content from _get_visible_content_and_highlight."
+            )
+            # Clear the text area when no content is available (e.g. empty file out of view)
             try:
                 for r in range(self.editor.visible_lines):
                     self.stdscr.move(r, self._text_start_x)
@@ -282,10 +293,9 @@ class DrawScreen:
                 logging.warning(f"Curses error clearing text area (no content): {e}")
             return
 
-        # Получаем ширину окна один раз
+        # Get the window width once
         _h, window_width = self.stdscr.getmaxyx()
 
-        # --- MODIFIED: Use the new offset ---
         # The padding is now handled by the offset, so we can simplify this.
         text_area_start_x = self._text_start_x + self.content_area_x_offset
 
@@ -301,16 +311,15 @@ class DrawScreen:
                 screen_row + self.content_area_y_offset,
                 line_data_tuple,
                 window_width,
-                text_area_start_x
+                text_area_start_x,
             )
 
-
     def _draw_single_line(
-            self,
-            screen_row: int,
-            line_data: tuple[int, list[tuple[str, int]]],
-            window_width: int,
-            text_area_start_x: int
+        self,
+        screen_row: int,
+        line_data: tuple[int, list[tuple[str, int]]],
+        window_width: int,
+        text_area_start_x: int,
     ) -> None:
         """Draw a single logical line of source text on the given screen row,
         applying horizontal scroll and syntax-highlight attributes.  Wide
@@ -329,9 +338,7 @@ class DrawScreen:
             self.stdscr.move(screen_row, text_area_start_x)
             self.stdscr.clrtoeol()
         except curses.error as e:
-            logging.error(
-                "Curses error while clearing line %d: %s", screen_row, e
-            )
+            logging.error("Curses error while clearing line %d: %s", screen_row, e)
             return
 
         logical_col_abs = 0  # running display width from line start
@@ -342,7 +349,7 @@ class DrawScreen:
 
             token_disp_width = self.editor.get_string_width(token_text)
             token_start_abs = logical_col_abs
-            # === Используем новую стартовую позицию ===
+            # Using the new starting position
             ideal_x = text_area_start_x + (token_start_abs - self.editor.scroll_left)
 
             cells_cut_left = 0
@@ -361,13 +368,13 @@ class DrawScreen:
                 logical_col_abs += token_disp_width
                 continue
 
-            # 1. Cut left part safely (do not split a wide char).
+            # Cut left part safely (do not split a wide char).
             visible_part = self._safe_cut_left(token_text, cells_cut_left)
             if not visible_part:
                 logical_col_abs += token_disp_width
                 continue
 
-            # 2. Cut right part to fit remaining screen width.
+            # Cut right part to fit remaining screen width.
             text_to_draw = ""
             drawn_w = 0
             for ch in visible_part:
@@ -379,14 +386,14 @@ class DrawScreen:
 
             if text_to_draw:
                 try:
-                    self.stdscr.addstr(
-                        screen_row, draw_x, text_to_draw, token_attr
-                    )
+                    self.stdscr.addstr(screen_row, draw_x, text_to_draw, token_attr)
                 except curses.error as e:
                     # Fallback: draw char-by-char if addstr fails (rare, but safe).
                     logging.debug(
                         "addstr failed at (%d,%d): %s – falling back to addch",
-                        screen_row, draw_x, e
+                        screen_row,
+                        draw_x,
+                        e,
                     )
                     cx = draw_x
                     for ch in text_to_draw:
@@ -403,8 +410,6 @@ class DrawScreen:
             # Early exit if we've reached the right edge.
             if draw_x + visible_w >= window_width:
                 break
-
-# ecli/ui/DrawScreen.py
 
     def draw(self) -> None:
         """The main screen drawing method."""
@@ -442,9 +447,9 @@ class DrawScreen:
             separator_y = height - 2
             separator_color = self.colors.get("comment", curses.A_DIM)
             try:
-                # ИСПРАВЛЕНО: Объединяем символ и атрибут цвета
+                # Combining a symbol and a color attribute
                 char_with_attr = curses.ACS_HLINE | separator_color
-                # Передаем 4 аргумента вместо 5
+                # Pass 4 arguments instead of 5
                 self.stdscr.hline(separator_y, 0, char_with_attr, width)
             except curses.error:
                 pass
@@ -462,8 +467,8 @@ class DrawScreen:
             self.editor._set_status_message(f"Draw error: {str(e)[:80]}...")
 
     def _clear_invalidated_lines(self) -> None:
-        """Очищает строки, которые в этом кадре будут перерисованы.
-        Избегаем глобального clear().
+        """Clears the rows that will be redrawn in this frame.
+        Avoiding global clear()
         """
         for row in range(self.editor.visible_lines):
             try:
@@ -471,7 +476,7 @@ class DrawScreen:
                 self.stdscr.clrtoeol()
             except curses.error:
                 pass
-        # статус-бар
+        # status bar
         try:
             h, _ = self.stdscr.getmaxyx()
             self.stdscr.move(h - 1, 0)
@@ -486,14 +491,14 @@ class DrawScreen:
         (running in a background thread) delivers its final output and
         `self.lint_panel_message` has been populated.
 
-        The method sets a **future timestamp** in the private attribute
+        The method sets a future timestamp in the private attribute
         ``_next_lint_panel_hide_ts``.  While the current wall-clock time is less
         than that timestamp, :pymeth:`_maybe_hide_lint_panel` will keep
         ``self.editor.lint_panel_active`` set to ``True`` so that the panel is
-        drawn on every frame and does **not** “flash” for only a single frame.
+        drawn on every frame and does not “flash” for only a single frame.
 
         Args:
-            hold_ms: Minimum time in **milliseconds** for which the lint panel
+            hold_ms: Minimum time in milliseconds for which the lint panel
                 must remain visible.  Default is 400 ms.
 
         Side Effects:
@@ -511,7 +516,7 @@ class DrawScreen:
         """Deactivate the lint panel once the hold timer expires.
 
         Should be invoked once per draw frame (e.g. near the end of
-        :pymeth:`DrawScreen.draw`).  If the current time is **past** the moment
+        :pymeth:`DrawScreen.draw`).  If the current time is past the moment
         stored in ``self._next_lint_panel_hide_ts``, the helper clears
         ``self.editor.lint_panel_active`` so the panel will no longer be painted.
 
@@ -527,66 +532,75 @@ class DrawScreen:
             self.editor.lint_panel_active = False
 
     def _show_small_window_error(self, height: int, width: int) -> None:
-        """Отображает сообщение о слишком маленьком окне."""
+        """Displays a message that the window is too small."""
         msg = f"Window too small ({width}x{height}). Minimum is 20x5."
         try:
-            self.stdscr.clear()  # Очищаем перед сообщением
-            # Центрируем сообщение, если возможно
+            self.stdscr.clear()  # Clearing before the message
+            # Centering the message if possible
             msg_len = len(msg)
             start_col = max(0, (width - msg_len) // 2)
             self.stdscr.addstr(height // 2, start_col, msg)
         except curses.error:
-            # Если даже это не сработало, терминал в плохом состоянии
+            # If even this doesn't work, the terminal is in a bad state
             pass
 
     def _draw_line_numbers(self) -> None:
-        """Рисует номера строк."""
-        # --- Проверяем флаг ---
+        """Draws line numbers"""
+        # Checking the flag
         if not self.editor.show_line_numbers:
-            self._text_start_x = 0  # Текст начинается с самого левого края
+            self._text_start_x = 0  # Text starts from the left edge
             return
 
         _height, width = self.stdscr.getmaxyx()
-        # Рассчитываем ширину, необходимую для номеров строк
-        # Максимальный номер строки - это общее количество строк в файле
+        # Calculating the width needed for line numbers
+        # The maximum line number is the total number of lines in the file
         max_line_num = len(self.editor.text)
-        max_line_num_digits = len(str(max(1, max_line_num)))  # Минимум 1 цифра для пустых файлов
-        line_num_width = max_line_num_digits + 1  # +1 для пробела после номера
+        max_line_num_digits = len(
+            str(max(1, max_line_num))
+        )  # Minimum 1 digit for empty files
+        line_num_width = max_line_num_digits + 1  # +1 for space after number
 
-        # Проверяем, помещаются ли номера строк в ширину окна
+        # Checking if line numbers fit within the window width
         if line_num_width >= width:
-            logging.warning(f"Window too narrow to draw line numbers ({width} vs {line_num_width})")
-            # Если не помещаются, пропускаем отрисовку номеров
-            self._text_start_x = 0  # Текст начинается с 0-й колонки
+            logging.warning(
+                f"Window too narrow to draw line numbers ({width} vs {line_num_width})"
+            )
+            # If they don't fit, skip drawing line numbers
+            self._text_start_x = 0  # Text starts from 0 column
             return
-        # Сохраняем начальную позицию для отрисовки текста
+        # Saving the starting position for text drawing
         self._text_start_x = line_num_width
         line_num_color = self.colors.get("line_number", curses.color_pair(7))
-        # Итерируем по видимым строкам на экране
+        # Iterating over visible lines on the screen
         for screen_row in range(self.editor.visible_lines):
-            # Рассчитываем индекс строки в self.text
+            # Calculating the line index in self.text
             line_idx = self.editor.scroll_top + screen_row
-            # Проверяем, существует ли эта строка в self.text
+            # Checking if this line exists in self.text
             if line_idx < len(self.editor.text):
-                # Форматируем номер строки (1-based)
-                line_num_str = f"{line_idx + 1:>{max_line_num_digits}} "  # Выравнивание по правому краю + пробел
+                # Formatting the line number (1-based)
+                line_num_str = (
+                    f"{line_idx + 1:>{max_line_num_digits}} "  # Right-aligning + space
+                )
                 try:
-                    # Рисуем номер строки
+                    # Drawing the line number
                     self.stdscr.addstr(screen_row, 0, line_num_str, line_num_color)
                 except curses.error as e:
-                    logging.error(f"Curses error drawing line number at ({screen_row}, 0): {e}")
-                    # В случае ошибки, пропускаем отрисовку этой строки и продолжаем
+                    logging.error(
+                        f"Curses error drawing line number at ({screen_row}, 0): {e}"
+                    )
+                    # If an error occurs, skip drawing this line and continue
             else:
-                # рисуем пустые строки с нужным фоном в области номеров
+                # Drawing empty lines with the desired background in the line number area
                 empty_num_str = " " * line_num_width
                 try:
                     self.stdscr.addstr(screen_row, 0, empty_num_str, line_num_color)
                 except curses.error as e:
-                    logging.error(f"Curses error drawing empty line number background at ({screen_row}, 0): {e}")
+                    logging.error(
+                        f"Curses error drawing empty line number background at ({screen_row}, 0): {e}"
+                    )
 
     def _draw_lint_panel(self) -> None:
-        """Рисует всплывающую панель с результатом линтера.
-        """
+        """Draws a popup panel with the linter's results."""
         if not getattr(self.editor, "lint_panel_active", False):
             return
         msg = self.editor.lint_panel_message
@@ -594,11 +608,13 @@ class DrawScreen:
             return
         h, w = self.stdscr.getmaxyx()
         panel_height = min(max(6, msg.count("\n") + 4), h - 2)
-        panel_width = min(max(40, max(len(line) for line in msg.splitlines()) + 4), w - 4)
+        panel_width = min(
+            max(40, max(len(line) for line in msg.splitlines()) + 4), w - 4
+        )
         start_y = max(1, (h - panel_height) // 2)
         start_x = max(2, (w - panel_width) // 2)
 
-        # Рамка окна
+        # Framing the window
         try:
             for i in range(panel_height):
                 line = ""
@@ -610,21 +626,27 @@ class DrawScreen:
                     line = "│" + " " * (panel_width - 2) + "│"
                 self.stdscr.addstr(start_y + i, start_x, line, curses.A_BOLD)
 
-            # Сообщение, разбитое по строкам
+            # Message split into lines
             msg_lines = msg.splitlines()
-            for idx, line in enumerate(msg_lines[:panel_height - 3]):
+            for idx, line in enumerate(msg_lines[: panel_height - 3]):
                 self.stdscr.addnstr(
-                    start_y + idx + 1, start_x + 2,
-                    line.strip(), panel_width - 4, curses.A_NORMAL
+                    start_y + idx + 1,
+                    start_x + 2,
+                    line.strip(),
+                    panel_width - 4,
+                    curses.A_NORMAL,
                 )
             # Footer
             footer = "Press Esc to close"
             self.stdscr.addnstr(
-                start_y + panel_height - 2, start_x + 2,
-                footer, panel_width - 4, curses.A_DIM
+                start_y + panel_height - 2,
+                start_x + 2,
+                footer,
+                panel_width - 4,
+                curses.A_DIM,
             )
         except curses.error as e:
-            logging.error(f"Ошибка curses при отрисовке панели линтера: {e}")
+            logging.error(f"Curses error drawing linter panel: {e}")
 
     def _draw_search_highlights(self) -> None:
         """Applies visual highlighting to all search matches found in the visible text area.
@@ -646,23 +668,46 @@ class DrawScreen:
         # Get the search highlight color attribute (defaults to A_REVERSE if not set)
         search_color = self.colors.get("search_highlight", curses.A_REVERSE)
         _height, width = self.stdscr.getmaxyx()
-        line_num_width = len(str(max(1, len(self.editor.text)))) + 1  # Width for line numbers plus space
+        line_num_width = (
+            len(str(max(1, len(self.editor.text)))) + 1
+        )  # Width for line numbers plus space
 
         # Iterate through all matches to be highlighted
-        for match_row, match_start_idx, match_end_idx in self.editor.highlighted_matches:
+        for (
+            match_row,
+            match_start_idx,
+            match_end_idx,
+        ) in self.editor.highlighted_matches:
             # Check if the match is within the currently visible lines
-            if match_row < self.editor.scroll_top or match_row >= self.editor.scroll_top + self.editor.visible_lines:
+            if (
+                match_row < self.editor.scroll_top
+                or match_row >= self.editor.scroll_top + self.editor.visible_lines
+            ):
                 continue
 
             screen_y = match_row - self.editor.scroll_top  # Screen row for this match
-            line = self.editor.text[match_row]  # The text of the line containing the match
+            line = self.editor.text[
+                match_row
+            ]  # The text of the line containing the match
 
             # Compute X screen positions (before and after scrolling) for match start and end
-            match_screen_start_x_before_scroll = self.editor.get_string_width(line[:match_start_idx])
-            match_screen_start_x = line_num_width + match_screen_start_x_before_scroll - self.editor.scroll_left
+            match_screen_start_x_before_scroll = self.editor.get_string_width(
+                line[:match_start_idx]
+            )
+            match_screen_start_x = (
+                line_num_width
+                + match_screen_start_x_before_scroll
+                - self.editor.scroll_left
+            )
 
-            match_screen_end_x_before_scroll = self.editor.get_string_width(line[:match_end_idx])
-            match_screen_end_x = line_num_width + match_screen_end_x_before_scroll - self.editor.scroll_left
+            match_screen_end_x_before_scroll = self.editor.get_string_width(
+                line[:match_end_idx]
+            )
+            match_screen_end_x = (
+                line_num_width
+                + match_screen_end_x_before_scroll
+                - self.editor.scroll_left
+            )
 
             # Clamp drawing area to the visible screen boundaries
             draw_start_x = max(line_num_width, match_screen_start_x)
@@ -675,16 +720,19 @@ class DrawScreen:
             if highlight_width_on_screen > 0:
                 try:
                     # Iterate over characters in the line to accurately highlight wide characters
-                    current_char_screen_x = line_num_width - self.editor.scroll_left  # Initial X for first char
+                    current_char_screen_x = (
+                        line_num_width - self.editor.scroll_left
+                    )  # Initial X for first char
                     for char_idx, char in enumerate(line):
                         char_width = self.editor.get_char_width(char)
                         char_screen_end_x = current_char_screen_x + char_width
 
                         # If this character falls within the match range and is visible
-                        if (match_start_idx <= char_idx < match_end_idx and
-                                current_char_screen_x < width and
-                                char_screen_end_x > line_num_width):
-
+                        if (
+                            match_start_idx <= char_idx < match_end_idx
+                            and current_char_screen_x < width
+                            and char_screen_end_x > line_num_width
+                        ):
                             draw_char_x = max(line_num_width, current_char_screen_x)
                             draw_char_width = min(char_width, width - draw_char_x)
 
@@ -692,26 +740,33 @@ class DrawScreen:
                                 try:
                                     # Highlight a single character cell with the search color
                                     # chgat(y, x, num_chars, attr): num_chars=1 for one character
-                                    self.stdscr.chgat(screen_y, draw_char_x, 1, search_color)
+                                    self.stdscr.chgat(
+                                        screen_y, draw_char_x, 1, search_color
+                                    )
                                 except curses.error as e:
                                     logging.warning(
                                         f"Curses error highlighting single char at ({screen_y}, {draw_char_x}): {e}"
                                     )
-                        current_char_screen_x += char_width  # Move X for the next character
+                        current_char_screen_x += (
+                            char_width  # Move X for the next character
+                        )
                 except curses.error as e:
                     logging.error(f"Curses error applying search highlight: {e}")
-
 
     def _draw_selection(self) -> None:
         """Paints a visual highlight for the current text selection.
 
         - For single-line selections, it highlights the precise characters.
         - For multi-line selections, it creates a solid block highlight. The width
-          of this block is determined by the longest line within the selection,
-          ensuring a continuous, rectangular appearance. Empty lines within the
-          selection are also highlighted to this width.
+        of this block is determined by the longest line within the selection,
+        ensuring a continuous, rectangular appearance. Empty lines within the
+        selection are also highlighted to this width.
         """
-        if not self.editor.is_selecting or not self.editor.selection_start or not self.editor.selection_end:
+        if (
+            not self.editor.is_selecting
+            or not self.editor.selection_start
+            or not self.editor.selection_end
+        ):
             return
 
         norm_range = self.editor._get_normalized_selection_range()
@@ -726,7 +781,7 @@ class DrawScreen:
         text_area_start_x = self._text_start_x
         selection_attr = curses.A_REVERSE
 
-        # --- NEW: Initial log for the selection action ---
+        # Initial log for the selection action
         logging.debug(
             f"--- Drawing Selection --- "
             f"Mode: {'Single-Line' if start_y == end_y else 'Multi-Line Block'}, "
@@ -734,19 +789,27 @@ class DrawScreen:
         )
 
         if start_y == end_y:
-            # --- BEHAVIOR 1: PRECISE SINGLE-LINE SELECTION ---
+            # PRECISE SINGLE-LINE SELECTION
             line_text = self.editor.text[start_y]
             screen_y = start_y - self.editor.scroll_top
 
             if 0 <= screen_y < self.editor.visible_lines:
-                x_left = text_area_start_x + self.editor.get_string_width(line_text[:start_x]) - self.editor.scroll_left
-                x_right = text_area_start_x + self.editor.get_string_width(line_text[:end_x]) - self.editor.scroll_left
+                x_left = (
+                    text_area_start_x
+                    + self.editor.get_string_width(line_text[:start_x])
+                    - self.editor.scroll_left
+                )
+                x_right = (
+                    text_area_start_x
+                    + self.editor.get_string_width(line_text[:end_x])
+                    - self.editor.scroll_left
+                )
 
                 draw_start_x = max(text_area_start_x, x_left)
                 draw_end_x = min(width, x_right)
                 highlight_w = max(0, draw_end_x - draw_start_x)
 
-                # --- NEW: Logging for single-line highlight ---
+                # Logging for single-line highlight
                 logging.debug(
                     f"  Line {start_y} (Screen {screen_y}): Single-line highlight. "
                     f"x_left={x_left}, x_right={x_right}, "
@@ -755,28 +818,32 @@ class DrawScreen:
 
                 if highlight_w > 0:
                     try:
-                        self.stdscr.chgat(screen_y, draw_start_x, highlight_w, selection_attr)
+                        self.stdscr.chgat(
+                            screen_y, draw_start_x, highlight_w, selection_attr
+                        )
                     except curses.error as e:
                         logging.error(f"Curses error on single-line chgat: {e}")
 
         else:
-            # --- BEHAVIOR 2: SOLID BLOCK FOR MULTI-LINE SELECTION ---
-            # Step 1: Find the maximum visual width of all lines in the selection.
+            # SOLID BLOCK FOR MULTI-LINE SELECTION
+            # Find the maximum visual width of all lines in the selection.
             max_visual_width = 0
             for i in range(start_y, end_y + 1):
                 if i < len(self.editor.text):
                     line_width = self.editor.get_string_width(self.editor.text[i])
                     max_visual_width = max(max_visual_width, line_width)
 
-            # --- NEW: Log the calculated max width for the block ---
-            logging.debug(f"  Multi-line: Calculated max_visual_width for block: {max_visual_width} cells.")
+            # Log the calculated max width for the block
+            logging.debug(
+                f"  Multi-line: Calculated max_visual_width for block: {max_visual_width} cells."
+            )
 
-            # Step 2: Iterate through the selected lines and draw the highlight block.
+            # Iterate through the selected lines and draw the highlight block.
             for doc_y in range(start_y, end_y + 1):
                 screen_y = doc_y - self.editor.scroll_top
 
                 if not (0 <= screen_y < self.editor.visible_lines):
-                    # --- NEW: Log when a line is skipped because it's off-screen ---
+                    # Log when a line is skipped because it's off-screen
                     logging.debug(f"  Line {doc_y}: Skipped (not visible on screen).")
                     continue
 
@@ -787,7 +854,7 @@ class DrawScreen:
                 draw_end_x = min(width, highlight_end_on_screen)
                 highlight_w = max(0, draw_end_x - draw_start_x)
 
-                # --- NEW: Detailed log for each line in the multi-line block ---
+                # Detailed log for each line in the multi-line block
                 logging.debug(
                     f"  Line {doc_y} (Screen {screen_y}): Multi-line highlight. "
                     f"highlight_start={highlight_start_on_screen}, highlight_end={highlight_end_on_screen}, "
@@ -796,13 +863,16 @@ class DrawScreen:
 
                 if highlight_w > 0:
                     try:
-                        self.stdscr.chgat(screen_y, draw_start_x, highlight_w, selection_attr)
+                        self.stdscr.chgat(
+                            screen_y, draw_start_x, highlight_w, selection_attr
+                        )
                     except curses.error as e:
-                        logging.error(f"Curses error on multi-line chgat for line {doc_y}: {e}")
-
+                        logging.error(
+                            f"Curses error on multi-line chgat for line {doc_y}: {e}"
+                        )
 
     def truncate_string(self, s: str, max_width: int) -> str:
-        """Return *s* clipped to **visual** width *max_width*.
+        """Return `s` clipped to visual width `max_width`.
 
         Wide-Unicode characters (e.g. CJK), zero-width joiners and other
         multi-cell glyphs are accounted for with :pyfunc:`wcwidth.wcwidth`.
@@ -834,7 +904,6 @@ class DrawScreen:
 
         return "".join(result)
 
-
     def _draw_status_bar(self) -> None:
         """Single-line status bar (bottom of the screen).
 
@@ -852,19 +921,23 @@ class DrawScreen:
         try:
             height, width = self.stdscr.getmaxyx()
             if height <= 2:
-                return                                    # not enough space
+                return  # not enough space
 
-            y = height - 1                                # last line
+            y = height - 1  # last line
 
-            # ── colours ───────────────────────────────────────────────
-            c_norm  = self.colors["status"]               # white on calm-dark
-            c_err   = self.colors["status_error"]         # bold white on calm-dark
-            c_git   = self.colors.get("git_info",  c_norm)
+            # -- colours ----------------------------------------------
+            c_norm = self.colors["status"]  # white on calm-dark
+            c_err = self.colors["status_error"]  # bold white on calm-dark
+            c_git = self.colors.get("git_info", c_norm)
             c_dirty = self.colors.get("git_dirty", c_norm | curses.A_BOLD)
 
-            # ── left part ─────────────────────────────────────────────
+            # -- left part --------------------------------------------
             icon = get_file_icon(self.editor.filename, self.config)
-            fname = os.path.basename(self.editor.filename) if self.editor.filename else "No Name"
+            fname = (
+                os.path.basename(self.editor.filename)
+                if self.editor.filename
+                else "No Name"
+            )
             lexer = self.editor._lexer.name if self.editor._lexer else "plain text"
             left = (
                 f" {icon} {fname}{'*' if self.editor.modified else ''} | "
@@ -875,32 +948,34 @@ class DrawScreen:
             )
             left_w = self.editor.get_string_width(left)
 
-            # ── right part = Git info ─────────────────────────────────
-            git_txt  = ""
+            # -- right part = Git info ---------------------------------
+            git_txt = ""
             git_attr = None
-            if self.editor.git and self.editor.config.get("git", {}).get("enabled", True):
+            if self.editor.git and self.editor.config.get("git", {}).get(
+                "enabled", True
+            ):
                 branch, user, commits = self.editor.git.info
                 if branch:
-                    dirty   = "*" in branch
-                    branch  = branch.rstrip("*")
+                    dirty = "*" in branch
+                    branch = branch.rstrip("*")
                     git_txt = f" Git: {user}, {branch}, {commits or '0'}"
                     git_attr = c_dirty if dirty else c_git
                 else:
                     git_txt = " Git: None"
             right_w = self.editor.get_string_width(git_txt)
 
-            # ── middle = status message ───────────────────────────────
-            msg      = self.editor.status_message or "Ready"
-            spacing  = width - left_w - right_w
+            # -- middle = status message --------------------------------
+            msg = self.editor.status_message or "Ready"
+            spacing = width - left_w - right_w
             if spacing < self.editor.get_string_width(msg):
                 msg = self.truncate_string(msg, max(0, spacing - 1))
 
-            msg_w     = self.editor.get_string_width(msg)
-            pad_left  = max(0, (spacing - msg_w) // 2)
+            msg_w = self.editor.get_string_width(msg)
+            pad_left = max(0, (spacing - msg_w) // 2)
             pad_right = max(0, spacing - msg_w - pad_left)
-            middle    = " " * pad_left + msg + " " * pad_right
+            middle = " " * pad_left + msg + " " * pad_right
 
-            # ── compose & paint ───────────────────────────────────────
+            # -- compose & paint ----------------------------------------
             line = (left + middle + git_txt)[:width]
             line += " " * (width - self.editor.get_string_width(line))
             self.stdscr.addstr(y, 0, line, c_norm)
@@ -917,7 +992,7 @@ class DrawScreen:
                 self.stdscr.chgat(y, err_x, msg_w, c_err)
 
         except curses.error:
-            pass                                          # drawing outside screen
+            pass  # drawing outside screen
         except Exception:
             logging.exception("Unexpected error in _draw_status_bar")
 
@@ -931,16 +1006,18 @@ class DrawScreen:
 
         text_area_start_x = self._text_start_x
 
-        # Если курсор на виртуальной строке, текст для вычисления ширины пуст,
-        # и горизонтальная позиция всегда 0.
+        # If the cursor is on a virtual line, the text for width calculation is empty,
+        # and the horizontal position is always 0.
         if self.editor.cursor_y >= len(self.editor.text):
             cursor_display_width = 0
             logging.debug("_position_cursor: Cursor on virtual line. display_width=0.")
         else:
-            # Курсор на реальной строке, можно безопасно получить текст.
-            self.editor._ensure_cursor_in_bounds() # Дополнительная подстраховка
+            # Cursor is on a real line, we can safely get the text.
+            self.editor._ensure_cursor_in_bounds()  # Additional safeguard
             current_line = self.editor.text[self.editor.cursor_y]
-            cursor_display_width = self.editor.get_string_width(current_line[:self.editor.cursor_x])
+            cursor_display_width = self.editor.get_string_width(
+                current_line[: self.editor.cursor_x]
+            )
 
         # 2. Adjust Vertical Scroll
         max_screen_row = self.editor.visible_lines - 1
@@ -957,10 +1034,17 @@ class DrawScreen:
             self.editor.scroll_left = cursor_display_width - text_area_width + 1
 
         # 4. Calculate Final Screen Coordinates
-        final_screen_y = (self.editor.cursor_y - self.editor.scroll_top) + self.content_area_y_offset
-        final_screen_x = text_area_start_x + cursor_display_width - self.editor.scroll_left
+        final_screen_y = (
+            self.editor.cursor_y - self.editor.scroll_top
+        ) + self.content_area_y_offset
+        final_screen_x = (
+            text_area_start_x + cursor_display_width - self.editor.scroll_left
+        )
 
-        final_screen_y = max(self.content_area_y_offset, min(final_screen_y, max_screen_row + self.content_area_y_offset))
+        final_screen_y = max(
+            self.content_area_y_offset,
+            min(final_screen_y, max_screen_row + self.content_area_y_offset),
+        )
         final_screen_x = max(text_area_start_x, min(final_screen_x, width - 1))
 
         # 5. Move the Physical Cursor
@@ -972,7 +1056,9 @@ class DrawScreen:
             )
             self.stdscr.move(final_screen_y, final_screen_x)
         except curses.error as e:
-            logging.warning(f"Curses error positioning cursor at ({final_screen_y}, {final_screen_x}): {e}")
+            logging.warning(
+                f"Curses error positioning cursor at ({final_screen_y}, {final_screen_x}): {e}"
+            )
             try:
                 self.stdscr.move(0, text_area_start_x)
             except curses.error:
@@ -1005,14 +1091,20 @@ class DrawScreen:
         # If the cursor is above the visible area, scroll up.
         if screen_y < 0:
             self.editor.scroll_top = self.editor.cursor_y
-            logging.debug(f"Adjusted vertical scroll: cursor above view. New scroll_top: {self.editor.scroll_top}")
+            logging.debug(
+                f"Adjusted vertical scroll: cursor above view. New scroll_top: {self.editor.scroll_top}"
+            )
         # If the cursor is below the visible area, scroll down.
         elif screen_y >= text_area_height:
             self.editor.scroll_top = self.editor.cursor_y - text_area_height + 1
-            logging.debug(f"Adjusted vertical scroll: cursor below view. New scroll_top: {self.editor.scroll_top}")
+            logging.debug(
+                f"Adjusted vertical scroll: cursor below view. New scroll_top: {self.editor.scroll_top}"
+            )
 
         # Ensure scroll_top stays within valid bounds.
-        self.editor.scroll_top = max(0, min(self.editor.scroll_top, len(self.editor.text) - text_area_height))
+        self.editor.scroll_top = max(
+            0, min(self.editor.scroll_top, len(self.editor.text) - text_area_height)
+        )
         logging.debug(f"Final adjusted scroll_top: {self.editor.scroll_top}")
 
     def _update_display(self) -> None:
