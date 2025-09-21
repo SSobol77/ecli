@@ -12,17 +12,6 @@ separate_error_log = false
 default_provider = "openai"
 
 
-[ai.keys]
-openai = "${OPENAI_API_KEY}"
-gemini = "${GEMINI_API_KEY}"
-mistral = "${MISTRAL_API_KEY}"
-grok = "${GROK_API_KEY}"
-claude = "${CLAUDE_API_KEY}"
-huggingface = "${HUGGINGFACE_API_KEY}"
-anthropic_api_key = "${ANTHROPIC_API_KEY}"
-xai_api_key = "${XAI_API_KEY}"
-
-
 [ai.models]
 openai = "gpt-4o"
 gemini = "gemini-1.5-flash-latest"
