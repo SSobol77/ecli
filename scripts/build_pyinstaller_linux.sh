@@ -1,20 +1,29 @@
-#!/usr/bin/env bash
+#!/bin/bash
+# ==============================================================================
+# scripts/build_pyinstaller_linux.sh
+#
+# Builds a standalone executable for Linux using PyInstaller.
+# The output will be a single file in the 'dist/' directory.
+# ==============================================================================
+
 set -euo pipefail
-# Build self-contained binary with PyInstaller (Linux)
-# Requires: uv, pyinstaller
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-OUT_DIR="$PROJECT_ROOT/build/linux"
-mkdir -p "$OUT_DIR"
+PROJECT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &> /dev/null && pwd)
+cd "${PROJECT_ROOT}"
 
-uv sync --frozen
-uv run pyinstaller \
-  --name ecli \
-  --onefile \
-  --console \
-  --clean \
-  --distpath "$OUT_DIR/dist" \
-  --workpath "$OUT_DIR/work" \
-  --paths "$PROJECT_ROOT/src" \
-  "$PROJECT_ROOT/src/ecli/__main__.py"
+echo "--- Building standalone Linux executable with PyInstaller ---"
 
-echo "Built binary: $OUT_DIR/dist/ecli"
+# Clean up previous builds
+rm -rf build/ dist/
+
+# Get the package name from main.spec or pyproject.toml
+# We'll assume the main entry point is main.py for this example.
+PACKAGE_NAME="ecli"
+
+pyinstaller main.py \
+    --name "${PACKAGE_NAME}" \
+    --onefile \
+    --clean \
+    --noconfirm \
+    --additional-hooks-dir=./hooks # Optional: for complex libraries
+
+echo "--- Executable created at: dist/${PACKAGE_NAME} ---"

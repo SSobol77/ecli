@@ -50,6 +50,7 @@ dependencies = [
     "libcst>=1.5.0",
     "cattrs>=23.2.0",
     "python-dotenv>=1.1.1",
+    "pyinstaller>=6.16.0",
 ]
 
 

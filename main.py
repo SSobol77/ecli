@@ -1,22 +1,29 @@
 #!/usr/bin/env python3
 # /ecli/main.py
-"""ECLI Main Entry Point
+"""
+ECLI Main Entry Point
+=====================
 
 This script serves as the primary entry point for launching the ECLI editor.
-It orchestrates the entire application startup sequence in a safe and
-structured manner:
+It orchestrates the entire application startup sequence in a safe and structured manner:
 
-1.  Environment Loading: Immediately loads environment variables from a `.env`
-    file using `dotenv`. This ensures API keys and other secrets are available
-    to all subsequent modules.
+1.  Environment Loading: Immediately loads environment variables from the user's
+    personal configuration directory (`~/.config/ecli/.env`). This ensures that
+    user-specific API keys and secrets are available globally before any other
+    part of the application runs.
+
 2.  Path Setup: Modifies `sys.path` to ensure the `ecli` package is correctly
-    located and importable.
-3.  Configuration and Logging: Loads the `config.toml` file and initializes
-    the logging system based on its settings. This is done before any major
-    imports to ensure all startup activities are logged.
-4.  Core Application Import: Imports the main `Ecli` class.
+    located and importable, which is crucial for both source and bundled execution.
+
+3.  Configuration and Logging: Loads the application's configuration files and
+    initializes the logging system based on those settings. This is done before
+    any core imports to ensure all startup activities are properly logged.
+
+4.  Core Application Import: After basic setup, it imports the main `Ecli` class.
+
 5.  Curses Wrapper: Uses `curses.wrapper` to safely initialize and tear down
     the curses environment, preventing terminal corruption on exit or crash.
+
 6.  Application Run: Instantiates the `Ecli` class and starts its main event loop.
 """
 
@@ -26,26 +33,36 @@ import logging
 import os
 import signal
 import sys
+from pathlib import Path
 
 from dotenv import load_dotenv
 
-# 1. Load Environment Variables First
-# This is the most critical step. By loading .env here, we ensure that all
-# environment variables (like API keys) are available globally before any
-# other part of the application, including configuration loading and module
-# imports, is executed.
-load_dotenv()
+# --- Step 1: Load Environment Variables from User's Config Directory ---
+# This is a critical step. We explicitly load the .env file from a consistent,
+# user-specific location. This prevents the application's behavior from changing
+# based on the current working directory and ensures it always uses the
+# intended secrets file.
+# The `utils.py` module will handle the creation of this file if it doesn't exist.
+try:
+    user_config_dir = Path.home() / ".config" / "ecli"
+    dotenv_path = user_config_dir / ".env"
+    load_dotenv(dotenv_path=dotenv_path)
+except Exception:
+    # This might fail in unusual environments (e.g., no home directory).
+    # Silently ignore, as logging is not yet configured. The app will later
+    # fail gracefully if an API key is required but not found.
+    pass
 
 
-# 2. Set up the path
-# This must follow environment loading so that Python can find the 'ecli' package.
+# --- Step 2: Set up the Python Path ---
+# This ensures that Python can find the 'ecli' package modules.
 project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
-# 3. Immediate logging setup
-# We import ONLY what is needed for logging and set it up right away.
-# This ensures that ANY subsequent error, including import errors, will be logged.
+# --- Step 3: Immediate Logging and Configuration Setup ---
+# We import only what is necessary for this step to set up logging ASAP.
+# This ensures that ANY subsequent error, including import failures, will be logged.
 try:
     from ecli.utils.logging_config import setup_logging
     from ecli.utils.utils import load_config
@@ -58,25 +75,27 @@ try:
     logger = logging.getLogger("ecli")
 
 except Exception as e:
-    # If logging setup itself fails, there's no choice but to print to stderr.
-    print(f"FATAL: Could not initialize logging system: {e}", file=sys.stderr)
+    # If the logging/config system itself fails, there's no choice but to print
+    # to stderr and exit, as we cannot log the failure.
+    print(f"FATAL: Could not initialize configuration or logging system: {e}", file=sys.stderr)
     import traceback
-
     traceback.print_exc()
     sys.exit(1)
 
-# 4. Import the rest of the application
+# --- Step 4: Import the Core Application ---
 # Now that logging is configured, it's safe to import the main Ecli class.
 try:
     from ecli.core.Ecli import Ecli
 except ImportError as e:
-    logger.critical(f"Failed to import a critical component: {e}", exc_info=True)
+    logger.critical(f"Failed to import a critical application component: {e}", exc_info=True)
     sys.exit(1)
 
 
-# 5. Curses Application Runner
-def main_app_runner(stdscr, config, file_to_open):
-    """This function is the target for `curses.wrapper`. It sets up and runs the editor."""
+# --- Step 5: Curses Application Runner ---
+def main_app_runner(stdscr: 'curses._CursesWindow', config: dict, file_to_open: str | None) -> None:
+    """
+    This function is the target for `curses.wrapper`. It sets up and runs the editor.
+    """
     # Set a short escape delay for better responsiveness (e.g., for Alt key combos).
     try:
         curses.set_escdelay(25)
@@ -99,7 +118,7 @@ def main_app_runner(stdscr, config, file_to_open):
     editor.run()
 
 
-def start():
+def start() -> None:
     """Initializes the environment and launches the curses application."""
     logger.info("ECLI editor starting up...")
 
@@ -115,12 +134,13 @@ def start():
     file_to_open = sys.argv[1] if len(sys.argv) > 1 else None
 
     try:
-        # `curses.wrapper` handles all the setup and teardown of the curses environment,
-        # ensuring the terminal is restored to a usable state on exit or crash.
+        # `curses.wrapper` handles all the setup and teardown of the curses
+        # environment, ensuring the terminal is restored to a usable state on
+        # exit or crash.
         curses.wrapper(main_app_runner, config, file_to_open)
         logger.info("ECLI editor shut down gracefully.")
     except Exception:
-        # Catch any unhandled exception that bubbles up to the top.
+        # Catch any unhandled exception that bubbles up to the top level.
         logger.critical("Unhandled exception at the top level.", exc_info=True)
         sys.exit(1)
     finally:

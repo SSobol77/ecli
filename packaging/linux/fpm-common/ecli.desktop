@@ -1,7 +1,10 @@
 [Desktop Entry]
+Version=1.0
 Name=ECLI
-Comment=ECLI — fast terminal code editor
+Comment=A fast terminal code editor
 Exec=ecli
+Icon=ecli
 Terminal=true
 Type=Application
-Categories=Development;Utility;
+Categories=Development;TextEditor;
+Keywords=editor;terminal;tui;devops;

@@ -1,0 +1,34 @@
+#!/bin/bash
+# ==============================================================================
+# postrm script for the ECLI package
+#
+# This script is executed after the package is removed.
+# Its primary purpose is to clean up user-specific configuration files
+# ONLY when the 'purge' command is used.
+# ==============================================================================
+
+set -e
+
+# The first argument ($1) passed to this script by dpkg is the action being
+# performed. We only want to delete user data on a complete 'purge'.
+if [ "$1" = "purge" ]; then
+    echo "Purging ECLI: Removing user configuration directories..."
+
+    # This script runs as root, so we need to find all potential user home
+    # directories to clean up their configs. We check /root and /home/*.
+    # A more complex system might query all users, but this is a robust
+
+    # approach for typical desktop/server systems.
+    for homedir in /root /home/*; do
+        if [ -d "${homedir}" ]; then
+            ECLI_CONFIG_DIR="${homedir}/.config/ecli"
+
+            if [ -d "${ECLI_CONFIG_DIR}" ]; then
+                echo "Removing ${ECLI_CONFIG_DIR}..."
+                rm -rf "${ECLI_CONFIG_DIR}"
+            fi
+        fi
+    done
+fi
+
+exit 0

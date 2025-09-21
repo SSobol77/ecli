@@ -1,7 +1,19 @@
 #!/bin/sh
+# packaging/linux/fpm-common/postinst
+
 set -e
-# Post-install hook: ensure executable bit & cache desktop entries if present
-if [ -x /usr/bin/update-desktop-database ]; then
-  /usr/bin/update-desktop-database -q || true
+
+if [ "$1" = "configure" ]; then
+    echo "----------------------------------------------------------------------"
+    echo "ECLI has been successfully installed."
+    echo
+    echo "On the first run, user configuration files will be automatically"
+    echo "created in the following directory:"
+    echo "  ~/.config/ecli/"
+    echo
+    echo "Please edit the '.env' file in that directory to add your API keys"
+    echo "for AI features."
+    echo "----------------------------------------------------------------------"
 fi
+
 exit 0

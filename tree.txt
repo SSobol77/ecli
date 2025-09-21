@@ -1,0 +1,136 @@
+.
+├── build
+│   └── main/
+├── config.toml
+├── dist
+├── docker/
+│   ├── build-freebsd.txt
+│   └── build-linux.Dockerfile
+├── docs/
+│   ├── BUILD_FROM_SOURCE.md
+│   ├── INSTALL.md
+├── ecli.egg-info/
+│   ├── dependency_links.txt
+│   ├── entry_points.txt
+│   ├── PKG-INFO
+│   ├── requires.txt
+│   ├── SOURCES.txt
+│   └── top_level.txt
+├── editor.log
+├── fortest.py
+├── htmlcov/
+│   ├── class_index.html
+│   ├── coverage_html_cb_6fb7b396.js
+│   ├── favicon_32_cb_58284776.png
+│   ├── function_index.html
+│   ├── index.html
+│   ├── keybd_closed_cb_ce680311.png
+│   ├── status.json
+│   ├── style_cb_6b508a39.css
+│   └── z_90f76a53f4447c1f_panels_py.html
+├── img/
+│   ├── background.jpg
+│   ├── favicon.ico
+│   ├── favicon.png
+│   ├── logo_m.ico
+│   ├── logo_m.png  - логотип аппликации
+│   └── logo.png
+├── infra/
+│   ├── ansible
+│   │   └── provision-builders
+│   └── terraform
+│       └── s3-releases
+├── LICENSE
+├── main.py
+├── main.spec
+├── Makefile
+├── packaging/
+│   ├── freebsd/
+│   │   └── ports/
+│   │       └── ecli/
+│   │           ├── distinfo
+│   │           ├── Makefile
+│   │           ├── pkg-descr
+│   │           └── pkg-plist
+│   ├── linux/
+│   │   ├── appimage/
+│   │   │   ├── AppDir/
+│   │   │   │   └── usr/
+│   │   │   │       └── share/
+│   │   │   │           ├── applications/
+│   │   │   │           │   └── ecli.desktop
+│   │   │   │           └── icons/
+│   │   │   │               └── hicolor/
+│   │   │   │                   └── 256x256/
+│   │   │   │                       └── apps/
+│   │   │   │                           └── ecli.png
+│   │   │   └── appimage-builder.yml
+│   │   ├── deb/
+│   │   │   └── DEBIAN/
+│   │   │       └── control
+│   │   ├── fpm-common/
+│   │   │   ├── ecli.desktop
+│   │   │   ├── postinst
+│   │   │   └── prerm
+│   │   └── rpm/
+│   │       └── ecli.spec
+│   └── windows/
+│       └── nsis/
+│           └── ecli.nsi
+├── pyproject.toml
+├── pyrightconfig.json
+├── README.md
+├── releases/
+│   └── latest
+│       └── readme.md
+├── requirements-dev.txt
+├── requirements.txt
+├── scripts/
+│   ├── build_freebsd_port.sh
+│   ├── build_pyinstaller_linux.sh
+│   ├── build_pyinstaller_windows.ps1
+│   ├── package_appimage.sh
+│   ├── package_fpm_deb.sh
+│   ├── package_fpm_rpm.sh
+│   ├── package_freebsd.sh
+│   ├── publish_pypi.sh
+│   ├── sign_checksums.sh
+│   └── verify_runtime.sh
+├── setup.cfg
+├── sonar-project.properties
+│        
+├── src/
+│   └── ecli/
+│       ├── __init__.py
+│       ├── core/
+│       │   ├── AsyncEngine.py
+│       │   ├── CodeCommenter.py
+│       │   ├── Ecli.py
+│       │   ├── History.py
+│       │   └── __init__.py
+│       │  
+│       ├── integrations/
+│       │   ├── AI.py
+│       │   ├── GitBridge.py
+│       │   ├── __init__.py
+│       │   └──  LinterBridge.py
+│       │  
+│       ├── ui/
+│       │   ├── DrawScreen.py
+│       │   ├── __init__.py
+│       │   ├── KeyBinder.py
+│       │   ├── PanelManager.py
+│       │   └── panels.py
+│       │  
+│       └── utils/
+│           ├── default_config.toml
+│           ├── __init__.py
+│           ├── logging_config.py
+│           └── utils.py
+├── tools/
+│   ├── re-commit-config.yaml
+│   └── Taskfile.yml
+├── tree.txt
+└── uv.lock
+
+
