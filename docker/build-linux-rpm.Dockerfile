@@ -17,32 +17,32 @@ RUN dnf -y install \
 # fpm via gem
 RUN gem install --no-document fpm
 
-# uv in PATH (curl-minimal уже в базовом образе)
+# uv in PATH
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
     && ln -s /root/.local/bin/uv /usr/local/bin/uv
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Явно заставляем uv использовать Python 3.11 (иначе на EL9 он цепляет системный 3.9)
+# Explicitly force uv to use Python 3.11 (otherwise, on EL9 it will use the system 3.9)
 ENV UV_PYTHON=python3.11
 
-# (Опционально) переключим python3 -> 3.11
+# Switch python3 -> 3.11
 RUN alternatives --set python3 /usr/bin/python3.11 || true
 
 WORKDIR /app
 
-# ---- Cache layer только с метаданными (не будем тянуть requirements внутрь)
+# ----Cache layer with metadata only (don't include requirements inside)
 COPY pyproject.toml ./
 
-# ВАЖНО:
-# Не ставим requirements.txt/requirements-dev.txt — они могут содержать записи,
-# несовместимые с Py 3.11 (например, pyyaml-ft>=8, требующий Py>=3.13),
-# а также ссылаться на локальные пути хоста. Для сборки бандла это НЕ нужно.
-# Ставим только PyInstaller и явно нужные рантайм-зависимости.
+# IMPORTANT:
+# Do not install requirements.txt/requirements-dev.txt - it may contain entries
+# incompatible with Py 3.11 (for example, pyyaml-ft>=8, which requires Py>=3.13),
+# or reference local host paths. This is NOT needed for building the bundle.
+# Install only PyInstaller and any explicitly required runtime dependencies.
 RUN python3.11 -m ensurepip --upgrade || true \
     && python3.11 -m pip install --upgrade pip wheel \
     && uv --version \
     && uv pip install --system --python python3.11 pyinstaller \
-    # runtime deps for bundling (должны совпадать с тем, что ты добавил в deb-сборку)
+    # Runtime deps for bundling (must match those in the deb build)
     && uv pip install --system --python python3.11 \
     aiohttp aiosignal yarl multidict frozenlist \
     python-dotenv toml chardet \
