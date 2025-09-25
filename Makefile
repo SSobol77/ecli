@@ -1,105 +1,72 @@
 # =============================================================================
-# Makefile for the ECLI Project
-#
-# Provides a standard interface for development, testing, and packaging tasks.
+# Makefile for ECLI
 # =============================================================================
 
-# --- Configuration ---
-
-# Define Python interpreter. Can be overridden, e.g.: make test PYTHON=python3.13
 PYTHON ?= python3
-
-# Define uv.
 UV ?= uv
 
-# Automatically extract version from pyproject.toml
-PACKAGE_VERSION := $(shell grep "^version =" pyproject.toml | cut -d '"' -f 2)
+# Read version from pyproject.toml without multiline $(shell)
+# We expect a line like: version = "0.1.0"
+PACKAGE_VERSION := $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null || echo 0.0.0)
 
-# Set default target. If just `make` is run, it executes `make help`.
 .DEFAULT_GOAL := help
 
-# --- Main Commands ---
-
+# ---------------------------
+# Help
+# ---------------------------
 .PHONY: help
 help:
-	@echo "ECLI Makefile"
-	@echo "---------------"
-	@echo "Usage: make <command>"
-	@echo ""
-	@echo "Development:"
-	@echo "  install        - Install dependencies using uv pip sync."
-	@echo "  run            - Run ECLI from source."
-	@echo "  clean          - Remove all build artifacts and cache files."
-	@echo ""
-	@echo "Quality Assurance:"
-	@echo "  lint           - Check code for style issues with Ruff."
-	@echo "  format         - Automatically format code with Ruff."
-	@echo "  test           - Run tests with pytest and generate coverage report."
-	@echo "  check          - Run lint and test targets together."
-	@echo ""
-	@echo "Packaging & Distribution:"
-	@echo "  build          - Build sdist and wheel packages."
-	@echo "  package-deb    - Create a .deb package for Debian/Ubuntu."
-	@echo ""
+	@echo "ECLI Makefile (version: $(PACKAGE_VERSION))"
+	@echo "  install               - Install dependencies with uv"
+	@echo "  run                   - Run from source"
+	@echo "  clean                 - Remove build artifacts"
+	@echo "  package-deb           - Build .deb locally (uses scripts/build-and-package-deb.sh)"
+	@echo "  package-deb-docker    - Build .deb inside Debian 11 container (recommended)"
+	@echo "  package-rpm           - Build .rpm locally (uses scripts/build-and-package-rpm.sh)"
+	@echo "  package-rpm-docker    - Build .rpm inside AlmaLinux 9 container (recommended)"
 
-
-# =============================================================================
-# DEVELOPMENT
-# =============================================================================
-
+# ---------------------------
+# Dev & QA
+# ---------------------------
 .PHONY: install
 install:
-	@echo "--> Installing dependencies from requirements files..."
-	$(UV) pip sync requirements.txt requirements-dev.txt
+	@echo "--> Installing dependencies..."
+	$(UV) pip install --system -r requirements.txt
+	-@[ -f requirements-dev.txt ] && $(UV) pip install --system -r requirements-dev.txt || true
 
 .PHONY: run
 run:
-	@echo "--> Running ECLI..."
 	$(PYTHON) main.py
 
 .PHONY: clean
 clean:
-	@echo "--> Cleaning up build artifacts and cache files..."
-	@find . -type f -name "*.pyc" -delete
-	@find . -type d -name "__pycache__" -delete
-	@rm -rf build/ dist/ .coverage htmlcov/ .pytest_cache/ ecli.egg-info/ releases/
-	@rm -f ecli_*.deb
+	rm -rf build/ dist/ releases/ .pytest_cache/ .ruff_cache/ .mypy_cache/ __pycache__
+	-find . -type d -name "__pycache__" -exec rm -rf {} +
+	-find . -type f -name "*.pyc" -delete
 
-
-# =============================================================================
-# QUALITY ASSURANCE
-# =============================================================================
-
-.PHONY: lint
-lint:
-	@echo "--> Running linter (Ruff)..."
-	$(UV) run ruff check src tests
-
-.PHONY: format
-format:
-	@echo "--> Formatting code (Ruff)..."
-	$(UV) run ruff format src tests
-
-.PHONY: test
-test:
-	@echo "--> Running tests (pytest)..."
-	$(UV) run pytest --cov=src/ecli --cov-report=term-missing
-
-.PHONY: check
-check: lint test
-
-
-# =============================================================================
-# PACKAGING & DISTRIBUTION
-# =============================================================================
-
-.PHONY: build
-build: clean
-	@echo "--> Building source distribution and wheel..."
-	$(PYTHON) -m build
-
+# ---------------------------
+# Packaging (DEB)
+# ---------------------------
 .PHONY: package-deb
 package-deb: clean
-	@echo "--> Building Debian package for version $(PACKAGE_VERSION)..."
-	@./scripts/package_fpm_deb.sh
-	@echo "--> Build process finished. See output above for details."
+	./scripts/build-and-package-deb.sh
+
+.PHONY: package-deb-docker
+package-deb-docker:
+	docker build -f docker/build-linux-deb.Dockerfile \
+		--build-arg PYTHON_VERSION=3.11 \
+		--build-arg DEBIAN_RELEASE=bullseye \
+		-t ecli-deb:py311-bullseye .
+	docker run --rm -v "$$(pwd):/app" -w /app ecli-deb:py311-bullseye
+
+# ---------------------------
+# Packaging (RPM)
+# ---------------------------
+.PHONY: package-rpm
+package-rpm: clean
+	./scripts/build-and-package-rpm.sh
+
+.PHONY: package-rpm-docker
+package-rpm-docker:
+	docker build -f docker/build-linux-rpm.Dockerfile -t ecli-rpm:alma9 .
+	docker run --rm -v "$$(pwd):/app" -w /app ecli-rpm:alma9

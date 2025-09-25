@@ -1,29 +1,41 @@
-#!/bin/bash
-# ==============================================================================
-# scripts/build_pyinstaller_linux.sh
-#
-# Builds a standalone executable for Linux using PyInstaller.
-# The output will be a single file in the 'dist/' directory.
-# ==============================================================================
-
+#!/usr/bin/env bash
+# Build Ecli binary with PyInstaller (Linux)
+# Prefers ecli.spec; falls back to main.py onefile.
 set -euo pipefail
-PROJECT_ROOT=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." &> /dev/null && pwd)
+
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
-echo "--- Building standalone Linux executable with PyInstaller ---"
+PACKAGE_NAME="ecli"
+MAIN_SCRIPT="main.py"
+SPEC_FILE="ecli.spec"
 
-# Clean up previous builds
+echo "==> Checking prerequisites"
+command -v python3 >/dev/null
+command -v pyinstaller >/dev/null
+
+echo "==> Cleaning previous artifacts"
 rm -rf build/ dist/
 
-# Get the package name from main.spec or pyproject.toml
-# We'll assume the main entry point is main.py for this example.
-PACKAGE_NAME="ecli"
+echo "==> Building with PyInstaller"
+PYI_ARGS=(--onefile --clean --noconfirm --strip)
 
-pyinstaller main.py \
-    --name "${PACKAGE_NAME}" \
-    --onefile \
-    --clean \
-    --noconfirm \
-    --additional-hooks-dir=./hooks # Optional: for complex libraries
+# Bundle optional configs if present
+[[ -f "config.toml" ]] && PYI_ARGS+=(--add-data "config.toml:.")
+[[ -d "config" ]] && PYI_ARGS+=(--add-data "config:config")
 
-echo "--- Executable created at: dist/${PACKAGE_NAME} ---"
+if [[ -f "${SPEC_FILE}" ]]; then
+  pyinstaller "${SPEC_FILE}" --clean --noconfirm
+else
+  pyinstaller "${MAIN_SCRIPT}" --name "${PACKAGE_NAME}" "${PYI_ARGS[@]}"
+fi
+
+# Sanity check
+if [[ -x "dist/${PACKAGE_NAME}/${PACKAGE_NAME}" ]]; then
+  echo "==> OK: dist/${PACKAGE_NAME}/${PACKAGE_NAME}"
+elif [[ -x "dist/${PACKAGE_NAME}" ]]; then
+  echo "==> OK: dist/${PACKAGE_NAME}"
+else
+  echo "Build output not found in dist/. Aborting." >&2
+  exit 1
+fi
