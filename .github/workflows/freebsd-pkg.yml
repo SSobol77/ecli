@@ -1,0 +1,58 @@
+name: FreeBSD 14 .pkg
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "src/**"
+      - "packaging/**"
+      - "scripts/build-and-package-freebsd.sh"
+      - "ecli.spec"
+      - "pyproject.toml"
+
+jobs:
+  build-freebsd-pkg:
+    runs-on: ubuntu-latest
+    name: "Build FreeBSD 14 .pkg"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build in FreeBSD 14 VM
+        uses: vmactions/freebsd-vm@v1
+        with:
+          release: "14.1"
+          usesh: true
+          prepare: |
+            set -eux
+            env ASSUME_ALWAYS_YES=yes pkg update -f
+          run: |
+            set -eux
+            sh ./scripts/build-and-package-freebsd.sh
+
+      - name: Find built .pkg
+        id: find_pkg
+        run: |
+          set -e
+          PKG_PATH="$(ls -1 releases/*/ecli-*.pkg | tail -n 1)"
+          echo "pkg_path=$PKG_PATH" >> $GITHUB_OUTPUT
+
+      - name: Upload artifact (.pkg)
+        uses: actions/upload-artifact@v4
+        with:
+          name: freebsd-pkg
+          path: ${{ steps.find_pkg.outputs.pkg_path }}
+
+      - name: Commit .pkg into repository
+        if: ${{ github.ref == 'refs/heads/main' }}
+        run: |
+          set -eux
+          PKG="${{ steps.find_pkg.outputs.pkg_path }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "$PKG"
+          git commit -m "ci(freebsd): add built pkg artifact $PKG [skip ci]" || echo "No changes to commit"
+          git push

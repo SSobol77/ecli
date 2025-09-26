@@ -11,6 +11,12 @@ PACKAGE_VERSION := $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print
 
 .DEFAULT_GOAL := help
 
+# ---- FreeBSD .pkg (via vmactions/freebsd-vm) -------------------------------
+FREEBSD_VM_IMAGE := ghcr.io/vmactions/freebsd-vm
+# tag order (can be changed if desired)
+FREEBSD_VM_TAGS ?= 14.2 14.1 14.0 14 latest
+
+
 # ---------------------------
 # Help
 # ---------------------------
@@ -70,3 +76,25 @@ package-rpm: clean
 package-rpm-docker:
 	docker build -f docker/build-linux-rpm.Dockerfile -t ecli-rpm:alma9 .
 	docker run --rm -v "$$(pwd):/app" -w /app ecli-rpm:alma9
+# ---------------------------
+# Packaging (PKG) — FreeBSD
+# ---------------------------
+
+# Используй GitHub Actions для сборки .pkg во FreeBSD 14 VM
+.PHONY: package-freebsd-ci
+package-freebsd-ci:
+	@echo "--> Triggering GitHub Actions workflow for FreeBSD .pkg build..."
+	@echo "   Open: https://github.com/ssobol77/ecli/actions/workflows/freebsd-pkg.yml"
+	@echo "   Click: 'Run workflow' (select branch: main)."
+	@echo "   Once completed, the .pkg will appear in artifacts and in releases/<version>/ (if autocommit is enabled)."
+	@echo ""
+	@echo "Optional via GitHub CLI:"
+	@echo "  gh workflow run freebsd-pkg.yml"
+
+# Локально через Docker это не работает (образ vmactions/freebsd-vm недоступен для pull)
+.PHONY: package-freebsd-docker
+package-freebsd-docker:
+	@echo "Local launch of FreeBSD VM via Docker is not possible:"
+	@echo "  ghcr.io/vmactions/freebsd-vm is not published for docker pull."
+	@echo "Use: make package-freebsd-ci (build in GitHub Actions)."
+	@exit 125
