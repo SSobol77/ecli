@@ -1,3 +1,4 @@
+# .github/workflows/freebsd-pkg.yml
 name: FreeBSD 14 .pkg
 
 on:
@@ -14,17 +15,17 @@ on:
 jobs:
   build-freebsd-pkg:
     runs-on: ubuntu-latest
-    name: "Build FreeBSD 14 .pkg"
+    name: "Build FreeBSD 14.3 .pkg"
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      - name: Build in FreeBSD 14 VM
+      - name: Build in FreeBSD 14.3 VM
         uses: vmactions/freebsd-vm@v1
         with:
-          release: "14.1"
+          release: "14.3"
           usesh: true
           prepare: |
             set -eux
@@ -33,26 +34,31 @@ jobs:
             set -eux
             sh ./scripts/build-and-package-freebsd.sh
 
-      - name: Find built .pkg
+      - name: Find built .pkg and checksum
         id: find_pkg
         run: |
           set -e
           PKG_PATH="$(ls -1 releases/*/ecli-*.pkg | tail -n 1)"
+          CHECKSUM_PATH="$(ls -1 releases/*/ecli-*.pkg.sha256 | tail -n 1)"
           echo "pkg_path=$PKG_PATH" >> $GITHUB_OUTPUT
+          echo "checksum_path=$CHECKSUM_PATH" >> $GITHUB_OUTPUT
 
-      - name: Upload artifact (.pkg)
+      - name: Upload artifact (.pkg and checksum)
         uses: actions/upload-artifact@v4
         with:
           name: freebsd-pkg
-          path: ${{ steps.find_pkg.outputs.pkg_path }}
+          path: |
+            ${{ steps.find_pkg.outputs.pkg_path }}
+            ${{ steps.find_pkg.outputs.checksum_path }}
 
-      - name: Commit .pkg into repository
+      - name: Commit .pkg and checksum into repository
         if: ${{ github.ref == 'refs/heads/main' }}
         run: |
           set -eux
           PKG="${{ steps.find_pkg.outputs.pkg_path }}"
+          CHECKSUM="${{ steps.find_pkg.outputs.checksum_path }}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add "$PKG"
-          git commit -m "ci(freebsd): add built pkg artifact $PKG [skip ci]" || echo "No changes to commit"
+          git add "$PKG" "$CHECKSUM"
+          git commit -m "ci(freebsd): add built pkg artifact $PKG and checksum [skip ci]" || echo "No changes to commit"
           git push

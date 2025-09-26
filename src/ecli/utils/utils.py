@@ -41,12 +41,13 @@ WHITE_FG_IDX = 255
 
 ENV_TEMPLATE = """# API Keys for AI Features
 # Get your keys from the respective provider websites and add them here.
+# XAI (Grok): from https://console.x.ai, format xa-...your-key-here
+XAI_API_KEY=
 OPENAI_API_KEY=
 GEMINI_API_KEY=
 MISTRAL_API_KEY=
 CLAUDE_API_KEY=
 HUGGINGFACE_API_KEY=
-XAI_API_KEY=
 """
 
 # This dictionary is a direct, hardcoded representation of `default_config.toml`.
@@ -77,8 +78,12 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "openai": "", "gemini": "", "mistral": "", "claude": "", "grok": "", "huggingface": ""
     },
     "ai.models": {
-        "openai": "gpt-4o", "gemini": "gemini-2.5-pro", "mistral": "mistral-large-latest",
-        "claude": "claude-3-opus-20240229", "grok": "grok-1.5", "huggingface": "microsoft/DialoGPT-large",
+        "openai": "gpt-5-codex",
+        "gemini": "gemini-2.5-pro",
+        "mistral": "magistral-medium-1.2",
+        "claude": "claude-4-opus",
+        "grok": "grok-4-fast",
+        "huggingface": "meta-llama/Meta-Llama-3.1-405B-Instruct",
     },
     "git": {"enabled": True},
     "settings": {"auto_save_interval": 5, "show_git_info": True},

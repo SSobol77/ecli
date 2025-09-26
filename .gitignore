@@ -126,7 +126,7 @@ ruff_cache/
 .sonar/
 .sonarqube/
 .re-commit-config.yaml
-
+sonar-project.properties
 
 # Lock files (regenerate with uv)
 uv.lock

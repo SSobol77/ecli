@@ -10,9 +10,19 @@
 #   4) Creates a native .pkg with `pkg create`
 #
 # Output: releases/<version>/ecli-<version>.pkg
+# Updated: September 26, 2025 for Python 3.11 and TTY-friendly output.
 # ==============================================================================
 
 set -eu
+
+# TTY Compatibility: Add green color to ==> messages if stdout is tty
+if [ -t 1 ]; then
+  GREEN="\033[32m"
+  RESET="\033[0m"
+else
+  GREEN=""
+  RESET=""
+fi
 
 PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
@@ -20,14 +30,14 @@ cd "$PROJECT_ROOT"
 PACKAGE_NAME="ecli"
 MAINTAINER="Siergej Sobolewski <s.sobolewski@hotmail.com>"
 HOMEPAGE="https://ecli.io"
-LICENSE="MIT"
+LICENSE="Apache-2.0"
 COMMENT="Terminal DevOps editor with AI and Git integration"
 CATEGORY="editors"  # FreeBSD manifest 'categories'
 
 # ------------------------------------------------------------------------------
 # 0) System prerequisites (FreeBSD 14)
 # ------------------------------------------------------------------------------
-echo "==> Installing base build dependencies (FreeBSD 14)..."
+echo "${GREEN}==> Installing base build dependencies (FreeBSD 14)...${RESET}"
 # fetch/curl:to install uv; ca_root_nss: TLS certs
 pkg install -y \
   python311 py311-pip py311-setuptools py311-wheel py311-pyinstaller \
@@ -37,7 +47,7 @@ pkg install -y \
 # 1) Userland package manager: uv
 # ------------------------------------------------------------------------------
 if ! command -v uv >/dev/null 2>&1; then
-  echo "==> Installing uv..."
+  echo "${GREEN}==> Installing uv...${RESET}"
   # FreeBSD имеет fetch в базе; используем его (можно и curl)
   fetch -o - https://astral.sh/uv/install.sh | sh
   export PATH="$HOME/.local/bin:$PATH"
@@ -49,7 +59,7 @@ export PATH="$HOME/.local/bin:$PATH"
 # 2) Python deps needed at analysis time for PyInstaller to bundle
 # (similar to deb/rpm: aiohttp stack + console libs)
 # ------------------------------------------------------------------------------
-echo "==> Installing runtime Python deps via uv (system site, Python 3.11)..."
+echo "${GREEN}==> Installing runtime Python deps via uv (system site, Python 3.11)...${RESET}"
 uv pip install --system --python python3.11 \
   aiohttp aiosignal yarl multidict frozenlist \
   python-dotenv toml chardet \
@@ -58,7 +68,7 @@ uv pip install --system --python python3.11 \
 # ------------------------------------------------------------------------------
 # 3) Determine version from pyproject.toml (use stdlib tomllib on 3.11)
 # ------------------------------------------------------------------------------
-echo "==> Reading version from pyproject.toml..."
+echo "${GREEN}==> Reading version from pyproject.toml...${RESET}"
 VERSION="$(python3.11 - <<'PY'
 import tomllib
 with open("pyproject.toml","rb") as f:
@@ -69,7 +79,7 @@ if [ -z "$VERSION" ]; then
   echo "ERROR: Could not read version from pyproject.toml" >&2
   exit 1
 fi
-echo "==> Version: $VERSION"
+echo "${GREEN}==> Version: $VERSION${RESET}"
 
 RELEASES_DIR="releases/$VERSION"
 STAGING_ROOT="build/freebsd_pkg_staging"
@@ -80,10 +90,10 @@ EXECUTABLE=""  # will detect below
 # ------------------------------------------------------------------------------
 # 4) Build one-file executable with PyInstaller
 # ------------------------------------------------------------------------------
-echo "==> Cleaning previous artifacts"
+echo "${GREEN}==> Cleaning previous artifacts${RESET}"
 rm -rf build/ dist/
 
-echo "==> Building executable with PyInstaller..."
+echo "${GREEN}==> Building executable with PyInstaller...${RESET}"
 if [ -f "ecli.spec" ]; then
   # spec should already:
   # - add pathex=src
@@ -123,12 +133,12 @@ if [ -z "$EXECUTABLE" ]; then
   echo "ERROR: PyInstaller output not found in dist/." >&2
   exit 1
 fi
-echo "==> Built: $EXECUTABLE"
+echo "${GREEN}==> Built: $EXECUTABLE${RESET}"
 
 # ------------------------------------------------------------------------------
 # 5) Stage files under /usr/local for FreeBSD packaging
 # ------------------------------------------------------------------------------
-echo "==> Preparing staging layout under $STAGING_ROOT ..."
+echo "${GREEN}==> Preparing staging layout under $STAGING_ROOT ...${RESET}"
 rm -rf "$STAGING_ROOT" "$META_DIR"
 mkdir -p \
   "$STAGING_ROOT/usr/local/bin" \
@@ -221,7 +231,7 @@ licenses:
 licenselogic: single
 EOF
 
-echo "==> Creating .pkg with pkg create..."
+echo "${GREEN}==> Creating .pkg with pkg create...${RESET}"
 # pkg create will take all files from the staging root, metadata from +MANIFEST
 pkg create -M "$MANIFEST_FILE" -r "$STAGING_ROOT" -o "$RELEASES_DIR"
 
@@ -231,6 +241,10 @@ if [ -z "$PKG_PATH" ]; then
   exit 1
 fi
 
-echo "✅ DONE: $PKG_PATH"
+# Generate SHA256 checksum for verification
+sha256sum "$PKG_PATH" > "$PKG_PATH.sha256" || shasum -a 256 "$PKG_PATH" > "$PKG_PATH.sha256"
+
+echo "${GREEN}✅ DONE: $PKG_PATH${RESET}"
+echo "${GREEN}✅ Checksum: $PKG_PATH.sha256${RESET}"
 # Optional: list contents
 pkg info -F "$PKG_PATH" || true
