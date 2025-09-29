@@ -64,6 +64,7 @@ from pygments.lexers import TextLexer, get_lexer_for_filename, guess_lexer
 from pygments.token import Token
 from wcwidth import wcswidth, wcwidth
 
+
 from ecli.core.AsyncEngine import AsyncEngine
 from ecli.core.CodeCommenter import CodeCommenter
 
@@ -71,6 +72,7 @@ from ecli.core.CodeCommenter import CodeCommenter
 from ecli.core.History import History
 from ecli.integrations.GitBridge import GitBridge
 from ecli.integrations.LinterBridge import LinterBridge
+from ecli.ui.TerminalAppMode import TerminalAppMode
 from ecli.ui.DrawScreen import DrawScreen
 from ecli.ui.KeyBinder import KeyBinder
 from ecli.ui.PanelManager import PanelManager
@@ -314,31 +316,72 @@ class Ecli:
         lightweight_mode: bool = False,
         show_line_numbers: bool = True,
     ) -> None:
-        """Creates and fully initializes a `Ecli` instance.
-        Delegates complex setup to private helper methods to reduce complexity.
+        """Create and fully initialize an Ecli instance.
+
+        Args:
+            stdscr: Curses standard screen window (must be provided by the caller).
+            config: Application configuration dictionary (already loaded).
+            lightweight_mode: If True, start in reduced/low-overhead mode.
+            show_line_numbers: If True, render line numbers in the gutter.
+
+        Side effects:
+            - Initializes all internal state and UI components.
+            - Prepares terminal-related helpers (TerminalAppMode holder).
+            - Sets initial cursor position and performs a first resize/layout pass.
+
+        Raises:
+            ValueError: If stdscr is None.
+            TypeError: If config is not a dict.
+            Exception: Re-raised if any initialization step fails (with context logged).
         """
-        # Basic setup
+        # --- basic input validation (mypy- and runtime-friendly) ---
+        if stdscr is None:
+            raise ValueError("stdscr must not be None")
+        if not isinstance(config, dict):
+            raise TypeError("config must be dict[str, Any]")
+
+        # --- basic setup ---
         self.stdscr = stdscr
         self.config: dict[str, Any] = config
-        self.is_lightweight: bool = lightweight_mode
-        self.show_line_numbers: bool = show_line_numbers
+        self.is_lightweight: bool = bool(lightweight_mode)
+        self.show_line_numbers: bool = bool(show_line_numbers)
 
-        # Initialize all state attributes
-        self._initialize_state()
+        # --- filename/path state used by save/open logic (kept in sync by helpers) ---
+        # These are intentionally set early so CLI preload can assign defaults immediately.
+        self._cli_intended_path: str | None = None
+        self.current_file_path: str | None = None
+        self.file_path: str | None = None
+        self.filename: str | None = None
 
-        # Initialize components
-        self._initialize_components()
+        # --- initialize state & subsystems with clear failure boundaries ---
+        try:
+            # 1) Core state (buffers, cursor model, options, etc.)
+            self._initialize_state()
 
-        # Setup environment (terminal, clipboard, etc.)
-        self._setup_environment()
+            # 2) UI/components (panels, key binder, status line, etc.)
+            self._initialize_components()
 
-        # Final setup steps
-        self.set_initial_cursor_position()
-        self._ensure_trailing_newline()
-        self.handle_resize()
+            # 3) Terminal mode holder (alternate screen / app cursor keys controller)
+            #    NOTE: actual enter/exit must be done in run() to cover the whole loop.
+            self._term_mode = TerminalAppMode()
+
+            # 4) Environment wiring (terminal flags, clipboard bridges, timers, etc.)
+            self._setup_environment()
+
+            # 5) Post-setup layout & cursor
+            self.set_initial_cursor_position()
+            self._ensure_trailing_newline()
+            self.handle_resize()
+
+        except Exception as e:
+            logging.critical("Ecli initialization failed: %s", e, exc_info=True)
+            # Bubble up so caller can handle a hard failure cleanly.
+            raise
+
         logging.info(
-            f"Ecli initialized successfully. \
-                Lightweight: {self.is_lightweight}"
+            "Ecli initialized successfully. Lightweight=%s, LineNumbers=%s",
+            self.is_lightweight,
+            self.show_line_numbers,
         )
 
     # --- State Initialization ---
@@ -425,7 +468,14 @@ class Ecli:
     # --- Environment Setup ---
     def _setup_environment(self) -> None:
         """Configures terminal settings, clipboard, and auto-save."""
-        self.stdscr.keypad(False)
+
+        # Enable keypad so that curses translates escape sequences (arrows, F-keys)
+        # into KEY_* constants, including Shift-modified arrows where supported.
+        self.stdscr.keypad(True)
+        try:
+            curses.meta(self.stdscr, True)
+        except Exception:
+            pass
         curses.curs_set(1)
         self.original_termios_attrs: Optional[list[Any]] = None
 
@@ -469,6 +519,104 @@ class Ecli:
 
         if self.git:
             self.git.update_git_info()
+
+    # ---------------- Screen wiring ----------------
+    def attach_screen(self, stdscr: curses.window) -> None:
+        """Attach curses stdscr after construction.
+           Keeps compatibility with wrapper().
+        """
+        self.stdscr = stdscr
+
+    # ---------------- CLI file preloading ----------------
+    def preload_cli_document(self, path: Path) -> None:
+        """Preload (open or create) a buffer named after 'path',
+           even if it does not exist on disk.
+           This ensures that Save will default to that path.
+        """
+        intended = str(path.resolve())
+        self._cli_intended_path = intended
+
+        # 1) If editor already has a dedicated API, use it.
+        for meth_name in ("preload_cli_document", "open_or_create"):
+            if hasattr(self, meth_name) and getattr(self, meth_name) is not self.preload_cli_document:
+                try:
+                    getattr(self, meth_name)(intended)  # type: ignore[misc]
+                    # also mirror filename state for downstream save logic
+                    self._set_current_path(intended)
+                    return
+                except Exception:
+                    logger.debug("%s(%s) failed, will try fallbacks", meth_name, intended, exc_info=True)
+
+        # 2) If file exists, use open_file; else create empty buffer with that name.
+        if os.path.exists(intended):
+            try:
+                self.open_file(intended)  # your method
+                self._set_current_path(intended)
+                return
+            except Exception:
+                logger.debug("open_file(%s) failed, will try creating an empty buffer", intended, exc_info=True)
+
+        # 3) Create an empty in-memory buffer with given name if API exists.
+        for meth_name in ("create_empty_buffer_with_name", "new_buffer_named", "new_file_with_name", "new_file"):
+            if hasattr(self, meth_name):
+                try:
+                    meth = getattr(self, meth_name)
+                    try:
+                        meth(initial_path=intended)  # type: ignore[call-arg]
+                    except TypeError:
+                        meth(intended)  # type: ignore[misc]
+                    self._set_current_path(intended)
+                    return
+                except Exception:
+                    logger.debug("%s failed, continue fallback", meth_name, exc_info=True)
+
+        # 4) Last resort: create on disk then open (guarantees correct default name).
+        try:
+            Path(intended).parent.mkdir(parents=True, exist_ok=True)
+            Path(intended).touch(exist_ok=True)
+            self.open_file(intended)
+            self._set_current_path(intended)
+        except Exception:
+            logger.warning("Could not preload CLI document %s; starting unnamed buffer.", intended, exc_info=True)
+
+    def open_or_create(self, path: str | Path) -> None:
+        """Open the file if it exists; otherwise create
+           an empty buffer with that path.
+        """
+        p = str(Path(path).expanduser().resolve())
+        if os.path.exists(p):
+            self.open_file(p)
+            self._set_current_path(p)
+            return
+        # try to create a named empty buffer via your APIs
+        for meth_name in ("create_empty_buffer_with_name", "new_buffer_named", "new_file_with_name", "new_file"):
+            if hasattr(self, meth_name):
+                try:
+                    meth = getattr(self, meth_name)
+                    try:
+                        meth(initial_path=p)  # type: ignore[call-arg]
+                    except TypeError:
+                        meth(p)  # type: ignore[misc]
+                    self._set_current_path(p)
+                    return
+                except Exception:
+                    logger.debug("%s failed, continue", meth_name, exc_info=True)
+        # fallback: touch then open
+        Path(p).parent.mkdir(parents=True, exist_ok=True)
+        Path(p).touch(exist_ok=True)
+        self.open_file(p)
+        self._set_current_path(p)
+
+    # --------------- internal helpers ---------------
+    def _set_current_path(self, abs_path: str) -> None:
+        """Set common filename attributes
+           so Save/Write use the intended path by default.
+        """
+        self.current_file_path = abs_path
+        self.file_path = abs_path
+        self.filename = abs_path
+
+
 
     # --- Clipboard Availability Check ---
     def close(self) -> None:
@@ -7484,49 +7632,110 @@ class Ecli:
 
     # ------------------  Main editor loop  ------------------------
     def run(self) -> None:
-        """The main event loop of the editor.
+        """Main editor event loop.
 
-        This loop orchestrates all top-level operations by delegating tasks to
-        specialized helper methods. It runs continuously until the `self.running`
-        flag is set to False, typically by the `exit_editor` method.
-
-        The loop is designed to be non-blocking and efficient, performing actions
-        only when necessary. Its responsibilities are divided into two main phases,
-        handled by `_process_events_and_input` and `_render_screen` respectively.
-
-        It also includes top-level exception handling to catch critical errors
-        (like `KeyboardInterrupt` for Ctrl+C) and ensure a graceful shutdown
-        by calling `exit_editor`.
+        Responsibilities:
+        1) Enter terminal application mode (alternate screen, app cursor keys, raw/noecho).
+        2) Process background events and user input.
+        3) Render only when needed.
+        4) Always restore terminal state on exit.
         """
         logger.info("Editor main loop started.")
         self.running = True
         self._force_full_redraw = True
 
-        self.stdscr.nodelay(True)
-        self.stdscr.timeout(100)
+        if self.stdscr is None:
+            raise RuntimeError("stdscr must be attached before run()")
 
-        while self.running:
+        # --- ENTER terminal application modes (alternate screen + app cursor keys) ---
+        # Use terminfo capabilities if available; otherwise these calls are no-ops.
+        try:
+            curses.setupterm()
+            smcup = curses.tigetstr("smcup")  # enter alternate screen
+            smkx  = curses.tigetstr("smkx")   # application cursor keys
+            if smcup:
+                curses.putp(smcup.decode("ascii", "ignore"))
+            if smkx:
+                curses.putp(smkx.decode("ascii", "ignore"))
+        except Exception:
+            # Non-fatal on platforms without terminfo
+            pass
+
+        # Input modes: raw/noecho + keypad/meta
+        try:
+            curses.raw()
+        except Exception:
+            curses.cbreak()
+        curses.noecho()
+        self.stdscr.keypad(True)
+        try:
+            curses.meta(self.stdscr, True)
+        except Exception:
+            pass
+
+        # Make ESC responsive for Alt chords
+        try:
+            curses.set_escdelay(35)
+        except Exception:
+            pass
+
+        try:
+            # Non-blocking input tuned for ESC-sequence parsing.
+            self.stdscr.nodelay(True)
+            self.stdscr.timeout(35)
+
+            # --------------------------- your existing loop ---------------------------
+            while self.running:
+                try:
+                    redraw_needed: bool = self._process_events_and_input()
+                    self._render_screen(redraw_needed)
+                except KeyboardInterrupt:
+                    logger.info("KeyboardInterrupt received, initiating graceful shutdown.")
+                    self.exit_editor()
+                    break
+                except Exception as e:
+                    logger.critical("Unhandled exception in main loop: %s", e, exc_info=True)
+                    self.exit_editor()
+                    break
+            # -------------------------------------------------------------------------
+
+        finally:
+            # Restore blocking read
             try:
-                # Phase 1: Process all incoming data (background events and user input)
-                redraw_needed = self._process_events_and_input()
+                self.stdscr.nodelay(False)
+                self.stdscr.timeout(-1)
+            except Exception:
+                pass
 
-                # Phase 2: Update the UI, but only if a change occurred
-                self._render_screen(redraw_needed)
+            # Restore cooked modes
+            try:
+                curses.noraw()
+            except Exception:
+                try:
+                    curses.nocbreak()
+                except Exception:
+                    pass
+            try:
+                curses.echo()
+            except Exception:
+                pass
+            try:
+                self.stdscr.keypad(False)
+            except Exception:
+                pass
 
-            except KeyboardInterrupt:
-                logger.info(
-                    "Main loop interrupted by KeyboardInterrupt. Initiating exit sequence."
-                )
-                self.exit_editor()
-                break
-            except Exception as e:
-                logger.critical(
-                    "Unhandled exception in main loop: %s", e, exc_info=True
-                )
-                self.exit_editor()
-                break
+            # --- EXIT terminal application modes (normal cursor keys + leave alt screen) ---
+            try:
+                rmkx  = curses.tigetstr("rmkx")
+                rmcup = curses.tigetstr("rmcup")
+                if rmkx:
+                    curses.putp(rmkx.decode("ascii", "ignore"))
+                if rmcup:
+                    curses.putp(rmcup.decode("ascii", "ignore"))
+            except Exception:
+                pass
 
-        logger.info("Editor main loop finished.")
+            logger.info("Editor main loop finished.")
 
     def _process_events_and_input(self) -> bool:
         """Processes all non-UI events for a single main loop iteration, including

@@ -33,17 +33,15 @@ default and user-defined keybindings.
 
 import curses
 import logging
+import re
 from typing import TYPE_CHECKING, Any, Callable, Optional
-
-# Importing a third-party library directly
 from wcwidth import wcswidth
-
 
 if TYPE_CHECKING:
     from ecli.core.Ecli import Ecli
 
 
-## ==================== KeyBinder Class ====================
+# ==================== KeyBinder Class ====================
 class KeyBinder:
     """Class KeyBinder
     ====================
@@ -69,54 +67,48 @@ class KeyBinder:
         _setup_action_map(): Constructs the mapping from key codes or strings to editor action methods.
         get_key_input(window): Reads a key or key sequence from the terminal, handling ESC/Alt combinations robustly.
     """
-    ESCAPE_SEQUENCE_MAP = {
-        # --- Стандартные последовательности (xterm/vt100) ---
-        # Простые стрелки
-        '[A': 'up',
-        '[B': 'down',
-        '[C': 'right',
-        '[D': 'left',
+    # Normalized escape sequences map. Keys do NOT include the leading ESC (0x1B),
+    # because get_key_input() already strips/reads after ESC.
+    ESCAPE_SEQUENCE_MAP: dict[str, str] = {
+        # Arrows (CSI and SS3)
+        "[A": "up", "[B": "down", "[C": "right", "[D": "left",
+        "OA": "up", "OB": "down", "OC": "right", "OD": "left",
 
-        # Home / End
-        '[H': 'home',
-        '[F': 'end',
-        '[1~': 'home',
-        '[4~': 'end',
+        # xterm modifiers for arrows: ;2=Shift, ;3=Alt, ;4=Shift+Alt, ;5=Ctrl,
+        # ;6=Shift+Ctrl, ;7=Alt+Ctrl, ;8=Shift+Alt+Ctrl
+        "[1;2A": "shift+up",    "[1;2B": "shift+down",
+        "[1;2C": "shift+right", "[1;2D": "shift+left",
 
-        # PageUp / PageDown / Insert / Delete
-        '[5~': 'pageup',
-        '[6~': 'pagedown',
-        '[2~': 'insert',
-        '[3~': 'delete',
+        "[1;3A": "alt+up",      "[1;3B": "alt+down",
+        "[1;3C": "alt+right",   "[1;3D": "alt+left",
 
-        # Shift+Tab
-        '[Z': 'shift+tab',
+        "[1;4A": "shift+alt+up",    "[1;4B": "shift+alt+down",
+        "[1;4C": "shift+alt+right", "[1;4D": "shift+alt+left",
 
-        # --- Последовательности с модификатором SHIFT ---
-        '\E[1;2A': 'shift+up',
-        '\E[1;2B': 'shift+down',
-        '[1;2C': 'shift+right',
-        '[1;2D': 'shift+left',
+        "[1;5A": "ctrl+up",     "[1;5B": "ctrl+down",
+        "[1;5C": "ctrl+right",  "[1;5D": "ctrl+left",
 
-        # --- Последовательности с модификатором CTRL ---
-        '[1;5A': 'ctrl+up',
-        '[1;5B': 'ctrl+down',
-        '[1;5C': 'ctrl+right',
-        '[1;5D': 'ctrl+left',
+        "[1;6A": "shift+ctrl+up",    "[1;6B": "shift+ctrl+down",
+        "[1;6C": "shift+ctrl+right", "[1;6D": "shift+ctrl+left",
 
-        # --- Последовательности для F-клавиш ---
-        'OP': 'f1',
-        'OQ': 'f2',
-        'OR': 'f3',
-        'OS': 'f4',
-        '[15~': 'f5',
-        '[17~': 'f6',
-        '[18~': 'f7',
-        '[19~': 'f8',
-        '[20~': 'f9',
-        '[21~': 'f10',
-        '[23~': 'f11',
-        '[24~': 'f12',
+        "[1;7A": "alt+ctrl+up",    "[1;7B": "alt+ctrl+down",
+        "[1;7C": "alt+ctrl+right", "[1;7D": "alt+ctrl+left",
+
+        "[1;8A": "shift+alt+ctrl+up",    "[1;8B": "shift+alt+ctrl+down",
+        "[1;8C": "shift+alt+ctrl+right", "[1;8D": "shift+alt+ctrl+left",
+
+        # Home/End (CSI/SS3 and tilde variants)
+        "[H": "home", "[F": "end", "OH": "home", "OF": "end",
+        "[1~": "home", "[4~": "end",
+
+        # Insert/Delete/PageUp/PageDown (~ style)
+        "[2~": "insert", "[3~": "delete", "[5~": "pageup", "[6~": "pagedown",
+
+        # Function keys (SS3 and tilde variants)
+        "OP": "f1", "OQ": "f2", "OR": "f3", "OS": "f4",
+        "[11~": "f1", "[12~": "f2", "[13~": "f3", "[14~": "f4",
+        "[15~": "f5", "[17~": "f6", "[18~": "f7", "[19~": "f8",
+        "[20~": "f9", "[21~": "f10", "[23~": "f11", "[24~": "f12",
     }
 
     def __init__(self, editor: "Ecli"):
@@ -143,7 +135,6 @@ class KeyBinder:
         self.keybindings = self._load_keybindings()
         self.action_map = self._setup_action_map()
 
-
     def _handle_printable_character(self, key: str | int) -> bool:
         """Handles insertion of a printable character into the buffer."""
         char_to_insert = ""
@@ -165,7 +156,8 @@ class KeyBinder:
 
         if char_to_insert:
             logging.debug(
-                f"handle_input: Treating '{repr(char_to_insert)}' as printable character for insertion."
+                f"handle_input: Treating '{repr(char_to_insert)}' \
+                as printable character for insertion."
             )
             return self.editor.insert_text(char_to_insert)
 
@@ -250,48 +242,40 @@ class KeyBinder:
         It returns a dictionary mapping action names to lists of key codes or key strings.
 
         Returns:
-            dict[str, list[Union[int, str]]]: A dictionary where each key is an action name
+            dict[str, list[int | str]]: A dictionary where each key is an action name
             (e.g., "delete", "undo"), and the value is a list of key codes or key strings
             that trigger that action.
         """
 
         # Getting the correct key codes for TTY
-        def get_backspace_code():
+        def get_backspace_code() -> list[int]:
             """Determines the correct key codes for the Backspace key depending on the terminal.
 
-            This helper function returns a list of integer codes that may represent the Backspace key
-            in different terminal environments. It is useful for handling Backspace consistently
-            across various platforms and terminal emulators.
-
             Returns:
-                list[int]: A list of possible key codes for Backspace (e.g., [curses.KEY_BACKSPACE, 8, 127]).
+                list[int]: Possible key codes for Backspace (e.g., [curses.KEY_BACKSPACE, 8, 127]).
             """
             return [curses.KEY_BACKSPACE, 8, 127]
 
-        def get_ctrl_z_codes():
+        def get_ctrl_z_codes() -> list[int]:
             """Returns all possible key codes for the Ctrl+Z key combination.
 
-            This helper function provides a list of integer codes that may represent
-            the Ctrl+Z (undo) key in different terminal environments. It includes
-            the standard ASCII code, any available curses constant, and common
-            alternative codes.
-
             Returns:
-                list[int]: A list of possible key codes for Ctrl+Z (e.g., [26, curses.KEY_SUSPEND, 407]).
+                list[int]: Possible key codes for Ctrl+Z (e.g., [26, curses.KEY_SUSPEND, 407]).
             """
-            codes = [26]  # ASCII SUB (Ctrl+Z)
+            codes: list[int] = [26]  # ASCII SUB (Ctrl+Z)
             if hasattr(curses, "KEY_SUSPEND"):
-                codes.append(curses.KEY_SUSPEND)
-
-            codes.append(407)  # Alternative code for undo
+                # type: ignore[attr-defined]  # some platforms may not have KEY_SUSPEND
+                codes.append(curses.KEY_SUSPEND)  # pyright: ignore[reportAttributeAccessIssue]
+            codes.append(407)  # Alternative code sometimes used for suspend/undo
             return codes
 
-        default_keybindings: dict[str, str | int | list[str | int]] = {
+        # All values are lists (to keep a uniform type for mypy)
+        default_keybindings: dict[str, list[int | str]] = {
             "delete": ["del", curses.KEY_DC],
             "paste": ["ctrl+v", 22],
             "copy": ["ctrl+c", 3],
             "cut": ["ctrl+x", 24],
-            "undo": ["ctrl+z"] + get_ctrl_z_codes(),
+            "undo": ["ctrl+z", *get_ctrl_z_codes()],
             "redo": ["ctrl+y", 558, 25],
             "new_file": ["f2", 266],
             "open_file": ["ctrl+o", 15],
@@ -318,25 +302,24 @@ class KeyBinder:
             "toggle_insert_mode": ["insert", curses.KEY_IC, 331],
             "select_to_home": [curses.KEY_SHOME],
             "select_to_end": [curses.KEY_SEND],
-            "handle_backspace": ["backspace"] + get_backspace_code(),
+            "handle_backspace": ["backspace", *get_backspace_code()],
             "toggle_file_browser": ["f10", 274],
             "toggle_focus": ["f12", 276],
-            # Improved Alt+HJKL support for TTYs
+
+            # Selection extensions (Shift/Alt variants)
             "extend_selection_up": [
                 "shift+up",
-                "alt-k",
-                337,
+                "alt-i",
                 getattr(curses, "KEY_SR", getattr(curses, "KEY_SPREVIOUS", 337)),
             ],
             "extend_selection_down": [
                 "shift+down",
-                "alt-j",
-                336,
+                "alt-k",
                 getattr(curses, "KEY_SF", getattr(curses, "KEY_SNEXT", 336)),
             ],
             "extend_selection_left": [
                 "shift+left",
-                "alt-h",
+                "alt-j",
                 curses.KEY_SLEFT,
             ],
             "extend_selection_right": [
@@ -346,54 +329,53 @@ class KeyBinder:
             ],
         }
 
-        user_keybindings_config = self.config.get("keybindings", {})
+        user_keybindings_config: dict[str, object] = self.config.get("keybindings", {})
         parsed_keybindings: dict[str, list[int | str]] = {}
 
         for action, default_value_spec in default_keybindings.items():
-            key_value_spec_from_config = user_keybindings_config.get(
+            key_value_spec_from_config: object = user_keybindings_config.get(
                 action, default_value_spec
             )
 
             if not key_value_spec_from_config:
-                logging.debug(f"Keybinding for action '{action}' is disabled or empty.")
+                logging.debug("Keybinding for action %r is disabled or empty.", action)
                 continue
 
             key_codes_for_action: list[int | str] = []
-            specs_to_process: list[str | int]
+            specs_to_process: list[int | str]
+
             if isinstance(key_value_spec_from_config, list):
-                specs_to_process = key_value_spec_from_config
-            elif (
-                isinstance(key_value_spec_from_config, str)
-                and "|" in key_value_spec_from_config
-            ):
-                specs_to_process = [
-                    s.strip() for s in key_value_spec_from_config.split("|")
-                ]
+                specs_to_process = key_value_spec_from_config  # type: ignore[assignment]
+            elif isinstance(key_value_spec_from_config, str) and "|" in key_value_spec_from_config:
+                specs_to_process = [s.strip() for s in key_value_spec_from_config.split("|")]
             else:
-                specs_to_process = [key_value_spec_from_config]
+                # single item (int or str)
+                specs_to_process = [key_value_spec_from_config]  # type: ignore[list-item]
 
             for key_spec_item in specs_to_process:
-                if not key_spec_item and key_spec_item != 0:
-                    continue
-                try:
-                    key_code = self._decode_keystring(key_spec_item)
-                    if key_code not in key_codes_for_action:
-                        key_codes_for_action.append(key_code)
-                except ValueError as e:
-                    logging.error(
-                        f"Error parsing keybinding item '{key_spec_item!r}' for action '{action}': {e}. "
-                        f"This specific binding for the action will be ignored."
-                    )
-                except Exception as e_unhandled:
-                    logging.error(
-                        f"Unexpected error parsing keybinding item '{key_spec_item!r}' for action '{action}': {e_unhandled}",
-                        exc_info=True,
-                    )
+                if key_spec_item == 0 or key_spec_item:  # allow 0, skip only falsy except 0
+                    try:
+                        key_code: int | str = self._decode_keystring(key_spec_item)  # type: ignore[arg-type]
+                        if key_code not in key_codes_for_action:
+                            key_codes_for_action.append(key_code)
+                    except ValueError as e:
+                        logging.error(
+                            "Error parsing keybinding item %r for action %r: %s. "
+                            "This specific binding for the action will be ignored.",
+                            key_spec_item, action, e
+                        )
+                    except Exception as e_unhandled:
+                        logging.error(
+                            "Unexpected error parsing keybinding item %r for action %r: %s",
+                            key_spec_item, action, e_unhandled,
+                            exc_info=True,
+                        )
 
-            if action == "undo":  # Ctrl+Z / KEY_SUSPEND
-                extra_codes: list[int] = [26, 407]  # 407 == curses.KEY_SUSPEND
+            if action == "undo":  # Ctrl+Z / KEY_SUSPEND hardening
+                extra_codes: list[int] = [26, 407]
                 if hasattr(curses, "KEY_SUSPEND"):
-                    extra_codes.append(curses.KEY_SUSPEND)
+                    # type: ignore[attr-defined]
+                    extra_codes.append(curses.KEY_SUSPEND)  # pyright: ignore[reportAttributeAccessIssue]
                 for code in extra_codes:
                     if code not in key_codes_for_action:
                         key_codes_for_action.append(code)
@@ -402,11 +384,13 @@ class KeyBinder:
                 parsed_keybindings[action] = key_codes_for_action
             else:
                 logging.warning(
-                    f"No valid key codes found for action '{action}' after parsing. It will not be bound."
+                    "No valid key codes found for action %r after parsing. It will not be bound.",
+                    action,
                 )
 
         logging.debug(
-            f"Loaded and parsed keybindings (action -> list of key_codes): {parsed_keybindings}"
+            "Loaded and parsed keybindings (action -> list of key_codes): %s",
+            parsed_keybindings,
         )
         return parsed_keybindings
 
@@ -493,9 +477,7 @@ class KeyBinder:
         if not s:
             raise ValueError("Key string cannot be empty.")
 
-        logging.debug(
-            f"_decode_keystring: Parsing key_input: {original_key_string!r} (initial s: {s!r})"
-        )
+        logging.debug(f"_decode_keystring: Parsing key_input: {original_key_string!r} (initial s: {s!r})")
 
         # Normalize alt+key to alt-key
         if "alt" in s.split("+"):
@@ -794,75 +776,75 @@ class KeyBinder:
         return final_key_action_map
 
     def get_key_input(self, window: Optional[curses.window] = None) -> int | str:
-        """Reads a single key or key sequence from the terminal, with robust handling of ESC sequences (e.g., for Alt+key) in TTY mode.
-
-        Args:
-            window (Optional[curses.window]): The curses window to read input from. If None, uses self.stdscr.
+        """Read a single key or key sequence from the terminal with robust ESC parsing:
+        - 27 (ESC) standalone,
+        - Alt/Meta chord: ESC + printable -> "alt-<char>",
+        - CSI/SS3 sequences (e.g., "[A", "OA", "[1;2A", "[1;3B", "[5~", ...).
 
         Returns:
-            Union[int, str]: The key code as an integer, or a string representing an Alt+key combination (e.g., "alt-a").
-                - Returns 27 for the Escape key.
-                - Returns curses.ERR on curses-related errors.
-                - Returns -1 on unexpected exceptions.
-
-        Raises:
-            None: All exceptions are handled internally.
+            int | str:
+            - curses key code (int) for known keys,
+            - "alt-<char>" for Alt/Meta,
+            - 27 for a lone ESC,
+            - curses.ERR for curses-related errors,
+            - -1 for unexpected exceptions.
         """
-        logging.debug("get_key_input: Waiting for key input from terminal.")
-
-        if not window:
-            logging.debug("get_key_input: No window provided, using stdscr.")
-        else:
-            logging.debug(f"get_key_input: Using provided window: {window}")
-
+        logging.debug("get_key_input: waiting for terminal input")
         target = window or self.stdscr
 
         try:
-            key = target.getch()
+            ch = target.getch()
+            if ch != 27:
+                return ch  # fast path
 
-            if key != 27:  # Not an ESC sequence
-                return key
-
-            # --- ESC Sequence Parsing ---
-            # This is an ESC, it could be a standalone key press or the start
-            # of a sequence (like Alt+key or an arrow key).
-            sequence = ""
-            target.nodelay(True) # Switch to non-blocking to read the rest of the sequence
+            # ESC received: lone ESC, Alt chord, or an escape sequence
+            seq = ""
+            target.nodelay(True)
             try:
-                # Read characters immediately following ESC
                 while True:
-                    next_key = target.getch()
-                    if next_key == curses.ERR:
-                        # No more characters in the buffer
+                    nx = target.getch()
+                    if nx == curses.ERR:
                         break
-                    sequence += chr(next_key)
+                    if 0 <= nx <= 255:
+                        seq += chr(nx)
+                    else:
+                        # Rare extended code; keep as a marker – will be stripped by regex below.
+                        seq += f"<{nx}>"
             finally:
-                target.nodelay(False) # Always switch back to blocking mode
+                target.nodelay(False)
 
-            if not sequence:
-                # It was a standalone ESC press
+            # Lone ESC
+            if not seq:
+                logging.debug("get_key_input: standalone ESC")
                 return 27
 
-            # Check if it's a classic Alt+<char> sequence (len 1)
-            if len(sequence) == 1:
-                alt_char = sequence[0]
-                # We return this as a logical string for the action_map
-                alt_key_str = f"alt-{alt_char.lower()}"
-                logging.debug(f"Parsed Alt sequence as logical key: {alt_key_str}")
-                return alt_key_str
+            # Some terminals deliver ESC-prefixed sequences: strip any leading ESC.
+            if seq and seq[0] == "\x1b":
+                seq = seq[1:]
 
-            # Check if it's a known terminal escape sequence (e.g., arrows)
-            if sequence in self.ESCAPE_SEQUENCE_MAP:
-                key_name = self.ESCAPE_SEQUENCE_MAP[sequence]
-                # We have the name, now use our existing logic to get the curses code
-                decoded_code = self._decode_keystring(key_name)
-                logging.debug(f"Parsed escape sequence '{sequence}' -> '{key_name}' -> code {decoded_code}")
-                return decoded_code
+            # Alt chord: ESC + single printable -> "alt-<char>"
+            if len(seq) == 1 and seq.isprintable():
+                alt_key = f"alt-{seq.lower()}"
+                logging.debug("get_key_input: Alt chord -> %r", alt_key)
+                return alt_key
 
-            # If we are here, it's an unknown/unmapped sequence
-            logging.warning(f"Received unknown escape sequence: ESC + '{sequence}'")
-            # We can't process it, so we treat it as a plain ESC for now.
-            # The other characters are discarded to avoid garbage input.
+            # Direct lookup (CSI/SS3, xterm modifiers)
+            mapped = self.ESCAPE_SEQUENCE_MAP.get(seq)
+
+            if not mapped:
+                # Tolerant cleanup: keep only tokens relevant to term sequences.
+                cleaned = "".join(re.findall(r"[\[O0-9;~A-Za-z]", seq))
+                mapped = self.ESCAPE_SEQUENCE_MAP.get(cleaned)
+                if mapped:
+                    logging.debug("get_key_input: cleaned %r -> %r -> %r", seq, cleaned, mapped)
+                    seq = cleaned
+
+            if mapped:
+                code = self._decode_keystring(mapped)
+                logging.debug("get_key_input: ESC %r -> %r -> code %r", seq, mapped, code)
+                return code
+
+            logging.warning("get_key_input: unknown escape sequence: ESC + %r", seq)
             return 27
 
         except curses.error:

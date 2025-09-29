@@ -4,28 +4,16 @@
 ECLI Main Entry Point
 =====================
 
-This script serves as the primary entry point for launching the ECLI editor.
-It orchestrates the entire application startup sequence in a safe and structured manner:
-
-1.  Environment Loading: Immediately loads environment variables from the user's
-    personal configuration directory (`~/.config/ecli/.env`). This ensures that
-    user-specific API keys and secrets are available globally before any other
-    part of the application runs.
-
-2.  Path Setup: Modifies `sys.path` to ensure the `ecli` package is correctly
-    located and importable, which is crucial for both source and bundled execution.
-
-3.  Configuration and Logging: Loads the application's configuration files and
-    initializes the logging system based on those settings. This is done before
-    any core imports to ensure all startup activities are properly logged.
-
-4.  Core Application Import: After basic setup, it imports the main `Ecli` class.
-
-5.  Curses Wrapper: Uses `curses.wrapper` to safely initialize and tear down
-    the curses environment, preventing terminal corruption on exit or crash.
-
-6.  Application Run: Instantiates the `Ecli` class and starts its main event loop.
+This script is the primary entry point for launching the ECLI editor. It performs:
+1) Environment Loading: reads ~/.config/ecli/.env early, so secrets are available.
+2) Path Setup: ensures the ecli package is importable.
+3) Configuration & Logging: loads config and initializes logging ASAP.
+4) Core Import: imports the Ecli class after logging is ready.
+5) Curses Wrapper: safely initializes/tears down curses to avoid terminal corruption.
+6) Application Run: instantiates Ecli and starts its main loop.
 """
+
+from __future__ import annotations
 
 import curses
 import locale
@@ -34,142 +22,224 @@ import os
 import signal
 import sys
 from pathlib import Path
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 
-# --- Step 1: Load Environment Variables from User's Config Directory ---
-# This is a critical step. We explicitly load the .env file from a consistent,
-# user-specific location. This prevents the application's behavior from changing
-# based on the current working directory and ensures it always uses the
-# intended secrets file.
-# The `utils.py` module will handle the creation of this file if it doesn't exist.
+# --- Step 1: Load Environment Variables from the User's Config Directory ---
+# Load ~/.config/ecli/.env early, before any other imports use environment.
 try:
     user_config_dir = Path.home() / ".config" / "ecli"
     dotenv_path = user_config_dir / ".env"
     load_dotenv(dotenv_path=dotenv_path)
 except Exception:
-    # This might fail in unusual environments (e.g., no home directory).
-    # Silently ignore, as logging is not yet configured. The app will later
-    # fail gracefully if an API key is required but not found.
+    # If HOME is missing or any edge-case occurs, ignore silently here.
+    # Later, the app may fail gracefully if a required key is absent.
     pass
 
-
 # --- Step 2: Set up the Python Path ---
-# This ensures that Python can find the 'ecli' package modules.
+# Ensure the 'ecli' package is importable for both source and bundled runs.
 project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # --- Step 3: Immediate Logging and Configuration Setup ---
-# We import only what is necessary for this step to set up logging ASAP.
-# This ensures that ANY subsequent error, including import failures, will be logged.
 try:
     from ecli.utils.logging_config import setup_logging
     from ecli.utils.utils import load_config
 
-    # Load config and set up logging immediately.
-    config = load_config()
+    config: dict[str, Any] = load_config()
     setup_logging(config)
-
-    # Now, obtain the logger for this module.
     logger = logging.getLogger("ecli")
-
 except Exception as e:
-    # If the logging/config system itself fails, there's no choice but to print
-    # to stderr and exit, as we cannot log the failure.
+    # Logging is not ready; print to stderr and exit.
     print(f"FATAL: Could not initialize configuration or logging system: {e}", file=sys.stderr)
     import traceback
     traceback.print_exc()
     sys.exit(1)
 
 # --- Step 4: Import the Core Application ---
-# Now that logging is configured, it's safe to import the main Ecli class.
 try:
     from ecli.core.Ecli import Ecli
 except ImportError as e:
-    logger.critical(f"Failed to import a critical application component: {e}", exc_info=True)
+    logger.critical("Failed to import a critical application component: %s", e, exc_info=True)
     sys.exit(1)
 
 
+def _resolve_cli_path(argv: list[str]) -> Optional[Path]:
+    """
+    Resolve an optional CLI path from argv[1], expanded to a user path.
+    The file does NOT need to exist on disk; we pass the intended path
+    to the editor so Save/Write defaults to that name.
+    """
+    if len(argv) <= 1:
+        return None
+    raw = argv[1].strip()
+    if not raw:
+        return None
+    try:
+        return Path(raw).expanduser()
+    except Exception:
+        return None
+
+
+def _preload_cli_document(editor: Ecli, candidate: Path) -> None:
+    """
+    Tell the editor to open/create a buffer named after 'candidate'.
+    This function is robust across possible editor APIs:
+
+    Priority:
+      1) editor.preload_cli_document(Path)           # preferred if available
+      2) editor.open_or_create(str|Path)             # open if exists, else create empty buffer with path
+      3) editor.open_file(str|Path) if exists else   # open if on disk
+         editor.create_empty_buffer_with_name(str)   # create empty buffer with that name
+      4) LAST RESORT: touch the file on disk and open it (ensures correct default path on Save).
+    """
+    # Normalize to absolute string path for broadest API compatibility
+    abs_path = str(candidate.resolve())
+
+    # 1) Preferred explicit API
+    if hasattr(editor, "preload_cli_document"):
+        try:
+            editor.preload_cli_document(candidate)  # type: ignore[attr-defined]
+            return
+        except Exception:
+            logger.debug("preload_cli_document(Path) failed, trying fallbacks.", exc_info=True)
+
+    # 2) Generic open-or-create
+    if hasattr(editor, "open_or_create"):
+        try:
+            editor.open_or_create(abs_path)  # type: ignore[attr-defined]
+            return
+        except Exception:
+            logger.debug("open_or_create(path) failed, trying fallbacks.", exc_info=True)
+
+    # 3) Open if exists, else create in-memory buffer with this name
+    if os.path.exists(abs_path):
+        try:
+            editor.open_file(abs_path)
+            return
+        except Exception:
+            logger.debug("open_file(existing path) failed, trying buffer creation.", exc_info=True)
+    else:
+        # Try a few common method names to set a new-named buffer without touching disk
+        for meth_name in ("create_empty_buffer_with_name", "new_buffer_named", "new_file_with_name", "new_file"):
+            if hasattr(editor, meth_name):
+                try:
+                    meth = getattr(editor, meth_name)
+                    # Try with a kw if method supports it, otherwise positional
+                    try:
+                        meth(initial_path=abs_path)  # type: ignore[call-arg]
+                    except TypeError:
+                        meth(abs_path)  # type: ignore[misc]
+                    return
+                except Exception:
+                    logger.debug("%s(...) failed, continue fallbacks.", meth_name, exc_info=True)
+                    continue
+
+    # 4) Last resort: create an empty file on disk so open_file() succeeds.
+    # This guarantees the buffer is named as requested when all nicer APIs are absent.
+    try:
+        Path(abs_path).parent.mkdir(parents=True, exist_ok=True)
+        Path(abs_path).touch(exist_ok=True)
+        editor.open_file(abs_path)
+        return
+    except Exception:
+        logger.warning("Fallback touch+open failed for %s; starting unnamed buffer.", abs_path, exc_info=True)
+
+
 # --- Step 5: Curses Application Runner ---
-def main_app_runner(stdscr: 'curses._CursesWindow', config: dict, file_to_open: str | None) -> None:
+def main_app_runner(stdscr: curses.window, config: dict[str, Any], file_to_open: Optional[str]) -> None:
     """
-    This function is the target for `curses.wrapper`. It sets up and runs the editor.
+    Target for `curses.wrapper`. Initializes terminal responsiveness and runs the editor.
+
+    Args:
+        stdscr: Curses standard screen window provided by wrapper.
+        config: Application configuration dict.
+        file_to_open: Optional CLI path (may or may not exist on disk).
+
+    Behavior:
+        - Sets a short ESC delay for snappy Alt/Meta combos.
+        - Instantiates Ecli with (stdscr, config).
+        - Blocks terminal suspension (SIGTSTP) to avoid accidental backgrounding.
+        - If CLI path provided, opens or preloads buffer with that name (even if not on disk).
+        - Starts the editor main loop.
     """
-    # Set a short escape delay for better responsiveness (e.g., for Alt key combos).
+    # Keep Alt/ESC combos responsive on TTY (especially FreeBSD consoles).
     try:
         curses.set_escdelay(25)
     except Exception:
         os.environ.setdefault("ESCDELAY", "25")
 
-    # Instantiate the main editor class.
     editor = Ecli(stdscr, config=config)
 
-    # Ignore the terminal suspension signal (Ctrl+Z) to prevent the editor from
-    # being backgrounded accidentally by the user's shell.
+    # Ignore terminal suspension (Ctrl+Z), typical for full-screen TUIs.
     if hasattr(signal, "SIGTSTP"):
-        signal.signal(signal.SIGTSTP, signal.SIG_IGN)
+        try:
+            signal.signal(signal.SIGTSTP, signal.SIG_IGN)
+        except Exception:
+            # Some restricted environments may disallow changing signal handlers.
+            pass
 
-    # If a file was passed as a command-line argument, open it.
-    if file_to_open and os.path.exists(file_to_open):
-        editor.open_file(file_to_open)
+    # Preload CLI document name: open if exists, otherwise create an empty buffer with that path.
+    if file_to_open:
+        try:
+            _preload_cli_document(editor, Path(file_to_open).expanduser())
+        except Exception:
+            logger.warning("Failed to preload CLI document: %s", file_to_open, exc_info=True)
 
-    # Start the editor's main event loop. This will run until editor.running is False.
+    # Start the editor main event loop (runs until editor.running is False).
     editor.run()
 
 
 def start() -> None:
-    """Initializes the environment and launches the curses application."""
+    """
+    Initializes locale and runs the curses application via wrapper.
+    Also toggles application keypad mode around the curses lifecycle to ensure
+    arrow keys (and their modifiers) are delivered to the app instead of the terminal.
+    """
     logger.info("ECLI editor starting up...")
 
-    # Set the locale to the user's default to ensure correct character handling.
+    # Locale is important for proper character width/encoding behavior in curses.
     try:
         locale.setlocale(locale.LC_ALL, "")
     except locale.Error:
-        logger.warning(
-            "Could not set system locale. Character rendering may be affected."
-        )
+        logger.warning("Could not set system locale. Character rendering may be affected.")
 
-    # Get the filename from command-line arguments, if provided.
     file_to_open = sys.argv[1] if len(sys.argv) > 1 else None
 
     try:
-        # --- ПРОФЕССИОНАЛЬНОЕ ИЗМЕНЕНИЕ: НАЧАЛО ---
-        # Включаем режим "Application Keypad" ПЕРЕД запуском curses.
-        # Это говорит терминалу отправлять специальные коды для клавиш (особенно стрелок),
-        # вместо того чтобы обрабатывать их самому (например, для прокрутки истории).
-        # \x1b[?1h = Включить режим клавиш курсора приложения (DECCKM)
-        # \x1b=     = Включить режим цифровой клавиатуры приложения (DECKPAM)
+        # Enable "Application Cursor Keys" + keypad mode *before* curses starts.
+        # \x1b[?1h → DECCKM (application cursor keys), \x1b= → DECKPAM (keypad application mode)
         if sys.platform != "win32":
             sys.stdout.write("\x1b[?1h\x1b=")
             sys.stdout.flush()
-        # --- ПРОФЕССИОНАЛЬНОЕ ИЗМЕНЕНИЕ: КОНЕЦ ---
 
-        # `curses.wrapper` handles all the setup and teardown of the curses
-        # environment, ensuring the terminal is restored to a usable state on
-        # exit or crash.
+        # wrapper() will set up/tear down curses safely.
         curses.wrapper(main_app_runner, config, file_to_open)
 
         logger.info("ECLI editor shut down gracefully.")
     except Exception:
-        # Catch any unhandled exception that bubbles up to the top level.
         logger.critical("Unhandled exception at the top level.", exc_info=True)
         sys.exit(1)
     finally:
-        # --- ПРОФЕССИОНАЛЬНОЕ ИЗМЕНЕНИЕ: НАЧАЛО ---
-        # Выключаем режим "Application Keypad" ПОСЛЕ завершения curses.
-        # Это возвращает терминал в нормальное состояние.
-        # \x1b[?1l = Выключить режим клавиш курсора приложения
-        # \x1b>     = Выключить режим цифровой клавиатуры приложения
+        # Disable application modes after curses finishes:
+        # \x1b[?1l → normal cursor keys, \x1b> → keypad numeric mode
         if sys.platform != "win32":
-            sys.stdout.write("\x1b[?1l\x1b>")
-            sys.stdout.flush()
-        # --- ПРОФЕССИОНАЛЬНОЕ ИЗМЕНЕНИЕ: КОНЕЦ ---
+            try:
+                sys.stdout.write("\x1b[?1l\x1b>")
+                sys.stdout.flush()
+            except Exception:
+                pass
 
-        # A final, best-effort attempt to clear the screen after curses has finished.
+        # Best-effort final clear to avoid artifacts after exit.
         if sys.platform != "win32":
-            print("\033c", end="")  # ANSI reset for Unix-like systems
+            try:
+                print("\033c", end="")
+            except Exception:
+                pass
         else:
+            # On Windows, do a standard clear.
             os.system("cls")
 
 
