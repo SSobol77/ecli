@@ -1,7 +1,6 @@
 [build-system]
-requires = [ "hatchling>=1.25" ]
+requires = ["hatchling>=1.25"]
 build-backend = "hatchling.build"
-
 
 [project]
 name = "ecli"
@@ -10,97 +9,95 @@ description = "ECLI — fast terminal code editor"
 readme = "README.md"
 requires-python = ">=3.11"
 keywords = [
-"editor",
-"terminal",
-"tui",
-"curses",
-"text-editor",
-"developer-tools",
-"devops",
-"ecli",
-"IDE"
-]
-classifiers = [
-"Development Status :: 4 - Beta",
-"Environment :: Console :: Curses",
-"Intended Audience :: Developers",
-"License :: OSI Approved :: Apache Software License",
-"Operating System :: OS Independent",
-"Programming Language :: Python :: 3",
-"Programming Language :: Python :: 3.11",
-"Programming Language :: Python :: 3.12",
-"Programming Language :: Python :: 3.13",
-"Programming Language :: Python :: Implementation :: CPython",
-"Topic :: Text Editors",
-"Typing :: Typed"
-]
-dependencies = [
-    "Pygments>=2.19.1",
-    "pyperclip>=1.9.0",
-    "wcwidth>=0.2.13",
-    "chardet>=5.2.0",
-    "PyYAML>=6.0.2",
-    "toml>=0.10.2",
-    "attrs>=24.0.0",
-    "typing_extensions>=4.12.2",
-    "packaging>=24.1",
-    "aiohttp>=3.9.0",
-    "pygls>=1.3.1",
-    "lsprotocol>=2023.0.1",
-    "libcst>=1.5.0",
-    "cattrs>=23.2.0",
-    "python-dotenv>=1.1.1",
-    "pyinstaller>=6.16.0",
+    "editor",
+    "terminal",
+    "tui",
+    "curses",
+    "text-editor",
+    "developer-tools",
+    "devops",
+    "ecli",
+    "IDE",
 ]
 
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console :: Curses",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: POSIX",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: POSIX :: BSD :: FreeBSD",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Text Editors",
+    "Typing :: Typed",
+]
+
+dependencies = [
+    "Pygments>=2.19.1; sys_platform != 'win32'",
+    "pyperclip>=1.9.0; sys_platform != 'win32'",
+    "wcwidth>=0.2.13; sys_platform != 'win32'",
+    "chardet>=5.2.0; sys_platform != 'win32'",
+    "PyYAML>=6.0.2; sys_platform != 'win32'",
+    "toml>=0.10.2; sys_platform != 'win32'",
+    "attrs>=24.0.0; sys_platform != 'win32'",
+    "typing_extensions>=4.12.2; sys_platform != 'win32'",
+    "packaging>=24.1; sys_platform != 'win32'",
+    "aiohttp>=3.9.0; sys_platform != 'win32'",
+    "pygls>=1.3.1; sys_platform != 'win32'",
+    "lsprotocol>=2023.0.1; sys_platform != 'win32'",
+    "libcst>=1.5.0; sys_platform != 'win32'",
+    "cattrs>=23.2.0; sys_platform != 'win32'",
+    "python-dotenv>=1.0.1; sys_platform != 'win32'",
+    "tato>=0.2.3; sys_platform != 'win32'",
+]
 
 [project.license]
 text = "Apache-2.0"
-
 
 [[project.authors]]
 name = "Siergej Sobolewski"
 email = "s.sobolewski@hotmail.com"
 
-
 [project.scripts]
 ecli = "ecli.main:start"
-
 
 [project.urls]
 Homepage = "https://ecli.io"
 Repository = "https://github.com/SSobol77/ecli"
 "Bug Tracker" = "https://github.com/SSobol77/ecli/issues"
 
-
 [project.optional-dependencies]
 dev = [
-"ruff==0.4.10",
-"mypy>=1.10.0",
-"mypy-extensions>=1.0.0",
-"types-PyYAML>=6.0.12.20240516",
-"types-toml>=0.10.8.20240310",
-"types-pyperclip>=1.9.0.20220518",
-"pytest>=8.4.1",
-"pytest-asyncio>=0.23.8",
-"pytest-aiohttp>=1.0.5",
-"pytest-mock>=3.14.0",
-"pytest-cov>=6.0.0",
-"coverage>=7.4.0",
-"tato>=0.2.3"
+    "pyinstaller>=6.16.0",
+    "ruff>=0.4.10",
+    "mypy>=1.10.0",
+    "mypy-extensions>=1.0.0",
+    "types-PyYAML>=6.0.12.20240516",
+    "types-toml>=0.10.8.20240310",
+    "types-pyperclip>=1.9.0.20220518",
+    "pytest>=8.4.1",
+    "pytest-asyncio>=0.23.8",
+    "pytest-aiohttp>=1.0.5",
+    "pytest-mock>=3.14.0",
+    "pytest-cov>=6.0.0",
+    "coverage>=7.4.0",
 ]
-
 
 [tool.pytest.ini_options]
 minversion = "8.0"
 addopts = "-ra --tb=short --strict-markers"
-testpaths = [ "tests" ]
+testpaths = ["tests"]
 python_files = "test_*.py"
-markers = [ "asyncio" ]
-
+markers = ["asyncio"]
 
 [tool.mypy]
-files = [ "ecli", "tests" ]
+files = ["ecli", "tests"]
 ignore_missing_imports = true
 show_error_codes = true
 strict = true
@@ -114,43 +111,30 @@ python_version = "3.13"
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-extend-exclude = [ "__pycache__", "*.pyc", ".git" ]
+extend-exclude = ["__pycache__", "*.pyc", ".git"]
 
 
 [tool.ruff.lint]
-select = [
-"E",
-"F",
-"W",
-"C90",
-"I",
-"UP",
-"B",
-"N",
-"Q",
-"PL",
-"RET",
-"D"
-]
+select = ["E", "F", "W", "C90", "I", "UP", "B", "N", "Q", "PL", "RET", "D"]
 ignore = [
-"N999",
-"E501",
-"D203",
-"D213",
-"D401",
-"D205",
-"D400",
-"D415",
-"PLR2004",
-"UP045",
-"D412",
-"UP035"
+    "N999",
+    "E501",
+    "D203",
+    "D213",
+    "D401",
+    "D205",
+    "D400",
+    "D415",
+    "PLR2004",
+    "UP045",
+    "D412",
+    "UP035",
 ]
 
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = [ "D100", "D101", "D102", "D103", "D104", "F401", "E402" ]
-"src/ecli/__init__.py" = [ "F401" ]
+"tests/**/*.py" = ["D100", "D101", "D102", "D103", "D104", "F401", "E402"]
+"src/ecli/__init__.py" = ["F401"]
 
 
 [tool.ruff.lint.pydocstyle]
@@ -160,7 +144,7 @@ convention = "google"
 [tool.ruff.lint.isort]
 combine-as-imports = true
 lines-after-imports = 2
-extra-standard-library = [ "typing_extensions" ]
+extra-standard-library = ["typing_extensions"]
 
 
 [tool.ruff.lint.flake8-quotes]
@@ -176,16 +160,16 @@ line-ending = "lf"
 
 
 [tool.hatch.build.targets.wheel]
-packages = [ "src/ecli" ]
-include = [ "ecli/py.typed" ]
+packages = ["src/ecli"]
+include = ["ecli/py.typed"]
 
 
 [tool.hatch.build.targets.sdist]
 include = [
-"/ecli",
-"/tests",
-"/README.md",
-"/LICENSE",
-"/CHANGELOG.md",
-"/pyproject.toml"
+    "/ecli",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/CHANGELOG.md",
+    "/pyproject.toml",
 ]

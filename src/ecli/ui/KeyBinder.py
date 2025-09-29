@@ -69,6 +69,55 @@ class KeyBinder:
         _setup_action_map(): Constructs the mapping from key codes or strings to editor action methods.
         get_key_input(window): Reads a key or key sequence from the terminal, handling ESC/Alt combinations robustly.
     """
+    ESCAPE_SEQUENCE_MAP = {
+        # --- Стандартные последовательности (xterm/vt100) ---
+        # Простые стрелки
+        '[A': 'up',
+        '[B': 'down',
+        '[C': 'right',
+        '[D': 'left',
+
+        # Home / End
+        '[H': 'home',
+        '[F': 'end',
+        '[1~': 'home',
+        '[4~': 'end',
+
+        # PageUp / PageDown / Insert / Delete
+        '[5~': 'pageup',
+        '[6~': 'pagedown',
+        '[2~': 'insert',
+        '[3~': 'delete',
+
+        # Shift+Tab
+        '[Z': 'shift+tab',
+
+        # --- Последовательности с модификатором SHIFT ---
+        '\E[1;2A': 'shift+up',
+        '\E[1;2B': 'shift+down',
+        '[1;2C': 'shift+right',
+        '[1;2D': 'shift+left',
+
+        # --- Последовательности с модификатором CTRL ---
+        '[1;5A': 'ctrl+up',
+        '[1;5B': 'ctrl+down',
+        '[1;5C': 'ctrl+right',
+        '[1;5D': 'ctrl+left',
+
+        # --- Последовательности для F-клавиш ---
+        'OP': 'f1',
+        'OQ': 'f2',
+        'OR': 'f3',
+        'OS': 'f4',
+        '[15~': 'f5',
+        '[17~': 'f6',
+        '[18~': 'f7',
+        '[19~': 'f8',
+        '[20~': 'f9',
+        '[21~': 'f10',
+        '[23~': 'f11',
+        '[24~': 'f12',
+    }
 
     def __init__(self, editor: "Ecli"):
         """Initializes the KeyBinder instance.
@@ -93,6 +142,7 @@ class KeyBinder:
         # State that now belongs to KeyBinder
         self.keybindings = self._load_keybindings()
         self.action_map = self._setup_action_map()
+
 
     def _handle_printable_character(self, key: str | int) -> bool:
         """Handles insertion of a printable character into the buffer."""
@@ -275,11 +325,13 @@ class KeyBinder:
             "extend_selection_up": [
                 "shift+up",
                 "alt-k",
+                337,
                 getattr(curses, "KEY_SR", getattr(curses, "KEY_SPREVIOUS", 337)),
             ],
             "extend_selection_down": [
                 "shift+down",
                 "alt-j",
+                336,
                 getattr(curses, "KEY_SF", getattr(curses, "KEY_SNEXT", 336)),
             ],
             "extend_selection_left": [
@@ -757,53 +809,63 @@ class KeyBinder:
             None: All exceptions are handled internally.
         """
         logging.debug("get_key_input: Waiting for key input from terminal.")
+
         if not window:
             logging.debug("get_key_input: No window provided, using stdscr.")
         else:
             logging.debug(f"get_key_input: Using provided window: {window}")
+
         target = window or self.stdscr
+
         try:
-            # Use getch() for reliability; it returns an int
             key = target.getch()
 
-            if key != 27:  # If this is not ESC, just return the code
+            if key != 27:  # Not an ESC sequence
                 return key
 
-            # If this is ESC, it might be the start of an Alt combination.
-            # Make ONE non-blocking attempt to read the next character.
-            target.nodelay(True)
-            next_key = target.getch()
-            target.nodelay(False)  # Immediately return to blocking mode
-
-            if next_key == curses.ERR:
-                # If nothing was read after ESC, it was just the Escape key
-                return 27
-            # We caught the sequence ESC + something else.
-            # This is almost certainly an Alt combination.
-
-            # Convert the second character to char if possible
+            # --- ESC Sequence Parsing ---
+            # This is an ESC, it could be a standalone key press or the start
+            # of a sequence (like Alt+key or an arrow key).
+            sequence = ""
+            target.nodelay(True) # Switch to non-blocking to read the rest of the sequence
             try:
-                char_after_esc = chr(next_key)
-                if "a" <= char_after_esc.lower() <= "z":
-                    # This is the classic Alt + letter
-                    alt_key_str = f"alt-{char_after_esc.lower()}"
-                    logging.debug(
-                        f"TTY: Parsed ESC sequence as logical key: {alt_key_str}"
-                    )
-                    return alt_key_str
-            except ValueError:
-                # next_key is not a valid character, ignoring
-                pass
+                # Read characters immediately following ESC
+                while True:
+                    next_key = target.getch()
+                    if next_key == curses.ERR:
+                        # No more characters in the buffer
+                        break
+                    sequence += chr(next_key)
+            finally:
+                target.nodelay(False) # Always switch back to blocking mode
 
-            # If this was not an Alt+letter (e.g., Alt+arrow),
-            # curses often returns a special code by itself.
-            # But if we got ESC + something_unexpected,
-            # we return just ESC, and the second character goes back to the buffer for the next read.
-            curses.ungetch(next_key)
+            if not sequence:
+                # It was a standalone ESC press
+                return 27
+
+            # Check if it's a classic Alt+<char> sequence (len 1)
+            if len(sequence) == 1:
+                alt_char = sequence[0]
+                # We return this as a logical string for the action_map
+                alt_key_str = f"alt-{alt_char.lower()}"
+                logging.debug(f"Parsed Alt sequence as logical key: {alt_key_str}")
+                return alt_key_str
+
+            # Check if it's a known terminal escape sequence (e.g., arrows)
+            if sequence in self.ESCAPE_SEQUENCE_MAP:
+                key_name = self.ESCAPE_SEQUENCE_MAP[sequence]
+                # We have the name, now use our existing logic to get the curses code
+                decoded_code = self._decode_keystring(key_name)
+                logging.debug(f"Parsed escape sequence '{sequence}' -> '{key_name}' -> code {decoded_code}")
+                return decoded_code
+
+            # If we are here, it's an unknown/unmapped sequence
+            logging.warning(f"Received unknown escape sequence: ESC + '{sequence}'")
+            # We can't process it, so we treat it as a plain ESC for now.
+            # The other characters are discarded to avoid garbage input.
             return 27
 
         except curses.error:
-            # Error reading, e.g., due to window resizing
             return curses.ERR
         except Exception:
             logging.exception("get_key_input: unexpected error")

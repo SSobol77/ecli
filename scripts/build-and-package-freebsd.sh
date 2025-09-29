@@ -41,7 +41,7 @@ echo "${GREEN}==> Installing base build dependencies (FreeBSD 14)...${RESET}"
 # fetch/curl:to install uv; ca_root_nss: TLS certs
 pkg install -y \
   python311 py311-pip py311-setuptools py311-wheel py311-pyinstaller \
-  git gmake pkgconf ca_root_nss curl
+  git gmake pkgconf ca_root_nss curl py311-uv
 
 # ------------------------------------------------------------------------------
 # 1) Userland package manager: uv

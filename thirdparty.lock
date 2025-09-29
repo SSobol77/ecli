@@ -1,0 +1,73 @@
+aiohappyeyeballs==2.6.1 \
+    # via
+    #   aiohttp
+    #   ecli
+aiohttp==3.12.14 \
+    # via ecli
+aiosignal==1.4.0 \
+    # via
+    #   aiohttp
+    #   ecli
+attrs==25.3.0 \
+    # via
+    #   aiohttp
+    #   cattrs
+    #   lsprotocol
+    #   ecli
+cattrs==25.1.1 \
+    # via
+    #   lsprotocol
+    #   ecli
+    #   pygls
+chardet==5.2.0 \
+    # via ecli
+frozenlist==1.7.0 \
+    # via
+    #   aiohttp
+    #   aiosignal
+    #   ecli
+idna==3.10 \
+    # via
+    #   ecli
+    #   yarl
+libcst==1.8.2 \
+    # via
+    #   ecli
+    #   tato
+lsprotocol==2023.0.1 \
+    # via
+    #   ecli
+    #   pygls
+multidict==6.6.3 \
+    # via
+    #   aiohttp
+    #   ecli
+    #   yarl
+packaging==25.0 \
+    # via ecli
+propcache==0.3.2 \
+    # via
+    #   aiohttp
+    #   yarl
+pygls==1.3.1 \
+    # via ecli
+pygments==2.19.2 \
+    # via ecli
+pyperclip==1.9.0 \
+    # via ecli
+pyyaml==6.0.2 \
+    # via libcst
+tato==0.2.3 \
+    # via ecli
+toml==0.10.2 \
+    # via ecli
+typing-extensions==4.14.1 \
+    # via
+    #   cattrs
+    #   ecli
+wcwidth==0.2.13 \
+    # via ecli
+yarl==1.20.1 \
+    # via
+    #   aiohttp
+    #   ecli

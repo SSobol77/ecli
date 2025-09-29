@@ -1,0 +1,19 @@
+name = "ecli";
+version = "0.1.0";
+origin = "editors/ecli";
+comment = "Terminal DevOps editor with AI and Git integration";
+desc = "Terminal DevOps editor with AI and Git integration";
+maintainer = "Siergej Sobolewski <s.sobolewski@hotmail.com>";
+www = "https://ecli.io";
+abi = "FreeBSD:14:amd64";
+prefix = "/usr/local";
+categories = ["editors"];
+licenses = ["Apache-2.0"];
+files = {
+  "/usr/local/bin/ecli" = {uname = "root"; gname = "wheel"; perm = 0755;};
+  "/usr/local/share/applications/ecli.desktop" = {uname = "root"; gname = "wheel"; perm = 0644;};
+  "/usr/local/share/icons/hicolor/256x256/apps/ecli.png" = {uname = "root"; gname = "wheel"; perm = 0644;};
+  "/usr/local/share/doc/ecli/LICENSE" = {uname = "root"; gname = "wheel"; perm = 0644;};
+  "/usr/local/share/doc/ecli/README.md" = {uname = "root"; gname = "wheel"; perm = 0644;};
+  "/usr/local/man/man1/ecli.1.gz" = {uname = "root"; gname = "wheel"; perm = 0644;};
+};

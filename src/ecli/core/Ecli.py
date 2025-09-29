@@ -425,7 +425,7 @@ class Ecli:
     # --- Environment Setup ---
     def _setup_environment(self) -> None:
         """Configures terminal settings, clipboard, and auto-save."""
-        self.stdscr.keypad(True)
+        self.stdscr.keypad(False)
         curses.curs_set(1)
         self.original_termios_attrs: Optional[list[Any]] = None
 

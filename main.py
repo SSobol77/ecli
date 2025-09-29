@@ -134,16 +134,38 @@ def start() -> None:
     file_to_open = sys.argv[1] if len(sys.argv) > 1 else None
 
     try:
+        # --- ПРОФЕССИОНАЛЬНОЕ ИЗМЕНЕНИЕ: НАЧАЛО ---
+        # Включаем режим "Application Keypad" ПЕРЕД запуском curses.
+        # Это говорит терминалу отправлять специальные коды для клавиш (особенно стрелок),
+        # вместо того чтобы обрабатывать их самому (например, для прокрутки истории).
+        # \x1b[?1h = Включить режим клавиш курсора приложения (DECCKM)
+        # \x1b=     = Включить режим цифровой клавиатуры приложения (DECKPAM)
+        if sys.platform != "win32":
+            sys.stdout.write("\x1b[?1h\x1b=")
+            sys.stdout.flush()
+        # --- ПРОФЕССИОНАЛЬНОЕ ИЗМЕНЕНИЕ: КОНЕЦ ---
+
         # `curses.wrapper` handles all the setup and teardown of the curses
         # environment, ensuring the terminal is restored to a usable state on
         # exit or crash.
         curses.wrapper(main_app_runner, config, file_to_open)
+
         logger.info("ECLI editor shut down gracefully.")
     except Exception:
         # Catch any unhandled exception that bubbles up to the top level.
         logger.critical("Unhandled exception at the top level.", exc_info=True)
         sys.exit(1)
     finally:
+        # --- ПРОФЕССИОНАЛЬНОЕ ИЗМЕНЕНИЕ: НАЧАЛО ---
+        # Выключаем режим "Application Keypad" ПОСЛЕ завершения curses.
+        # Это возвращает терминал в нормальное состояние.
+        # \x1b[?1l = Выключить режим клавиш курсора приложения
+        # \x1b>     = Выключить режим цифровой клавиатуры приложения
+        if sys.platform != "win32":
+            sys.stdout.write("\x1b[?1l\x1b>")
+            sys.stdout.flush()
+        # --- ПРОФЕССИОНАЛЬНОЕ ИЗМЕНЕНИЕ: КОНЕЦ ---
+
         # A final, best-effort attempt to clear the screen after curses has finished.
         if sys.platform != "win32":
             print("\033c", end="")  # ANSI reset for Unix-like systems
