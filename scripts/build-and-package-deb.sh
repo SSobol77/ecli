@@ -158,4 +158,21 @@ fpm -s dir -t deb \
 echo "==> Verify"
 dpkg-deb --info "${FINAL_DEB_PATH}" >/dev/null || true
 dpkg-deb --contents "${FINAL_DEB_PATH}" | head -20 || true
+
+echo "==> Generating SHA-256 checksum"
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum "${FINAL_DEB_PATH}" > "${FINAL_DEB_PATH}.sha256"
+elif command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 "${FINAL_DEB_PATH}" > "${FINAL_DEB_PATH}.sha256"
+else
+  echo "WARNING: no sha256 tool found (sha256sum/shasum). Skipping checksum." >&2
+fi
+
+# instant validation
+if command -v sha256sum >/dev/null 2>&1; then
+  sha256sum -c "${FINAL_DEB_PATH}.sha256" || true
+elif command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 -c "${FINAL_DEB_PATH}.sha256" || true
+fi
+
 echo "✅ DONE: ${FINAL_DEB_PATH}"
