@@ -1,5 +1,5 @@
 # ==============================================================================
-# Dockerfile for building the ECLI .rpm package (AlmaLinux 9 for max RHEL compat)
+# Dockerfile for building the ECLI .rpm package (AlmaLinux 9 for broad RHEL compat)
 # ==============================================================================
 
 FROM almalinux:9
@@ -7,48 +7,72 @@ FROM almalinux:9
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# Toolchain + Python 3.11 + Ruby/fpm + rpm-build
-RUN dnf -y install \
-    python3.11 python3.11-pip python3.11-devel \
-    gcc gcc-c++ make git which file \
-    ruby ruby-devel rpm-build \
-    && dnf clean all
+# Toolchain + Python 3.11 + Ruby/fpm + RPM build tooling
+# (A→Z sorting, weak deps disabled, cache cleanup)
+# Toolchain + Python 3.11 + Ruby/fpm + RPM build tooling
+RUN dnf -y --setopt=install_weak_deps=False install \
+      file \
+      gcc \
+      gcc-c++ \
+      git \
+      make \
+      python3.11 \
+      python3.11-devel \
+      python3.11-pip \
+      redhat-rpm-config \
+      rpm-build \
+      rpmdevtools \
+      ruby \
+      ruby-devel \
+      rubygem-json \
+      tar \
+      which \
+  && dnf clean all \
+  && rm -rf /var/cache/dnf
 
-# fpm via gem
+# Install fpm via RubyGems
 RUN gem install --no-document fpm
 
-# uv in PATH
+# Install uv and expose it on PATH
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && ln -s /root/.local/bin/uv /usr/local/bin/uv
+ && ln -s /root/.local/bin/uv /usr/local/bin/uv
 ENV PATH="/root/.local/bin:${PATH}"
 
-# Explicitly force uv to use Python 3.11 (otherwise, on EL9 it will use the system 3.9)
+# Force uv to use Python 3.11 (EL9 default python3 may be 3.9)
 ENV UV_PYTHON=python3.11
 
-# Switch python3 -> 3.11
+# Switch system `python3` alternative to Python 3.11 if available
 RUN alternatives --set python3 /usr/bin/python3.11 || true
 
 WORKDIR /app
 
-# ----Cache layer with metadata only (don't include requirements inside)
+# Cache layer with project metadata only
 COPY pyproject.toml ./
 
-# IMPORTANT:
-# Do not install requirements.txt/requirements-dev.txt - it may contain entries
-# incompatible with Py 3.11 (for example, pyyaml-ft>=8, which requires Py>=3.13),
-# or reference local host paths. This is NOT needed for building the bundle.
-# Install only PyInstaller and any explicitly required runtime dependencies.
+# Only install the tools required to build the bundle
 RUN python3.11 -m ensurepip --upgrade || true \
-    && python3.11 -m pip install --upgrade pip wheel \
-    && uv --version \
-    && uv pip install --system --python python3.11 pyinstaller \
-    # Runtime deps for bundling (must match those in the deb build)
-    && uv pip install --system --python python3.11 \
-    aiohttp aiosignal yarl multidict frozenlist \
-    python-dotenv toml chardet \
-    pyperclip wcwidth pygments tato
+ && python3.11 -m pip install --upgrade pip wheel \
+ && uv --version \
+ && uv pip install --system --python python3.11 \
+      pyinstaller \
+      ruff \
+ && uv pip install --system --python python3.11 \
+      aiohttp \
+      aiosignal \
+      chardet \
+      frozenlist \
+      multidict \
+      pygments \
+      pyperclip \
+      python-dotenv \
+      tato \
+      toml \
+      wcwidth \
+      yarl
 
-# ---- Project sources
+
+
+# Project sources
 COPY . .
 
 RUN chmod +x scripts/build-and-package-rpm.sh
