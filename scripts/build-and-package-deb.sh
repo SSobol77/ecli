@@ -1,10 +1,31 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# Build and Package ECLI into a .deb file (inside container or locally)
+# ECLI — Build and Package into a .deb (runs inside Debian/Ubuntu container or locally)
 #
-# Do NOT touch $HOME — the app (utils.py) creates ~/.config/ecli on first run.
-# We embed config.toml and bundle required runtime deps.
+# This script:
+#   1) Enters the project root deterministically.
+#   2) Reads the version from pyproject.toml (Python 3.11 tomllib; 3.10 tomli fallback if needed).
+#   3) Builds a standalone executable via PyInstaller (uses ecli.spec if present; otherwise a safe fallback).
+#   4) Stages a minimal FHS payload for Debian (/usr/bin, /usr/share/{applications,icons,doc,man}).
+#   5) Produces a .deb with FPM and places artifacts under releases/<version>/.
+#   6) Optionally generates a .sha256 checksum next to the .deb (if checksum step is enabled below).
+#
+# Build-time requirements expected in the environment:
+#   - python3.11 + pip, pyinstaller
+#   - ruby + fpm
+#   - dpkg-dev utils (for validation) — optional
+#
+# Runtime dependencies declared in the package (via FPM):
+#   - libncurses6, libncursesw6, libtinfo6, ncurses-term
+#   - libyaml-0-2
+#   - xclip | xsel (clipboard integration; may be set as Recommends if desired)
+#
+# Notes:
+#   - Do NOT modify $HOME; the app will create ~/.config/ecli on first run.
+#   - Desktop entry and icon are included when available.
+#   - All outputs are written to releases/<version>/ to keep the repo clean.
 # ==============================================================================
+
 
 set -euo pipefail
 

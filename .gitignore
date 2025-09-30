@@ -107,6 +107,9 @@ coverage.xml
 .hypothesis/
 key_debugger.py
 instrukcja.md
+instrukcja_м.md
+newyork
+newyork.pub
 
 # ==========================
 # Type checker / Linter

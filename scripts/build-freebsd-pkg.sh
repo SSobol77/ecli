@@ -1,6 +1,19 @@
 #!/bin/sh
 # ==============================================================================
-# build-freebsd-pkg.sh - Local FreeBSD Package Builder for ECLI
+# build-freebsd-pkg.sh - Local FreeBSD Package Builder for ECLI (FreeBSD 14.x)
+# ==============================================================================
+# This script builds a PyInstaller one-file binary and produces a native .pkg
+# using `pkg create`. It:
+#   1) Ensures required system packages (python311, pyinstaller, git, ncurses, etc.)
+#   2) Installs Python runtime deps via pip (aiohttp stack, etc.)
+#   3) Builds executable (uses ecli.spec if present; otherwise safe fallback)
+#   4) Stages FHS payload under /usr/local/*
+#   5) Generates +MANIFEST (YAML & UCL) with proper runtime deps
+#   6) Creates .pkg and a .sha256 checksum in releases/<version>/
+# Notes:
+#   - Uses /bin/sh for maximum portability on FreeBSD
+#   - Requires root (will re-exec via sudo if needed)
+#   - If you rely on fast YAML loader, add PyYAML (pip) and libyaml (pkg deps)
 # ==============================================================================
 
 set -eu
@@ -54,10 +67,11 @@ print_warning() {
 
 cleanup() {
     print_step "Cleaning up temporary directories..."
-    # DON'T clean up - leave for debugging
+    # Leave for debugging (uncomment to auto-clean)
     echo "Skipping cleanup for debugging - directories preserved:"
     echo "STAGING_ROOT: $STAGING_ROOT"
     echo "META_DIR: $META_DIR"
+    # [Optional auto-clean]
     # if [ -n "$STAGING_ROOT" ] && [ -d "$STAGING_ROOT" ]; then
     #     rm -rf "$STAGING_ROOT" && echo "Removed: $STAGING_ROOT"
     # fi
@@ -67,6 +81,7 @@ cleanup() {
 }
 
 check_dependencies() {
+    # Binary presence check (commands, not pkg names)
     local deps="python3.11 pip pyinstaller pkg install git"
     local missing=""
 
@@ -77,7 +92,7 @@ check_dependencies() {
     done
 
     if [ -n "$missing" ]; then
-        print_error "Missing dependencies:$missing"
+        print_error "Missing commands:$missing"
         return 1
     fi
 }
@@ -133,7 +148,7 @@ setup_directories() {
     echo "STAGING_ROOT: $STAGING_ROOT"
     echo "META_DIR: $META_DIR"
 
-    # Clean ONLY the packaging directories, NOT dist/ (needed for PyInstaller output)
+    # Clean ONLY packaging dirs (keep dist/ with PyInstaller output)
     if [ -d "$STAGING_ROOT" ]; then
         rm -rf "$STAGING_ROOT"
         echo "Cleaned staging directory"
@@ -144,7 +159,6 @@ setup_directories() {
         echo "Cleaned meta directory"
     fi
 
-    # Create all necessary directories
     if ! mkdir -p \
         "$STAGING_ROOT/usr/local/bin" \
         "$STAGING_ROOT/usr/local/share/applications" \
@@ -157,35 +171,39 @@ setup_directories() {
         return 1
     fi
 
-    echo "Directories created successfully"
-
-    # Verify directories were created
-    if [ ! -d "$STAGING_ROOT/usr/local/bin" ]; then
-        print_error "Staging bin directory was not created: $STAGING_ROOT/usr/local/bin"
-        return 1
-    fi
-
-    if [ ! -d "$META_DIR" ]; then
-        print_error "Meta directory was not created: $META_DIR"
-        return 1
-    fi
-
-    if [ ! -d "$RELEASES_DIR" ]; then
-        print_error "Releases directory was not created: $RELEASES_DIR"
-        return 1
-    fi
-
-    echo "Directory verification successful"
+    echo "Directory verification..."
+    [ -d "$STAGING_ROOT/usr/local/bin" ] || { print_error "Missing $STAGING_ROOT/usr/local/bin"; return 1; }
+    [ -d "$META_DIR" ] || { print_error "Missing $META_DIR"; return 1; }
+    [ -d "$RELEASES_DIR" ] || { print_error "Missing $RELEASES_DIR"; return 1; }
 }
 
 install_system_dependencies() {
     print_header "ECLI FreeBSD Package Builder"
     print_step "Installing system build dependencies..."
 
-    # Check if packages are already installed
-    local packages="python311 py311-pip py311-setuptools py311-wheel py311-pyinstaller git gmake pkgconf ca_root_nss curl ncurses"
-    local missing_packages=""
+    # Exact pkg names for FreeBSD 14:
+    # - python311 / py311-* for Python 3.11 toolchain
+    # - py311-pyinstaller — system PyInstaller package
+    # - py311-ruff — ship Ruff as part of default tooling
+    # - ncurses — required on your 14.x setup (libncursesw/libtinfo, terminfo tools)
+    # - libyaml — OPTIONAL: only if you want C-accelerated YAML at runtime/tests
+    local packages="
+        ca_root_nss
+        curl
+        git
+        gmake
+        pkgconf
+        python311
+        py311-pip
+        py311-pyinstaller
+        py311-setuptools
+        py311-wheel
+        py311-ruff
+        ncurses
+        libyaml
+    "
 
+    local missing_packages=""
     for package in $packages; do
         if ! pkg info -e "$package" >/dev/null 2>&1; then
             missing_packages="$missing_packages $package"
@@ -206,13 +224,14 @@ install_system_dependencies() {
 install_python_dependencies() {
     print_step "Installing Python runtime dependencies..."
 
-    # Install tomli if tomllib not available
+    # Provide tomli if tomllib not available (Py 3.10 compatibility pathways)
     python3.11 -c "import tomllib" 2>/dev/null || {
         print_step "Installing tomli for TOML parsing..."
         python3.11 -m pip install tomli
     }
 
-    local pip_packages="aiohttp aiosignal yarl multidict frozenlist python-dotenv toml chardet pyperclip wcwidth pygments tato"
+    # aiohttp stack, TUI bits, etc.
+    local pip_packages="aiohttp aiosignal yarl multidict frozenlist python-dotenv toml chardet pyperclip wcwidth pygments tato PyYAML"
 
     if ! python3.11 -m pip install $pip_packages; then
         print_error "Failed to install Python dependencies"
@@ -302,47 +321,23 @@ build_binary() {
 stage_package_files() {
     print_step "Creating FreeBSD package structure..."
 
-    # Debug: Check if executable exists and is accessible
     echo "Executable path: $EXECUTABLE"
-    if [ ! -f "$EXECUTABLE" ]; then
-        print_error "Executable not found: $EXECUTABLE"
-        return 1
-    fi
-
-    if [ ! -x "$EXECUTABLE" ]; then
-        print_error "Executable not executable: $EXECUTABLE"
-        return 1
-    fi
+    [ -f "$EXECUTABLE" ] || { print_error "Executable not found: $EXECUTABLE"; return 1; }
+    [ -x "$EXECUTABLE" ] || { print_error "Executable not executable: $EXECUTABLE"; return 1; }
 
     echo "Staging directory: $STAGING_ROOT"
     echo "Target binary path: $STAGING_ROOT/usr/local/bin/$PACKAGE_NAME"
+    [ -d "$STAGING_ROOT/usr/local/bin" ] || { print_error "Missing dir: $STAGING_ROOT/usr/local/bin"; return 1; }
 
-    # Ensure target directory exists
-    if [ ! -d "$STAGING_ROOT/usr/local/bin" ]; then
-        print_error "Target directory does not exist: $STAGING_ROOT/usr/local/bin"
-        return 1
-    fi
-
-    # Install binary with absolute paths
     if ! install -m 755 "$PROJECT_ROOT/$EXECUTABLE" "$STAGING_ROOT/usr/local/bin/$PACKAGE_NAME"; then
         print_error "Failed to install binary"
-        echo "install command failed. Checking permissions and paths..."
-        ls -la "$PROJECT_ROOT/$EXECUTABLE"
-        ls -la "$STAGING_ROOT/usr/local/bin/"
+        ls -la "$PROJECT_ROOT/$EXECUTABLE" || true
+        ls -la "$STAGING_ROOT/usr/local/bin/" || true
         return 1
     fi
 
-    # Verify binary was installed correctly
-    if [ ! -f "$STAGING_ROOT/usr/local/bin/$PACKAGE_NAME" ]; then
-        print_error "Binary was not created in staging area"
-        return 1
-    fi
-
-    if [ ! -x "$STAGING_ROOT/usr/local/bin/$PACKAGE_NAME" ]; then
-        print_error "Binary in staging area is not executable"
-        return 1
-    fi
-
+    [ -f "$STAGING_ROOT/usr/local/bin/$PACKAGE_NAME" ] || { print_error "Binary not staged"; return 1; }
+    [ -x "$STAGING_ROOT/usr/local/bin/$PACKAGE_NAME" ] || { print_error "Binary not executable in staging"; return 1; }
     echo "Binary installed successfully: $(ls -la "$STAGING_ROOT/usr/local/bin/$PACKAGE_NAME")"
 
     # Desktop entry
@@ -364,7 +359,7 @@ StartupNotify=false
 EOF
     fi
 
-    # Application icon
+    # Icon
     if [ -f "$PROJECT_ROOT/img/logo_m.png" ]; then
         install -m 644 "$PROJECT_ROOT/img/logo_m.png" \
             "$STAGING_ROOT/usr/local/share/icons/hicolor/256x256/apps/$PACKAGE_NAME.png"
@@ -373,12 +368,8 @@ EOF
     fi
 
     # Documentation
-    if [ -f "$PROJECT_ROOT/LICENSE" ]; then
-        install -m 644 "$PROJECT_ROOT/LICENSE" "$STAGING_ROOT/usr/local/share/doc/$PACKAGE_NAME/LICENSE"
-    fi
-    if [ -f "$PROJECT_ROOT/README.md" ]; then
-        install -m 644 "$PROJECT_ROOT/README.md" "$STAGING_ROOT/usr/local/share/doc/$PACKAGE_NAME/README.md"
-    fi
+    [ -f "$PROJECT_ROOT/LICENSE" ] && install -m 644 "$PROJECT_ROOT/LICENSE" "$STAGING_ROOT/usr/local/share/doc/$PACKAGE_NAME/LICENSE"
+    [ -f "$PROJECT_ROOT/README.md" ] && install -m 644 "$PROJECT_ROOT/README.md" "$STAGING_ROOT/usr/local/share/doc/$PACKAGE_NAME/README.md"
 
     # Manual page
     if [ ! -f "$PROJECT_ROOT/man/$PACKAGE_NAME.1" ]; then
@@ -413,20 +404,17 @@ create_package() {
     local abi
     abi="$(pkg config ABI 2>/dev/null || echo 'FreeBSD:14:amd64')"
     local manifest_file="$META_DIR/+MANIFEST"
+    local ucl_manifest="$META_DIR/+MANIFEST.ucl"
 
     # Ensure releases directory exists
     mkdir -p "$RELEASES_DIR"
 
-    # Debug: verify staging area has our binary
     echo "Verifying staging area before package creation:"
     ls -la "$STAGING_ROOT/usr/local/bin/"
 
-    if [ ! -f "$STAGING_ROOT/usr/local/bin/$PACKAGE_NAME" ]; then
-        print_error "Binary not found in staging area: $STAGING_ROOT/usr/local/bin/$PACKAGE_NAME"
-        return 1
-    fi
+    [ -f "$STAGING_ROOT/usr/local/bin/$PACKAGE_NAME" ] || { print_error "Binary not found in staging"; return 1; }
 
-    # Create proper FreeBSD manifest format with explicit file list
+    # --- YAML manifest (+MANIFEST)
     cat > "$manifest_file" <<EOF
 name: "$PACKAGE_NAME"
 version: "$VERSION"
@@ -439,9 +427,15 @@ abi: "$abi"
 prefix: "/usr/local"
 categories: ["$CATEGORY"]
 licenses: ["$LICENSE"]
+
+# Runtime dependencies for FreeBSD:
+# - ncurses: from devel/ncurses (libncursesw, libtinfo, terminfo tools)
+# - libyaml: optional, if you use PyYAML with C-accel (remove if not needed)
 deps: {
-  ncurses: {origin: "devel/ncurses", version: ">=6.0"}
+  ncurses: {origin: "devel/ncurses",    version: ">=6.0"},
+  libyaml: {origin: "textproc/libyaml", version: ">=0.2"}
 }
+
 files: {
   /usr/local/bin/$PACKAGE_NAME: {uname: root, gname: wheel, perm: 0755},
   /usr/local/share/applications/$PACKAGE_NAME.desktop: {uname: root, gname: wheel, perm: 0644},
@@ -452,8 +446,7 @@ files: {
 }
 EOF
 
-    # Alternative UCL format with explicit file list
-    local ucl_manifest="$META_DIR/+MANIFEST.ucl"
+    # --- UCL manifest (+MANIFEST.ucl)
     cat > "$ucl_manifest" <<EOF
 name = "$PACKAGE_NAME";
 version = "$VERSION";
@@ -466,6 +459,13 @@ abi = "$abi";
 prefix = "/usr/local";
 categories = ["$CATEGORY"];
 licenses = ["$LICENSE"];
+
+# Runtime dependencies for FreeBSD:
+deps = {
+  "ncurses" = { origin = "devel/ncurses";    version = ">=6.0"; };
+  "libyaml" = { origin = "textproc/libyaml"; version = ">=0.2"; };
+};
+
 files = {
   "/usr/local/bin/$PACKAGE_NAME" = {uname = "root"; gname = "wheel"; perm = 0755;};
   "/usr/local/share/applications/$PACKAGE_NAME.desktop" = {uname = "root"; gname = "wheel"; perm = 0644;};
@@ -477,34 +477,25 @@ files = {
 EOF
 
     echo "Created YAML manifest:"
-    cat "$manifest_file"
+    cat "$manifest_file" || true
     echo ""
     echo "Created UCL manifest:"
-    cat "$ucl_manifest"
+    cat "$ucl_manifest" || true
 
     print_step "Building .pkg package..."
 
-    # Debug: show what we're trying to create
-    echo "Manifest file: $manifest_file"
-    echo "Staging root: $STAGING_ROOT"
-    echo "Output directory: $RELEASES_DIR"
-    echo "Working directory: $(pwd)"
-
-    # Try different pkg create approaches
     local pkg_created=false
     local error_log="$META_DIR/pkg_create_error.log"
 
-    # Method 1: Direct output to releases directory (try UCL first)
+    # Method 1: UCL first
     print_step "Trying Method 1a: UCL format"
     echo "Command: pkg create -M \"$ucl_manifest\" -r \"$STAGING_ROOT\" -o \"$RELEASES_DIR\""
-
     if pkg create -M "$ucl_manifest" -r "$STAGING_ROOT" -o "$RELEASES_DIR" 2>&1 | tee "$error_log"; then
         pkg_created=true
         print_step "Method 1a (UCL) successful"
     else
         print_step "Trying Method 1b: YAML format"
         echo "Command: pkg create -M \"$manifest_file\" -r \"$STAGING_ROOT\" -o \"$RELEASES_DIR\""
-
         if pkg create -M "$manifest_file" -r "$STAGING_ROOT" -o "$RELEASES_DIR" 2>&1 | tee "$error_log"; then
             pkg_created=true
             print_step "Method 1b (YAML) successful"
@@ -512,23 +503,18 @@ EOF
             print_warning "Both UCL and YAML direct methods failed. Error details:"
             cat "$error_log" || echo "Could not read error log"
 
-            # Method 2: Create in current directory, then move
+            # Method 2: Create in current directory then move
             print_step "Trying Method 2: Create in current directory"
             cd "$PROJECT_ROOT"
-            echo "Changed to directory: $(pwd)"
             echo "Command: pkg create -M \"$ucl_manifest\" -r \"$STAGING_ROOT\""
-
             if pkg create -M "$ucl_manifest" -r "$STAGING_ROOT" 2>&1 | tee "$error_log"; then
                 local created_pkg="${PACKAGE_NAME}-${VERSION}.pkg"
-                echo "Looking for created package: $created_pkg"
                 if [ -f "$created_pkg" ]; then
-                    print_step "Moving package to releases directory"
                     mv "$created_pkg" "$RELEASES_DIR/"
                     pkg_created=true
                     print_step "Method 2 successful"
                 else
                     print_error "Package file not found after creation: $created_pkg"
-                    echo "Files in current directory:"
                     ls -la *.pkg 2>/dev/null || echo "No .pkg files found"
                 fi
             else
@@ -561,25 +547,48 @@ EOF
         return 1
     fi
 
-    print_step "Package created successfully: $(basename "$pkg_path")"
+    print_step "Package created: $(basename "$pkg_path")"
 
-    # Save manifest and staging info for debugging
+    # --- Normalize filename to ecli_<version>_<arch>.pkg
+    # FreeBSD reports amd64 on 64-bit; normalize x86_64->amd64 just in case
+    local arch
+    arch="$(uname -m || echo amd64)"
+    [ "$arch" = "x86_64" ] && arch="amd64"
+
+    local normalized_pkg="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_${arch}.pkg"
+
+    # If target exists, overwrite
+    [ -f "$normalized_pkg" ] && rm -f "$normalized_pkg"
+
+    # Move/rename artifact
+    mv "$pkg_path" "$normalized_pkg"
+    pkg_path="$normalized_pkg"
+    print_step "Renamed artifact → $(basename "$pkg_path")"
+
+    # Save manifest and staging info for debugging (keep these filenames stable)
     cp "$manifest_file" "$RELEASES_DIR/manifest.txt" 2>/dev/null || true
     cp "$ucl_manifest" "$RELEASES_DIR/manifest.ucl" 2>/dev/null || true
     find "$STAGING_ROOT" -type f > "$RELEASES_DIR/staged_files.txt" 2>/dev/null || true
 
-    # Generate checksum
+    # Remove any old checksum for previous name(s)
+    rm -f "${RELEASES_DIR}/${PACKAGE_NAME}-${VERSION}.pkg.sha256" 2>/dev/null || true
+    rm -f "${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_amd64.pkg.sha256" 2>/dev/null || true
+
+    # Generate checksum for normalized name
     if command -v sha256sum >/dev/null 2>&1; then
         sha256sum "$pkg_path" > "${pkg_path}.sha256"
     elif command -v shasum >/dev/null 2>&1; then
         shasum -a 256 "$pkg_path" > "${pkg_path}.sha256"
+    elif command -v sha256 >/dev/null 2>&1; then
+        sha256 -q "$pkg_path" > "${pkg_path}.sha256"
     else
-        print_warning "No checksum utility found (sha256sum or shasum)"
+        print_warning "No checksum utility found (sha256sum/shasum/sha256)"
     fi
 
     # Return just the path without any print statements
     printf '%s\n' "$pkg_path"
 }
+
 
 verify_package() {
     local pkg_path="$1"
@@ -605,7 +614,7 @@ main() {
     # Set trap for cleanup on any exit
     trap cleanup EXIT
 
-    # Check if running as root, if not, restart with sudo
+    # Require root
     if [ "$(id -u)" -ne 0 ]; then
         echo "This script requires root privileges. Restarting with sudo..."
         exec sudo PROJECT_ROOT="$PROJECT_ROOT" "$0" "$@"
@@ -614,7 +623,6 @@ main() {
     cd "$PROJECT_ROOT"
     export PROJECT_ROOT
 
-    # Execute build steps with error handling and debugging
     print_step "Starting build process..."
 
     print_step "Step 1: Checking dependencies..."
@@ -639,7 +647,6 @@ main() {
     stage_package_files || { print_error "Package staging failed"; exit 1; }
 
     print_step "Step 8: Creating package..."
-    # Capture the package path properly
     if ! pkg_path=$(create_package); then
         print_error "Package creation failed"
         exit 1
@@ -653,7 +660,6 @@ main() {
     print_step "Step 9: Verifying package..."
     verify_package "$pkg_path" || { print_warning "Package verification failed, but continuing..."; }
 
-    # Final output
     print_header "BUILD COMPLETE"
     echo "Package: ${BOLD}$pkg_path${RESET}"
     if [ -f "${pkg_path}.sha256" ]; then
@@ -663,10 +669,8 @@ main() {
     print_header "INSTALLATION"
     echo "To install locally: ${BOLD}pkg install $pkg_path${RESET}"
     if [ -f "${pkg_path}.sha256" ]; then
-        echo "To verify checksum: ${BOLD}sha256sum -c ${pkg_path}.sha256${RESET}"
+        echo "To verify checksum: ${BOLD}sha256 -c ${pkg_path}.sha256${RESET} (or sha256sum -c)"
     fi
-
-    # Cleanup will be called automatically by trap
 }
 
 # Run main function only if script is executed directly
