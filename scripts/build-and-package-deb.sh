@@ -133,11 +133,22 @@ fi
 
 echo "==> Building .deb with FPM"
 fpm -s dir -t deb \
-  -n "${PACKAGE_NAME}" -v "${VERSION}" -a "amd64" \
+  -n "${PACKAGE_NAME}" \
+  -v "${VERSION}" \
+  -a "amd64" \
   --maintainer "${MAINTAINER}" \
   --description "Ecli — terminal DevOps editor with AI and Git integration" \
-  --url "${HOMEPAGE}" --license "${LICENSE}" --category "${CATEGORY}" \
-  --deb-priority optional --deb-compression xz \
+  --url "${HOMEPAGE}" \
+  --license "${LICENSE}" \
+  --category "${CATEGORY}" \
+  --deb-priority optional \
+  --deb-compression xz \
+  --depends "libncurses6" \
+  --depends "libncursesw6" \
+  --depends "libtinfo6" \
+  --depends "ncurses-term" \
+  --depends "libyaml-0-2" \
+  --depends "xclip | xsel" \
   --after-install "packaging/linux/fpm-common/postinst" \
   --before-remove "packaging/linux/fpm-common/prerm" \
   --after-remove  "packaging/linux/fpm-common/postrm" \

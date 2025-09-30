@@ -10,12 +10,40 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# System tools + FPM
+# System tools + FPM + Python + Ruff (list sorted A→Z)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential git ca-certificates curl make gcc g++ \
-    ruby ruby-dev rpm patchelf file upx-ucl \
-    && gem install --no-document fpm \
-    && rm -rf /var/lib/apt/lists/*
+    build-essential \
+    ca-certificates \
+    curl \
+    file \
+    g++ \
+    gcc \
+    git \
+    libncurses-dev \
+    libncurses6 \
+    libncursesw5-dev \
+    libncursesw6 \
+    libtinfo6 \
+    libyaml-dev \
+    make \
+    ncurses-bin \
+    ncurses-term \
+    patchelf \
+    python3 \
+    python3-pip \
+    python3-venv \
+    rpm \
+    ruby \
+    ruby-dev \
+    upx-ucl \
+    xclip \
+    xsel \
+ && gem install --no-document fpm \
+ && python3 -m pip install --no-cache-dir --upgrade pip \
+ && python3 -m pip install --no-cache-dir ruff \
+ && rm -rf /var/lib/apt/lists/*
+
+
 
 # Install uv
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \

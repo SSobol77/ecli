@@ -19,17 +19,18 @@ It brings the power of modern development tools into your terminal - fast, exten
 
 #### ✨ Key Features
 
-- 🧠 **AI Panel** - integrated assistant for code, docs, and refactoring
-- 📂 **File Manager** - navigate and manage projects seamlessly
-- 🌱 **Git Panel** - stage, commit, push/pull directly in terminal
-- 🌈 **Syntax Highlighting** - powered by Tree-sitter, supports 70+ languages
-- 📝 **LSP Integration** - full Language Server Protocol support (autocomplete, diagnostics, go-to-definition)
-- 🐍 **Built-in Linters** -
-  - **Ruff** (Python) integrated by default
-  - Support for external linters across 70+ languages
-- ⚡ **Extensible Architecture** - plugins & themes
-- 🎨 **Dark/Light Themes** out of the box
-- 🔄 **Cross-platform**: Linux, macOS, and FreeBSD
+* 🧠 **AI Panel** - integrated assistant for code, docs, and refactoring
+* 📂 **File Manager** - navigate and manage projects seamlessly
+* 🌱 **Git Panel** - stage, commit, push/pull directly in terminal
+* 🌈 **Syntax Highlighting** - powered by Tree-sitter, supports 70+ languages
+* 📝 **LSP Integration** - full Language Server Protocol support (autocomplete, diagnostics, go-to-definition)
+* 🐍 **Built-in Linters** -
+
+  * **Ruff** (Python) integrated by default
+  * Support for external linters across 70+ languages
+* ⚡ **Extensible Architecture** - plugins & themes
+* 🎨 **Dark/Light Themes** out of the box
+* 🔄 **Cross-platform**: Linux, macOS, and FreeBSD
 
 ---
 
@@ -37,7 +38,7 @@ It brings the power of modern development tools into your terminal - fast, exten
 
 #### 1. System Dependencies
 
-First, ensure you have the `ncurses` library installed. This is a required dependency for the terminal interface.
+First, ensure you have the required system libraries installed. These are necessary for the terminal interface, clipboard integration, YAML acceleration, and testing with full UTF-8 support.
 
 <details>
 <summary>Click to see installation commands for your OS</summary>
@@ -45,28 +46,45 @@ First, ensure you have the `ncurses` library installed. This is a required depen
 ##### **On Debian/Ubuntu:**
 
 ```bash
-sudo apt-get update && sudo apt-get install libncursesw5-dev
+sudo apt update && sudo apt install \
+  libncurses6 \
+  libncursesw6 \
+  libtinfo6 \
+  libncurses-dev \
+  libncursesw5-dev \
+  ncurses-bin \
+  ncurses-term \
+  libyaml-dev \
+  xclip \
+  xsel
 ```
 
 ##### **On Fedora/CentOS/RHEL:**
 
 ```bash
-sudo dnf install ncurses-devel
+sudo dnf install ncurses ncurses-devel libyaml-devel xclip xsel
 ```
 
 ##### **On Arch Linux:**
 
 ```bash
-sudo pacman -S ncurses
+sudo pacman -S ncurses libyaml xclip xsel
 ```
 
 ##### **On FreeBSD:**
 
 ```bash
-sudo pkg install ncurses
+sudo pkg install ncurses libyaml xclip xsel
 ```
 
 </details>
+
+These dependencies ensure:
+
+* ✅ Full **curses** (UTF-8, wide-char, colors) support
+* ✅ **wcwidth** correct behavior
+* ✅ **PyYAML** C bindings for faster parsing
+* ✅ **Clipboard support** for `pyperclip`
 
 <br>
 

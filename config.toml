@@ -13,12 +13,12 @@ default_provider = "openai"
 
 
 [ai.models]
-openai = "gpt-4o"
-gemini = "gemini-1.5-flash-latest"
-mistral = "mistral-7b"
-claude = "claude-sonnet-4-20250514"
-grok = "grok-3-latest"
-huggingface = "microsoft/DialoGPT-large"
+openai = "gpt-5-codex"
+gemini = "gemini-2.5-pro"
+mistral = "magistral-medium-1.2""
+claude = "claude-4-opus"
+grok = "grok-4-fast"
+huggingface = "meta-llama/Meta-Llama-3.1-405B-Instruct"
 
 
 [colors]
