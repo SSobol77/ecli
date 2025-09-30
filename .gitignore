@@ -142,6 +142,8 @@ pypr_old.toml
 
 # Temporary test scripts
 fortest.py
+instrukcja_м.md
+instrukcja.md
 
 # Terraform / Ansible state
 infra/terraform/**/.terraform/
