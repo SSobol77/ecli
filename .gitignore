@@ -106,7 +106,7 @@ coverage.xml
 *.py,cover
 .hypothesis/
 key_debugger.py
-
+instrukcja.md
 
 # ==========================
 # Type checker / Linter
