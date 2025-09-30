@@ -408,6 +408,10 @@ create_package() {
 
     # Ensure releases directory exists
     mkdir -p "$RELEASES_DIR"
+    # Aggressive cleanup of legacy-named FreeBSD artifacts in this version dir
+    find "$RELEASES_DIR" -maxdepth 1 -type f -name "${PACKAGE_NAME}-${VERSION}*.pkg*" -delete || true
+    find "$RELEASES_DIR" -maxdepth 1 -type f -name "${PACKAGE_NAME}_${VERSION}_*.pkg*" -delete || true
+
 
     echo "Verifying staging area before package creation:"
     ls -la "$STAGING_ROOT/usr/local/bin/"
@@ -549,32 +553,19 @@ EOF
 
     print_step "Package created: $(basename "$pkg_path")"
 
-    # --- Normalize filename to ecli_<version>_<arch>.pkg
-    # FreeBSD reports amd64 on 64-bit; normalize x86_64->amd64 just in case
+    # Normalize filename to ecli_<version>_<arch>.pkg
     local arch
     arch="$(uname -m || echo amd64)"
     [ "$arch" = "x86_64" ] && arch="amd64"
 
     local normalized_pkg="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_${arch}.pkg"
-
-    # If target exists, overwrite
     [ -f "$normalized_pkg" ] && rm -f "$normalized_pkg"
-
-    # Move/rename artifact
     mv "$pkg_path" "$normalized_pkg"
     pkg_path="$normalized_pkg"
     print_step "Renamed artifact → $(basename "$pkg_path")"
 
-    # Save manifest and staging info for debugging (keep these filenames stable)
-    cp "$manifest_file" "$RELEASES_DIR/manifest.txt" 2>/dev/null || true
-    cp "$ucl_manifest" "$RELEASES_DIR/manifest.ucl" 2>/dev/null || true
-    find "$STAGING_ROOT" -type f > "$RELEASES_DIR/staged_files.txt" 2>/dev/null || true
-
-    # Remove any old checksum for previous name(s)
-    rm -f "${RELEASES_DIR}/${PACKAGE_NAME}-${VERSION}.pkg.sha256" 2>/dev/null || true
-    rm -f "${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_amd64.pkg.sha256" 2>/dev/null || true
-
     # Generate checksum for normalized name
+    rm -f "${pkg_path}.sha256" 2>/dev/null || true
     if command -v sha256sum >/dev/null 2>&1; then
         sha256sum "$pkg_path" > "${pkg_path}.sha256"
     elif command -v shasum >/dev/null 2>&1; then
@@ -585,10 +576,14 @@ EOF
         print_warning "No checksum utility found (sha256sum/shasum/sha256)"
     fi
 
+    # Optionally: upload debug manifests as release assets later via CI/gh (не копируем в repo)
+    # cp "$manifest_file" "$RELEASES_DIR/manifest.txt" 2>/dev/null || true
+    # cp "$ucl_manifest"  "$RELEASES_DIR/manifest.ucl" 2>/dev/null || true
+    # find "$STAGING_ROOT" -type f > "$RELEASES_DIR/staged_files.txt" 2>/dev/null || true
+
     # Return just the path without any print statements
     printf '%s\n' "$pkg_path"
 }
-
 
 verify_package() {
     local pkg_path="$1"

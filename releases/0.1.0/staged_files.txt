@@ -1,6 +1,0 @@
-/home/ssobol7/Code/ecli/build/freebsd_pkg_staging/usr/local/man/man1/ecli.1.gz
-/home/ssobol7/Code/ecli/build/freebsd_pkg_staging/usr/local/share/doc/ecli/LICENSE
-/home/ssobol7/Code/ecli/build/freebsd_pkg_staging/usr/local/share/doc/ecli/README.md
-/home/ssobol7/Code/ecli/build/freebsd_pkg_staging/usr/local/share/applications/ecli.desktop
-/home/ssobol7/Code/ecli/build/freebsd_pkg_staging/usr/local/share/icons/hicolor/256x256/apps/ecli.png
-/home/ssobol7/Code/ecli/build/freebsd_pkg_staging/usr/local/bin/ecli
