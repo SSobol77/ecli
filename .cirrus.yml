@@ -1,0 +1,67 @@
+# ==============================================================================
+# Cirrus CI — FreeBSD 14.x packaging for ECLI
+# Builds a native .pkg in a real FreeBSD VM and uploads STRICT artifacts:
+#   releases/<version>/ecli_<version>_amd64.pkg
+#   releases/<version>/ecli_<version>_amd64.pkg.sha256
+#
+# Triggers:
+#   - Pushes to main
+#   - Tags (v<version>)
+#   - Manual rebuilds from Cirrus UI
+# ==============================================================================
+
+freebsd_pkg_task:
+  # Use a FreeBSD 14.x image. Prefer 14.3 when available in Cirrus; fall back to 14.2.
+  freebsd_instance:
+    image_family: freebsd-14-3
+    cpu: 2
+    memory: 4G
+
+  # Shallow clone speeds up builds
+  env:
+    CIRRUS_CLONE_DEPTH: "1"
+
+  # --- Compute VERSION once and export to env for all subsequent steps --------
+  # We parse [project].version from pyproject.toml using awk (no Python needed here).
+  version_script:
+    - |
+      set -eu
+      VER="$(awk -F'"'"'" '/^[[:space:]]*version[[:space:]]*=/ {print $2; exit}' pyproject.toml)"
+      if [ -z "${VER:-}" ]; then
+        echo "ERROR: cannot read version from pyproject.toml" >&2
+        exit 1
+      fi
+      echo "VERSION=${VER}" | tee -a "$CIRRUS_ENV"
+      echo "Resolved VERSION=${VERSION}"
+
+  # --- Optional: ensure git present (Cirrus images usually have it) -----------
+  install_script:
+    - sudo pkg update -f
+    - sudo pkg install -y git || true
+
+  # --- Build using the canonical packager in your repo ------------------------
+  # It installs all system & pip deps itself and enforces strict naming.
+  build_script:
+    - sh scripts/build-and-package-freebsd.sh
+
+  # --- Verify STRICT artifact names/locations ---------------------------------
+  verify_script:
+    - |
+      set -eu
+      ARCH="amd64"
+      PKG="releases/${VERSION}/ecli_${VERSION}_${ARCH}.pkg"
+      SHA="${PKG}.sha256"
+      test -f "$PKG" || { echo "Missing $PKG"; ls -R releases || true; exit 2; }
+      test -f "$SHA" || { echo "Missing $SHA"; ls -R releases || true; exit 3; }
+      echo "OK: $PKG"
+      echo "OK: $SHA"
+
+  # --- Publish artifacts to Cirrus UI (downloadable from the build page) ------
+  artifacts:
+    # Use the computed VERSION from version_script (exported via $CIRRUS_ENV)
+    - path: "releases/${VERSION}/ecli_${VERSION}_amd64.pkg"
+    - path: "releases/${VERSION}/ecli_${VERSION}_amd64.pkg.sha256"
+
+  # --- When to run -------------------------------------------------------------
+  # Build on main or on version tags. Adjust as needed.
+  only_if: $CIRRUS_BRANCH == "main" || $CIRRUS_TAG =~ "v.*"
