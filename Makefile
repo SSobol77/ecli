@@ -321,3 +321,126 @@ release-freebsd: package-freebsd-assert
 		--clobber
 	@echo "--> Release v$(FREEBSD_PKG_VERSION) updated with FreeBSD artifacts."
 
+
+# ---------------------------
+# Packaging (macOS)
+# ---------------------------
+# Use:
+# Build (choose one):
+#  - Local on macOS 12+ with Python 3.11:
+#       `make package-macos`
+#    (Produces a DMG via PyInstaller .app → hdiutil)
+#
+# Verify produced artifacts (strict naming & location):
+#   `make show-macos-artifacts`
+#
+# Publish to GitHub Release (creates tag v<version> if missing, then uploads):
+#   `make release-macos`
+#
+# Notes:
+#  - Output files (strict):
+#       releases/<version>/ecli_<version>_macos_<arch>.dmg
+#       releases/<version>/ecli_<version>_macos_<arch>.dmg.sha256
+#  - <arch> is normalized from the host (x86_64 or arm64).
+#  - For CI builds, see `.github/workflows/macos-dmg.yml`.
+# ---------------------------
+
+MACOS_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
+MACOS_ARCH        ?= $(shell uname -m)
+MACOS_PKG_DIR     ?= releases/$(MACOS_PKG_VERSION)
+MACOS_PKG_FILE    ?= $(MACOS_PKG_DIR)/ecli_$(MACOS_PKG_VERSION)_macos_$(MACOS_ARCH).dmg
+MACOS_SHA_FILE    ?= $(MACOS_PKG_FILE).sha256
+
+.PHONY: package-macos
+package-macos: clean
+	sh ./scripts/build-and-package-macos.sh
+	$(MAKE) package-macos-assert
+
+.PHONY: package-macos-assert
+package-macos-assert:
+	@test -n "$(MACOS_PKG_VERSION)" || (echo "MACOS_PKG_VERSION empty (pyproject.toml)"; exit 1)
+	@test -f "$(MACOS_PKG_FILE)"    || (echo "Missing $(MACOS_PKG_FILE)"; ls -R releases || true; exit 2)
+	@test -f "$(MACOS_SHA_FILE)"    || (echo "Missing $(MACOS_SHA_FILE)"; ls -R releases || true; exit 3)
+	@echo "--> OK: $(MACOS_PKG_FILE)"
+	@echo "--> OK: $(MACOS_SHA_FILE)"
+
+.PHONY: show-macos-artifacts
+show-macos-artifacts:
+	@echo "Version: $(MACOS_PKG_VERSION) Arch: $(MACOS_ARCH)"
+	@ls -l $(MACOS_PKG_DIR)/ecli_*_macos_* 2>/dev/null || echo "(no artifacts yet)"
+
+# Publish to GitHub Release
+.PHONY: release-macos
+release-macos: package-macos-assert
+	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' required"; exit 1)
+	@if ! git rev-parse "v$(MACOS_PKG_VERSION)" >/dev/null 2>&1; then \
+		git tag "v$(MACOS_PKG_VERSION)"; git push origin "v$(MACOS_PKG_VERSION)"; \
+	fi
+	@gh release view "v$(MACOS_PKG_VERSION)" >/dev/null 2>&1 || \
+	  gh release create "v$(MACOS_PKG_VERSION)" --title "ECLI v$(MACOS_PKG_VERSION)" \
+	    --notes "macOS package (DMG) for ECLI v$(MACOS_PKG_VERSION)."
+	@gh release upload "v$(MACOS_PKG_VERSION)" "$(MACOS_PKG_FILE)" "$(MACOS_SHA_FILE)" --clobber
+	@echo "--> Release v$(MACOS_PKG_VERSION) updated with macOS artifacts."
+
+
+# ---------------------------
+# Packaging (Windows)
+# ---------------------------
+# Use:
+# Build (local, PowerShell 7+ on Windows 10/11 x64):
+#   `make package-windows`
+#   (PyInstaller → NSIS; produces a signed or unsigned installer depending on your setup)
+#
+# Verify produced artifacts (strict naming & location):
+#   `make show-windows-artifacts`
+#
+# Publish to GitHub Release (creates tag v<version> if missing, then uploads):
+#   `make release-windows`
+#
+# Notes:
+#  - Output files (strict):
+#       releases/<version>/ecli_<version>_win_x64.exe
+#       releases/<version>/ecli_<version>_win_x64.exe.sha256
+#  - For CI builds, see `.github/workflows/windows-installer.yml`.
+#  - If code signing is required, integrate `signtool` before checksum generation.
+# ---------------------------
+
+
+WIN_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
+WIN_PKG_DIR     ?= releases/$(WIN_PKG_VERSION)
+WIN_PKG_FILE    ?= $(WIN_PKG_DIR)/ecli_$(WIN_PKG_VERSION)_win_x64.exe
+WIN_SHA_FILE    ?= $(WIN_PKG_FILE).sha256
+
+# Local Windows build (run in PowerShell on Windows host)
+.PHONY: package-windows
+package-windows: clean
+	pwsh -File ./scripts/build-and-package-windows.ps1
+	$(MAKE) package-windows-assert
+
+.PHONY: package-windows-assert
+package-windows-assert:
+	@test -n "$(WIN_PKG_VERSION)" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
+	@test -f "$(WIN_PKG_FILE)"    || (echo "Missing $(WIN_PKG_FILE)"; ls -R releases || true; exit 2)
+	@test -f "$(WIN_SHA_FILE)"    || (echo "Missing $(WIN_SHA_FILE)"; ls -R releases || true; exit 3)
+	@echo "--> OK: $(WIN_PKG_FILE)"
+	@echo "--> OK: $(WIN_SHA_FILE)"
+
+.PHONY: show-windows-artifacts
+show-windows-artifacts:
+	@echo "Version: $(WIN_PKG_VERSION)"
+	@ls -l $(WIN_PKG_DIR)/ecli_*_win_x64.exe* 2>/dev/null || echo "(no artifacts yet)"
+
+# Publish to GitHub Release
+.PHONY: release-windows
+release-windows: package-windows-assert
+	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' required"; exit 1)
+	@if ! git rev-parse "v$(WIN_PKG_VERSION)" >/dev/null 2>&1; then \
+		git tag "v$(WIN_PKG_VERSION)"; git push origin "v$(WIN_PKG_VERSION)"; \
+	fi
+	@gh release view "v$(WIN_PKG_VERSION)" >/dev/null 2>&1 || \
+	  gh release create "v$(WIN_PKG_VERSION)" --title "ECLI v$(WIN_PKG_VERSION)" \
+	    --notes "Windows x64 installer for ECLI v$(WIN_PKG_VERSION)."
+	@gh release upload "v$(WIN_PKG_VERSION)" "$(WIN_PKG_FILE)" "$(WIN_SHA_FILE)" --clobber
+	@echo "--> Release v$(WIN_PKG_VERSION) updated with Windows artifacts."
+	
+# ================================(SSobol77)======================================
