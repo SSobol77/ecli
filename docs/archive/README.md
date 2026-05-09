@@ -1,3 +1,11 @@
+<!--
+Filename: docs/archive/README.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Archive
 
 This folder contains superseded documentation retained for historical context.

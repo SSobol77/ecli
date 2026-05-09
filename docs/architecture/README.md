@@ -1,12 +1,11 @@
 <!--
-Path: docs/architecture/README.md
-File: README.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/architecture/README.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Architecture Documentation
 
 Defines architecture authority, ownership contracts, lifecycle semantics, and migration-safe target design.

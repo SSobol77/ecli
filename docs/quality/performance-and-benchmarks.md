@@ -1,3 +1,11 @@
+<!--
+Filename: docs/quality/performance-and-benchmarks.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Performance and Benchmarks
 
 ## Scope

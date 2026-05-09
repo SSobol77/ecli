@@ -1,12 +1,11 @@
 <!--
-Path: docs/extensions/diagnostics-model.md
-File: diagnostics-model.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/extensions/diagnostics-model.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Diagnostics Model
 
 ## Current vs Target

@@ -1,3 +1,11 @@
+<!--
+Filename: docs/product/compatibility-policy.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Compatibility Policy
 
 ## Configuration Compatibility

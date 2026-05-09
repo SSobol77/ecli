@@ -1,3 +1,11 @@
+<!--
+Filename: docs/release/release-checklist.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Release Checklist
 
 - [ ] Version in `pyproject.toml` is correct.

@@ -1,3 +1,11 @@
+<!--
+Filename: BUILD_SYSTEM.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # ECLI Multi-Platform Build System
 
 ## Overview

@@ -1,12 +1,11 @@
 <!--
-Path: docs/architecture/event-and-concurrency-model.md
-File: event-and-concurrency-model.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/architecture/event-and-concurrency-model.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Event and Concurrency Model
 
 ## Observed Concurrency Primitives

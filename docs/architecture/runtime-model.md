@@ -1,12 +1,11 @@
 <!--
-Path: docs/architecture/runtime-model.md
-File: runtime-model.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/architecture/runtime-model.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Runtime Model
 
 ## Runtime State Machine (Operational View)

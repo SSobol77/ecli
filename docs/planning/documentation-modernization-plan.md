@@ -1,3 +1,11 @@
+<!--
+Filename: docs/planning/documentation-modernization-plan.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Documentation Modernization Plan
 
 **Status: Completed** — The following sections document the modernization work that has been finished.

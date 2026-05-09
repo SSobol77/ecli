@@ -1,12 +1,11 @@
 <!--
-Path: docs/contributor/development-setup.md
-File: development-setup.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/contributor/development-setup.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Development Setup
 
 ## Environment Bootstrap Checklist

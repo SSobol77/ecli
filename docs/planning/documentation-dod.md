@@ -1,3 +1,11 @@
+<!--
+Filename: docs/planning/documentation-dod.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Documentation Definition of Done
 
 - [ ] Documentation hierarchy is layered and category-based.

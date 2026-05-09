@@ -1,3 +1,11 @@
+<!--
+Filename: README.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 <p align="center">
   <img src="https://github.com/SSobol77/ecli/blob/main/img/logo_m.png" alt="ecli Logo" width="200"/>
 </p>

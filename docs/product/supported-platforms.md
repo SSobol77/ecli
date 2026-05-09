@@ -1,3 +1,11 @@
+<!--
+Filename: docs/product/supported-platforms.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Supported Platforms
 
 ## Runtime Platforms (Current State)

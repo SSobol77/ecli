@@ -1,3 +1,11 @@
+<!--
+Filename: MAKEFILE_UPGRADE_SUMMARY.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # ECLI Makefile Upgrade Summary
 
 **Commit:** `4735875` - Upgrade Makefile with comprehensive multi-platform build system

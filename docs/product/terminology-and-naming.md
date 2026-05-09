@@ -1,3 +1,11 @@
+<!--
+Filename: docs/product/terminology-and-naming.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Terminology and Naming
 
 ## Canonical Project Name

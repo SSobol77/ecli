@@ -1,3 +1,11 @@
+<!--
+Filename: docs/quality/security-review-checklist.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Security Review Checklist
 
 ## Subprocess and Command Execution

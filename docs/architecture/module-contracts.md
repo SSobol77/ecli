@@ -1,12 +1,11 @@
 <!--
-Path: docs/architecture/module-contracts.md
-File: module-contracts.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/architecture/module-contracts.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Module Contracts (Normative)
 
 ## Core Contract Matrix

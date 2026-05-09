@@ -1,3 +1,11 @@
+<!--
+Filename: docs/README.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # ECLI Documentation System
 
 This documentation is organized as an engineering subsystem with explicit authority boundaries.

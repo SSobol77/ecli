@@ -1,3 +1,11 @@
+<!--
+Filename: docs/quality/test-strategy.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Test Strategy
 
 ## Objectives

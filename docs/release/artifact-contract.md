@@ -1,3 +1,11 @@
+<!--
+Filename: docs/release/artifact-contract.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Artifact Contract (Normative)
 
 ## Contract Scope

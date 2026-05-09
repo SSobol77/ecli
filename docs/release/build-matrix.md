@@ -1,3 +1,11 @@
+<!--
+Filename: docs/release/build-matrix.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Build Matrix
 
 ## Platform Matrix (Current Observed)

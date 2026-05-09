@@ -1,3 +1,11 @@
+<!--
+Filename: CODE_REVIEW_REPORT.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Code Review Report - ECLI Python Codebase
 **Date**: May 9, 2026
 **Scope**: Full codebase review

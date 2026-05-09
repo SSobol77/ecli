@@ -1,12 +1,11 @@
 <!--
-Path: docs/planning/engineering-plan.md
-File: engineering-plan.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/planning/engineering-plan.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Engineering Plan
 
 ## Scope Boundary

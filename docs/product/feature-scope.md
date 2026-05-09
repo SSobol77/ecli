@@ -1,3 +1,11 @@
+<!--
+Filename: docs/product/feature-scope.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Feature Scope
 
 ## Core Scope

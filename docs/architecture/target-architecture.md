@@ -1,12 +1,11 @@
 <!--
-Path: docs/architecture/target-architecture.md
-File: target-architecture.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/architecture/target-architecture.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Target Architecture (Normative Direction)
 
 ## Target Design Principles

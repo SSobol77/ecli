@@ -1,12 +1,11 @@
 <!--
-Path: docs/planning/risk-register.md
-File: risk-register.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/planning/risk-register.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Risk Register
 
 | Risk | Likelihood | Impact | Severity | Detection | Mitigation | Owner | Status |

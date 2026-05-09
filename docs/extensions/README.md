@@ -1,12 +1,11 @@
 <!--
-Path: docs/extensions/README.md
-File: README.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/extensions/README.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Extensions Documentation
 
 Defines extension boundaries, runtime contracts, and safety guardrails.

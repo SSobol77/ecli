@@ -1,3 +1,11 @@
+<!--
+Filename: docs/release/artifact-verification.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
 # Artifact Verification
 
 ## Required Verification

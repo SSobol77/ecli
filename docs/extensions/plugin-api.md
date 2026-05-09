@@ -1,12 +1,11 @@
 <!--
-Path: docs/extensions/plugin-api.md
-File: plugin-api.md
-Project: Ecli
-Site: www.ecli.io
-Author: Siergej Sobolewski
-License: Apache License, Version 2.0
-Date: 19/04/2026
+Filename: docs/extensions/plugin-api.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
 -->
+
 # Plugin API Boundary
 
 ## Current-State Disclaimer
