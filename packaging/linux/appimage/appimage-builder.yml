@@ -12,6 +12,8 @@ AppDir:
     exec: usr/bin/ecli # path to the executable inside the AppImage
     exec_args: $@
   runtime:
+    arch:
+      - x86_64
     env:
       APPDIR: $APPDIR
 
@@ -23,17 +25,6 @@ AppDir:
     exclude:
       - "**/*.pyc"
 
-  apt:
-    arch: amd64
-    sources:
-      - sourceline: "deb [arch=amd64] http://archive.ubuntu.com/ubuntu/ noble main universe"
-    include:
-      - libstdc++6
-      - libc6
-      - zlib1g
-      - libgcc-s1
-    exclude: []
-
 AppImage:
   arch: x86_64
-  update-information: "gh-releases-zsync|SSobol77|ecli|latest|ECLI-*.AppImage.zsync"
+  update-information: "gh-releases-zsync|SSobol77|ecli|latest|ecli_*_linux_x86_64.AppImage.zsync"

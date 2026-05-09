@@ -48,8 +48,8 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          mapfile -t PKGS < <(ls -1 releases/*/ecli_*_amd64.pkg 2>/dev/null || true)
-          mapfile -t SHAS < <(ls -1 releases/*/ecli_*_amd64.pkg.sha256 2>/dev/null || true)
+          mapfile -t PKGS < <(ls -1 releases/*/ecli_*_freebsd_*.pkg 2>/dev/null || true)
+          mapfile -t SHAS < <(ls -1 releases/*/ecli_*_freebsd_*.pkg.sha256 2>/dev/null || true)
           if (( ${#PKGS[@]} == 0 )); then
             echo "No .pkg files found under releases/**/ — build failed or copyback disabled" >&2
             exit 2

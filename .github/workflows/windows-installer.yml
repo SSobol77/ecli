@@ -49,7 +49,7 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.ver.outputs.version }}"
-          $exe = "releases\$version\ecli_${version}_win_x64.exe"
+          $exe = "releases\$version\ecli_${version}_win_x86_64.exe"
           $sha = "$exe.sha256"
           if (-not (Test-Path $exe)) { throw "Missing $exe" }
           if (-not (Test-Path $sha)) { throw "Missing $sha" }
@@ -62,6 +62,6 @@ jobs:
         with:
           name: windows-installer
           path: |
-            releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x64.exe
-            releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x64.exe.sha256
+            releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x86_64.exe
+            releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x86_64.exe.sha256
           if-no-files-found: error

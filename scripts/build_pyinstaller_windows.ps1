@@ -12,8 +12,8 @@ This script is the canonical Windows packager for ECLI. It:
   5) Asserts that outputs exist in the exact paths.
 
 STRICT OUTPUTS (normalized)
-  releases\<version>\ecli_<version>_win_x64.exe
-  releases\<version>\ecli_<version>_win_x64.exe.sha256
+  releases\<version>\ecli_<version>_win_x86_64.exe
+  releases\<version>\ecli_<version>_win_x86_64.exe.sha256
 
 The script follows the same dependency stack and hidden-import rules used on
 Linux/FreeBSD to ensure consistent runtime behavior across platforms.
@@ -31,8 +31,8 @@ Linux/FreeBSD to ensure consistent runtime behavior across platforms.
 
 .ARTIFACTS
   Path:    releases\<version>\
-  Files:   ecli_<version>_win_x64.exe
-           ecli_<version>_win_x64.exe.sha256
+  Files:   ecli_<version>_win_x86_64.exe
+           ecli_<version>_win_x86_64.exe.sha256
   Version: extracted from pyproject.toml → [project].version
 
 .USAGE
@@ -46,8 +46,8 @@ Linux/FreeBSD to ensure consistent runtime behavior across platforms.
 .EXAMPLES
   EXAMPLE 1: Local build on a developer workstation
     PS> pwsh -File scripts/build_pyinstaller_windows.ps1
-    PS> Get-Item releases\*\ecli_*_win_x64.exe*
-    PS> Get-FileHash -Algorithm SHA256 releases\0.1.0\ecli_0.1.0_win_x64.exe
+    PS> Get-Item releases\*\ecli_*_win_x86_64.exe*
+    PS> Get-FileHash -Algorithm SHA256 releases\0.1.0\ecli_0.1.0_win_x86_64.exe
 
   EXAMPLE 2: Makefile workflow (from bash on Windows, e.g., Git Bash)
     $ make package-windows
@@ -70,16 +70,16 @@ Linux/FreeBSD to ensure consistent runtime behavior across platforms.
       with:
         name: windows-installer
         path: |
-          releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x64.exe
-          releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x64.exe.sha256
+          releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x86_64.exe
+          releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x86_64.exe.sha256
 
 .VERIFICATION
   # Verify the installer exists in the STRICT location:
-  PS> Test-Path releases\<version>\ecli_<version>_win_x64.exe
+  PS> Test-Path releases\<version>\ecli_<version>_win_x86_64.exe
 
   # Verify checksum matches:
-  PS> (Get-FileHash -Algorithm SHA256 releases\<version>\ecli_<version>_win_x64.exe).Hash
-  PS> Get-Content releases\<version>\ecli_<version>_win_x64.exe.sha256
+  PS> (Get-FileHash -Algorithm SHA256 releases\<version>\ecli_<version>_win_x86_64.exe).Hash
+  PS> Get-Content releases\<version>\ecli_<version>_win_x86_64.exe.sha256
 
 .TROUBLESHOOTING
   - "NSIS not found":
@@ -136,7 +136,7 @@ $version = (Get-Content pyproject.toml) -match '^\s*version\s*=\s*"(.*)"' | ForE
 if ([string]::IsNullOrWhiteSpace($version)) { Err "Cannot read version"; exit 1 }
 Ok "Version: $version"
 
-$ARCH = "win_x64"
+$ARCH = "win_x86_64"
 $releasesDir = Join-Path "releases" $version
 $outInstaller = Join-Path $releasesDir ("ecli_{0}_{1}.exe" -f $version,$ARCH)
 $outSha = "$outInstaller.sha256"

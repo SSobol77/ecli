@@ -24,14 +24,14 @@
 #      (bin/, share/{applications,icons,doc}, man/).
 #   5) Generates +MANIFEST and creates a native .pkg via `pkg create`.
 #   6) Renames the artifact to a strict name and writes a checksum:
-#      releases/<version>/ecli_<version>_amd64.pkg
-#      releases/<version>/ecli_<version>_amd64.pkg.sha256
+#      releases/<version>/ecli_<version>_freebsd_<arch>.pkg
+#      releases/<version>/ecli_<version>_freebsd_<arch>.pkg.sha256
 #
 # PRODUCED ARTIFACTS
 #   - Directory: releases/<version>/
 #   - Files:
-#       ecli_<version>_amd64.pkg
-#       ecli_<version>_amd64.pkg.sha256
+#       ecli_<version>_freebsd_<arch>.pkg
+#       ecli_<version>_freebsd_<arch>.pkg.sha256
 #
 # VERSIONING
 #   - The <version> is read from `pyproject.toml` → [project].version.
@@ -67,18 +67,18 @@
 #           run: |
 #             sh ./scripts/build-and-package-freebsd.sh
 #   - Next steps can upload/commit:
-#       releases/<version>/ecli_<version>_amd64.pkg
-#       releases/<version>/ecli_<version>_amd64.pkg.sha256
+#       releases/<version>/ecli_<version>_freebsd_<arch>.pkg
+#       releases/<version>/ecli_<version>_freebsd_<arch>.pkg.sha256
 #
 # QUICK VERIFICATION
 #   # Inspect package metadata:
-#   $ pkg info -F releases/<version>/ecli_<version>_amd64.pkg
+#   $ pkg info -F releases/<version>/ecli_<version>_freebsd_x86_64.pkg
 #
 #   # Inspect archive contents (structure under /usr/local):
-#   $ tar -tf releases/<version>/ecli_<version>_amd64.pkg | head
+#   $ tar -tf releases/<version>/ecli_<version>_freebsd_x86_64.pkg | head
 #
 #   # Verify checksum:
-#   $ sha256 -q releases/<version>/ecli_<version>_amd64.pkg
+#   $ sha256 -q releases/<version>/ecli_<version>_freebsd_x86_64.pkg
 #   # Compare against contents of the .sha256 file.
 #
 # TROUBLESHOOTING
@@ -357,14 +357,15 @@ EOF
   # Normalize arch for filename
   RAW_ARCH="$(uname -m 2>/dev/null || echo amd64)"
   case "$RAW_ARCH" in
-    amd64|x86_64) ARCH="amd64" ;;
+    amd64|x86_64) ARCH="x86_64" ;;
+    aarch64|arm64) ARCH="arm64" ;;
     *) ARCH="${RAW_ARCH}" ;;
   esac
 
   ORIG_PKG="$(ls -1 "$RELEASES_DIR/${PACKAGE_NAME}-${VERSION}"*.pkg 2>/dev/null | head -n1 || true)"
   [ -n "$ORIG_PKG" ] || { print_error "pkg create did not produce a .pkg file"; return 1; }
 
-  DEST_PKG="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_${ARCH}.pkg"
+  DEST_PKG="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_freebsd_${ARCH}.pkg"
   [ "$ORIG_PKG" != "$DEST_PKG" ] && mv -f "$ORIG_PKG" "$DEST_PKG"
 
   # SHA256 sidecar
