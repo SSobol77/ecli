@@ -134,6 +134,15 @@ ruff_cache/
 .re-commit-config.yaml
 sonar-project.properties
 
+# Local AI agent instruction packs
+AGENTS.md
+CLAUDE.md
+CODEX.md
+CURSOR.md
+.claude/
+.codex/
+.cursor/
+
 # Lock files (regenerate with uv)
 uv.lock
 
@@ -198,4 +207,3 @@ docker/*.log
 *~
 *.db
 *.sqlite3
-
