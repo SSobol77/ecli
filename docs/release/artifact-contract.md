@@ -73,11 +73,11 @@ The artifact basename must not include a directory component.
 Canonical script entrypoints are those referenced by `Makefile` and active workflows under `.github/workflows/`.
 
 Current-state note:
-- repository workflows and scripts use `packaging/pyinstaller/ecli.spec`; the
-  root `ecli.spec` is a compatibility wrapper.
-- deterministic release parity depends on keeping the PyInstaller spec,
-  Makefile targets, workflows, and packaging scripts aligned on the canonical
-  output names.
+- `packaging/pyinstaller/ecli.spec` is the single source of truth for
+  PyInstaller builds across all platforms.
+- deterministic release parity depends on keeping the canonical PyInstaller
+  spec, Makefile targets, workflows, and packaging scripts aligned on the
+  canonical output names.
 
 ## Naming Migration Notes
 

@@ -702,9 +702,9 @@ release-freebsd: package-freebsd-assert
 #
 # Notes:
 #  - Output files (strict):
-#       releases/<version>/ecli_<version>_macos_<arch>.dmg
-#       releases/<version>/ecli_<version>_macos_<arch>.dmg.sha256
-#  - <arch> is normalized from the host (x86_64 or arm64).
+#       releases/<version>/ecli_<version>_macos_universal2.dmg
+#       releases/<version>/ecli_<version>_macos_universal2.dmg.sha256
+#  - MACOS_ARCH defaults to universal2 for Phase 1.
 #  - For CI builds, see `.github/workflows/macos-dmg.yml`.
 # ---------------------------
 

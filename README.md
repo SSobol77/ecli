@@ -51,16 +51,20 @@ Download and install a pre-compiled package for your platform:
 
 ```bash
 # Debian/Ubuntu
-sudo apt install ./ecli_0.1.0_amd64.deb
+sudo apt install ./ecli_0.1.0_linux_x86_64.deb
 
 # Fedora/RHEL/Rocky
-sudo dnf install ./ecli_0.1.0_amd64.rpm
+sudo dnf install ./ecli_0.1.0_linux_x86_64.rpm
 
 # Windows (PowerShell)
-.\ecli_0.1.0_win_x64.exe
+.\ecli_0.1.0_win_x86_64.exe
+# SmartScreen warns on unsigned EXE; click "More info" -> "Run anyway".
+# Code signing is planned for v0.2.
 
 # macOS
 open ecli_0.1.0_macos_universal2.dmg
+# First launch is blocked by Gatekeeper; see docs/install/macos.md
+# for the one-time "Open Anyway" or xattr workaround.
 ```
 
 All packages available at [GitHub Releases](https://github.com/SSobol77/ecli/releases)
@@ -80,7 +84,7 @@ make run
 ### Install via Python Package Manager
 
 ```bash
-pip install ecli
+pip install ecli-editor
 ```
 
 ---
@@ -138,7 +142,7 @@ Download from [GitHub Releases](https://github.com/SSobol77/ecli/releases):
 **Option B: PyPI (Python Package Index)**
 
 ```bash
-pip install ecli
+pip install ecli-editor
 ```
 
 Requires Python 3.11+ and system dependencies listed above.
@@ -175,9 +179,8 @@ make help              # See all available build targets
 
 ECLI features a comprehensive multi-platform build system. For detailed information:
 
-- **Quick Start**: Read [BUILD_QUICK_REFERENCE.md](BUILD_QUICK_REFERENCE.md) (5 minutes)
-- **Complete Guide**: See [BUILD_SYSTEM.md](BUILD_SYSTEM.md) for all targets and options
-- **Makefile Overview**: Check [MAKEFILE_UPGRADE_SUMMARY.md](MAKEFILE_UPGRADE_SUMMARY.md)
+- **Build from Source**: Read [docs/contributor/build-from-source.md](docs/contributor/build-from-source.md)
+- **Packaging Flows**: See [docs/release/packaging-flows.md](docs/release/packaging-flows.md)
 
 #### Common Build Commands
 
@@ -232,13 +235,14 @@ Complete documentation is organized by audience:
 
 ### For Users
 - [Installation Guide](docs/contributor/install.md) - Detailed setup instructions
-- [Quick Reference](BUILD_QUICK_REFERENCE.md) - Build system quick start
+- [Build from Source](docs/contributor/build-from-source.md) - Build system quick start
 - [Getting Started](docs/contributor/development-setup.md) - First steps with ECLI
 
 ### For Developers
 - [Development Setup](docs/contributor/development-setup.md) - Development environment
 - [Architecture Overview](docs/architecture/current-architecture.md) - System design
-- [Build System](BUILD_SYSTEM.md) - Complete build documentation
+- [Packaging Flows](docs/release/packaging-flows.md) - Release packaging overview
+- [Build from Source](docs/contributor/build-from-source.md) - Local build commands
 - [Contributor Guide](docs/contributor/README.md) - Contributing to ECLI
 
 ### For System Administrators
@@ -368,14 +372,14 @@ ECLI is licensed under the [MIT License](LICENSE). See the LICENSE file for deta
 - **GitHub**: https://github.com/SSobol77/ecli
 - **Issues**: https://github.com/SSobol77/ecli/issues
 - **Discussions**: https://github.com/SSobol77/ecli/discussions
-- **PyPI**: https://pypi.org/project/ecli/
+- **PyPI**: https://pypi.org/project/ecli-editor/
 - **Releases**: https://github.com/SSobol77/ecli/releases
 
 ---
 
 ## 💬 Support
 
-- **Documentation**: Read [Build Quick Reference](BUILD_QUICK_REFERENCE.md) and [Build System Guide](BUILD_SYSTEM.md)
+- **Documentation**: Read [Build from Source](docs/contributor/build-from-source.md) and [Packaging Flows](docs/release/packaging-flows.md)
 - **Community**: GitHub Discussions
 - **Bugs**: GitHub Issues
 - **Development**: See [Contributing](docs/contributor/README.md)

@@ -5,7 +5,7 @@
 # This script:
 #   1) Enters project root deterministically.
 #   2) Reads version from pyproject.toml (Python 3.11 tomllib; 3.10 tomli fallback).
-#   3) Builds a standalone binary via PyInstaller (uses ecli.spec if present).
+#   3) Builds a standalone binary via PyInstaller (uses packaging/pyinstaller/ecli.spec if present).
 #   4) Stages a minimal FHS payload for RPM.
 #   5) Builds .rpm with FPM, places artifacts under releases/<version>/.
 #   6) Normalizes file name to ecli_<version>_linux_<arch>.rpm and generates .sha256.
@@ -110,8 +110,8 @@ echo "==> Building executable with PyInstaller"
 rm -rf "${BUILD_DIR}"
 mkdir -p "${STAGING_DIR}" "${DOC_DIR}" "${MAN_DIR}" "${BIN_DIR}" "${APPS_DIR}" "${ICON_DIR}"
 
-if [[ -f "ecli.spec" ]]; then
-  pyinstaller ecli.spec --clean --noconfirm
+if [[ -f "packaging/pyinstaller/ecli.spec" ]]; then
+  pyinstaller packaging/pyinstaller/ecli.spec --clean --noconfirm
 else
   # Fallback: single-file CLI with common dynamic deps collected
   pyinstaller main.py \

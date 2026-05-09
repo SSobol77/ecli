@@ -5,7 +5,7 @@
 # This script:
 #   1) Enters the project root deterministically.
 #   2) Reads the version from pyproject.toml (Python 3.11 tomllib; 3.10 tomli fallback if needed).
-#   3) Builds a standalone executable via PyInstaller (uses ecli.spec if present; otherwise a safe fallback).
+#   3) Builds a standalone executable via PyInstaller (uses packaging/pyinstaller/ecli.spec if present; otherwise a safe fallback).
 #   4) Stages a minimal FHS payload for Debian (/usr/bin, /usr/share/{applications,icons,doc,man}).
 #   5) Produces a .deb with FPM and places artifacts under releases/<version>/.
 #   6) Optionally generates a .sha256 checksum next to the .deb (if checksum step is enabled below).
@@ -61,8 +61,8 @@ echo "==> Version: ${VERSION}"
 rm -rf build/ dist/
 
 echo "==> Building executable with PyInstaller"
-if [[ -f "ecli.spec" ]]; then
-  pyinstaller ecli.spec --clean --noconfirm
+if [[ -f "packaging/pyinstaller/ecli.spec" ]]; then
+  pyinstaller packaging/pyinstaller/ecli.spec --clean --noconfirm
 else
   # Fallback: force src layout and critical deps
   pyinstaller main.py \

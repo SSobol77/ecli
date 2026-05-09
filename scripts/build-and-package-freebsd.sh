@@ -19,7 +19,7 @@
 #        python3.11 -m pip install \
 #          aiohttp aiosignal yarl multidict frozenlist \
 #          python-dotenv toml chardet pyperclip wcwidth pygments tato PyYAML
-#   3) Builds a single-file ECLI binary using PyInstaller (uses ecli.spec if present).
+#   3) Builds a single-file ECLI binary using PyInstaller (uses packaging/pyinstaller/ecli.spec if present).
 #   4) Stages files under /usr/local/... following FreeBSD conventions
 #      (bin/, share/{applications,icons,doc}, man/).
 #   5) Generates +MANIFEST and creates a native .pkg via `pkg create`.
@@ -40,7 +40,7 @@
 #   - FreeBSD 14.x host or VM with Internet access to pkg(8) repos.
 #   - Git installed (the script installs it if missing).
 #   - `pyproject.toml` and `main.py` present at repo root.
-#   - Optional: `ecli.spec` for a fine-tuned PyInstaller build.
+#   - Optional: `packaging/pyinstaller/ecli.spec` for a fine-tuned PyInstaller build.
 #
 # USAGE (LOCAL, INSIDE FREEBSD 14.x)
 #   $ sh scripts/build-and-package-freebsd.sh
@@ -85,7 +85,7 @@
 #   - "pkg create did not produce a .pkg file":
 #       Ensure the build finished and staging tree exists under build/freebsd_pkg_staging.
 #   - "PyInstaller output not found in dist/":
-#       Check PyInstaller logs. Ensure `main.py` (or `ecli.spec`) is correct and
+#       Check PyInstaller logs. Ensure `main.py` (or `packaging/pyinstaller/ecli.spec`) is correct and
 #       required Python deps are installed.
 #   - Missing system packages:
 #       The script runs `pkg update -f` and installs exact FreeBSD 14.x package names.
@@ -208,8 +208,8 @@ build_binary() {
   rm -rf build/ dist/
 
   print_step "Building one-file binary with PyInstaller..."
-  if [ -f "ecli.spec" ]; then
-    pyinstaller ecli.spec --clean --noconfirm
+  if [ -f "packaging/pyinstaller/ecli.spec" ]; then
+    pyinstaller packaging/pyinstaller/ecli.spec --clean --noconfirm
   else
     # Fallback specless build (collect all required hidden imports)
     pyinstaller main.py \

@@ -48,8 +48,8 @@ Write-Info "Cleaning build/ dist/..."
 Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
 
 Write-Info "Building onefile exe with PyInstaller..."
-if (Test-Path "ecli.spec") {
-  pyinstaller ecli.spec --clean --noconfirm
+if (Test-Path "packaging/pyinstaller/ecli.spec") {
+  pyinstaller packaging/pyinstaller/ecli.spec --clean --noconfirm
 } else {
   pyinstaller main.py `
     --name ecli `

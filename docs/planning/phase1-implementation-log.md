@@ -194,3 +194,189 @@ were not executed on this Debian 13 workstation:
 - `make validate-macos-contract` against a real macOS-built DMG.
 
 These checks require a macOS runner with `lipo`, `codesign`, and `hdiutil`.
+
+## Workstream A - PR #14 Pre-Merge Cleanup
+
+Timestamp: 2026-05-10
+
+Branch: `feat/phase1-macos-universal2`
+
+### Verification: No Stale Root Spec References in Scripts
+
+Command:
+
+```sh
+grep -rn "ecli\.spec" scripts/ | grep -v "packaging/pyinstaller/ecli.spec"
+```
+
+Output:
+
+```text
+```
+
+Result: passed.
+
+### Verification: Root Spec Removed
+
+Command:
+
+```sh
+ls -la ecli.spec 2>&1
+```
+
+Output:
+
+```text
+ls: cannot access 'ecli.spec': No such file or directory
+```
+
+Result: passed.
+
+### Verification: Gitignore Tracks Only Canonical Spec Exception
+
+Command:
+
+```sh
+grep "ecli\.spec" .gitignore
+```
+
+Output:
+
+```text
+!packaging/pyinstaller/ecli.spec
+```
+
+Result: passed.
+
+### Verification: README Naming Is Canonical
+
+Command:
+
+```sh
+grep -n "ecli_0.1.0" README.md
+```
+
+Output:
+
+```text
+54:sudo apt install ./ecli_0.1.0_linux_x86_64.deb
+57:sudo dnf install ./ecli_0.1.0_linux_x86_64.rpm
+60:.\ecli_0.1.0_win_x86_64.exe
+65:open ecli_0.1.0_macos_universal2.dmg
+```
+
+Result: passed.
+
+### Verification: README PyPI Install Command
+
+Command:
+
+```sh
+grep -n "pip install" README.md
+```
+
+Output:
+
+```text
+87:pip install ecli-editor
+145:pip install ecli-editor
+```
+
+Result: passed.
+
+### Verification: Stale BUILD Docs Removed
+
+Command:
+
+```sh
+ls -la BUILD_QUICK_REFERENCE.md BUILD_SYSTEM.md MAKEFILE_UPGRADE_SUMMARY.md 2>&1
+```
+
+Output:
+
+```text
+ls: cannot access 'BUILD_QUICK_REFERENCE.md': No such file or directory
+ls: cannot access 'BUILD_SYSTEM.md': No such file or directory
+ls: cannot access 'MAKEFILE_UPGRADE_SUMMARY.md': No such file or directory
+```
+
+Result: passed.
+
+### Verification: No README References to Deleted BUILD Docs
+
+Command:
+
+```sh
+grep -n "BUILD_QUICK_REFERENCE\|BUILD_SYSTEM\|MAKEFILE_UPGRADE_SUMMARY" README.md
+```
+
+Output:
+
+```text
+```
+
+Result: passed.
+
+### Verification: Canonical Spec Is Tracked
+
+Command:
+
+```sh
+git ls-files packaging/pyinstaller/ecli.spec
+```
+
+Output:
+
+```text
+packaging/pyinstaller/ecli.spec
+```
+
+Result: passed.
+
+### Verification: Universal2 References Remain in Makefile and macOS Script
+
+Command:
+
+```sh
+grep -n "macos_universal2" Makefile scripts/build-and-package-macos.sh
+```
+
+Output:
+
+```text
+Makefile:705:#       releases/<version>/ecli_<version>_macos_universal2.dmg
+Makefile:706:#       releases/<version>/ecli_<version>_macos_universal2.dmg.sha256
+scripts/build-and-package-macos.sh:6:#   releases/<version>/ecli_<version>_macos_universal2.dmg
+scripts/build-and-package-macos.sh:7:#   releases/<version>/ecli_<version>_macos_universal2.dmg.sha256
+scripts/build-and-package-macos.sh:75:UNIVERSAL_DIR="build/macos_universal2"
+```
+
+Result: passed.
+
+### Verification: Smoke Tests
+
+Command:
+
+```sh
+python3 -m pytest tests/test_smoke.py -v
+```
+
+Output:
+
+```text
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.0.3, pluggy-1.5.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/ssb/Code/Ecli/ecli
+configfile: pyproject.toml
+plugins: mock-3.15.1, asyncio-1.3.0, aiohttp-1.1.0, cov-7.1.0, anyio-4.8.0, typeguard-4.4.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 2 items
+
+tests/test_smoke.py::test_package_imports PASSED                         [ 50%]
+tests/test_smoke.py::test_version_format PASSED                          [100%]
+
+============================== 2 passed in 0.01s ===============================
+```
+
+Result: passed.
