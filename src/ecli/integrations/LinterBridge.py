@@ -18,6 +18,7 @@ import logging
 import os
 import queue
 import re
+import signal
 import subprocess
 import sys
 import threading
@@ -47,6 +48,7 @@ class LinterBridge:
         self.lsp_reader: Optional[threading.Thread] = None
         self.lsp_message_q: queue.Queue[dict[str, Any]] = queue.Queue(maxsize=256)
         self.is_lsp_initialized: bool = False
+        self._shutting_down: bool = False
         self.lsp_seq_id: int = 0
         self.lsp_doc_versions: dict[str, int] = {}
 
@@ -379,16 +381,47 @@ class LinterBridge:
 
     def shutdown(self) -> None:
         """Gracefully shuts down the LSP server and related threads."""
+        if self._shutting_down:
+            return
+        self._shutting_down = True
         logging.info("Shutting down LinterBridge and LSP server...")
-        if self.lsp_proc and self.lsp_proc.poll() is None:
+        try:
+            proc = self.lsp_proc
+            if proc and proc.poll() is None:
+                try:
+                    self._send_lsp("shutdown", is_request=True)
+                    self._send_lsp("exit")
+                    proc.wait(timeout=2)
+                except Exception as e:
+                    logging.warning(f"Graceful LSP shutdown did not complete: {e}")
+                    self._terminate_lsp_process(proc)
+            if self.lsp_reader and self.lsp_reader.is_alive():
+                self.lsp_reader.join(timeout=2)
+            self.is_lsp_initialized = False
+            self.lsp_proc = None
+            self.lsp_reader = None
+        finally:
+            self._shutting_down = False
+
+    def cleanup(self) -> None:
+        """Compatibility alias for shutdown used by application cleanup paths."""
+        self.shutdown()
+
+    def _terminate_lsp_process(self, proc: subprocess.Popen[bytes]) -> None:
+        """Terminate the LSP process group on POSIX, with kill fallback."""
+        try:
+            if sys.platform != "win32":
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            else:
+                proc.terminate()
+            proc.wait(timeout=3)
+        except Exception as exc:
+            logging.warning("Forcing LSP process kill due to: %s", exc)
             try:
-                self._send_lsp("shutdown", is_request=True)
-                self._send_lsp("exit")
-                self.lsp_proc.terminate()
-                self.lsp_proc.wait(timeout=2)
-            except (subprocess.TimeoutExpired, Exception) as e:
-                logging.warning(f"Forcing LSP process kill due to: {e}")
-                self.lsp_proc.kill()
-        self.is_lsp_initialized = False
-        self.lsp_proc = None
-        self.lsp_reader = None
+                if sys.platform != "win32":
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                else:
+                    proc.kill()
+                proc.wait(timeout=3)
+            except Exception:
+                logging.debug("Failed to force-kill LSP process.", exc_info=True)

@@ -57,7 +57,7 @@ class BaseAiClient:
         self.session: Optional[aiohttp.ClientSession] = None
         logger.info(f"Initialized {self.__class__.__name__} for model {self.model}")
 
-    async def _get_session(self) -> aiohttp.ClientSession:
+    def _get_session(self) -> aiohttp.ClientSession:
         """Get a valid aiohttp session, creating one if needed.
 
         Returns:
@@ -66,11 +66,6 @@ class BaseAiClient:
         if self.session is None or self.session.closed:
             logger.debug("Creating new aiohttp.ClientSession")
             self.session = aiohttp.ClientSession()
-        # Small await to ensure this coroutine uses asynchronous features
-        # (satisfies static analysis rules that require `async` functions to
-        # perform at least one await). This yields control to the event loop
-        # but does not change runtime behavior for the session creation.
-        await asyncio.sleep(0)
         return self.session
 
     async def close(self) -> None:
@@ -168,7 +163,7 @@ class OpenAiClient(BaseAiClient):
 
         logger.debug("Sending request to OpenAI API...")
         try:
-            session = await self._get_session()
+            session = self._get_session()
             timeout = aiohttp.ClientTimeout(total=90)
             async with session.post(
                 self.API_URL, headers=headers, json=body, timeout=timeout
@@ -266,7 +261,7 @@ class GeminiClient(BaseAiClient):
         logger.debug(f"Sending request to Gemini API: {url}")
 
         try:
-            session = await self._get_session()
+            session = self._get_session()
             timeout = aiohttp.ClientTimeout(total=90)
             async with session.post(
                 url, headers=headers, json=body, timeout=timeout
@@ -379,7 +374,7 @@ class MistralClient(BaseAiClient):
 
         logger.debug("Sending request to Mistral API...")
         try:
-            session = await self._get_session()
+            session = self._get_session()
             timeout = aiohttp.ClientTimeout(total=90)
             async with session.post(
                 self.API_URL, headers=headers, json=body, timeout=timeout
@@ -490,7 +485,7 @@ class HuggingFaceClient(BaseAiClient):
         logger.debug(f"Sending request to Hugging Face API: {url}")
 
         try:
-            session = await self._get_session()
+            session = self._get_session()
             timeout = aiohttp.ClientTimeout(total=120)
             async with session.post(
                 url, headers=headers, json=body, timeout=timeout
@@ -649,7 +644,7 @@ class ClaudeClient(BaseAiClient):
 
         logger.debug("Sending request to Claude API...")
         try:
-            session = await self._get_session()
+            session = self._get_session()
             timeout = aiohttp.ClientTimeout(total=90)
             async with session.post(
                 self.API_URL, headers=headers, json=body, timeout=timeout
@@ -766,7 +761,7 @@ class GrokClient(BaseAiClient):
 
         logger.debug("Sending request to Grok API...")
         try:
-            session = await self._get_session()
+            session = self._get_session()
             timeout = aiohttp.ClientTimeout(total=90)
             async with session.post(
                 self.API_URL, headers=headers, json=body, timeout=timeout

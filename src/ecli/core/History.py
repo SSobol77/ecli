@@ -159,7 +159,7 @@ class History:
                         if not (col <= len(self.editor.text[row]) and self.editor.text[row][
                                                                col:col + len_inserted] == text_that_was_inserted):
                             logging.warning(
-                                f"Undo insert: Text mismatch for deletion at [{row},{col}] len {len_inserted}. Expected '{text_that_was_inserted}', found '{self.text[row][col:col + len_inserted]}'.")
+                                f"Undo insert: Text mismatch for deletion at [{row},{col}] len {len_inserted}. Expected '{text_that_was_inserted}', found '{self.editor.text[row][col:col + len_inserted]}'.")
                             # Potentially raise error or try to proceed if desired, for now, log and proceed carefully.
                             # This indicates a potential inconsistency in undo stack or text state.
                         self.editor.text[row] = self.editor.text[row][:col] + self.editor.text[row][col + len_inserted:]
@@ -531,4 +531,3 @@ class History:
                     f"Redo for action type '{action_type}' resulted in no effective change from current state.")
 
             return final_redraw_needed or (self.editor.status_message != original_status)
-

@@ -29,7 +29,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import toml
 
@@ -52,7 +52,7 @@ HUGGINGFACE_API_KEY=
 
 # This dictionary is a direct, hardcoded representation of `default_config.toml`.
 # It serves as the ultimate fallback, ensuring the application can ALWAYS start.
-DEFAULT_CONFIG: Dict[str, Any] = {
+DEFAULT_CONFIG: dict[str, Any] = {
     "colors": {"error": "red", "status": "bright_white", "green": "green"},
     "editor": {
         "use_system_clipboard": True, "default_new_filename": "new_file.py",
@@ -204,7 +204,7 @@ def ensure_user_config_exists() -> None:
 
 
 
-def load_config() -> Dict[str, Any]:
+def load_config() -> dict[str, Any]:
     """
     Loads and merges configurations, ensuring the application can always run.
     """
@@ -225,7 +225,7 @@ def load_config() -> Dict[str, Any]:
     return final_config
 
 
-def get_file_icon(filename: Optional[str], config: Dict[str, Any]) -> str:
+def get_file_icon(filename: Optional[str], config: dict[str, Any]) -> str:
     """
     Returns an icon string for a given filename based on the configuration.
 
@@ -280,27 +280,35 @@ def get_file_icon(filename: Optional[str], config: Dict[str, Any]) -> str:
     return text_icon
 
 
-def safe_run(cmd: List[str], **kwargs: Any) -> subprocess.CompletedProcess:
+def safe_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
     """
     Executes a command safely, capturing output and handling common exceptions.
     """
+    timeout = kwargs.pop("timeout", None)
+    if timeout is not None and not isinstance(timeout, int | float):
+        logger.warning("Invalid timeout type %s; running without timeout.", type(timeout).__name__)
+        timeout = None
+    elif timeout is not None and timeout <= 0:
+        logger.warning("Invalid timeout value %s; using default 30s.", timeout)
+        timeout = 30
+
     try:
         return subprocess.run(
             cmd, capture_output=True, text=True, check=False,
-            encoding="utf-8", errors="replace", **kwargs,
+            encoding="utf-8", errors="replace", timeout=timeout, **kwargs,
         )
     except FileNotFoundError as e:
         logger.error(f"Command not found: {cmd[0]!r}", exc_info=True)
         return subprocess.CompletedProcess(cmd, 127, stdout="", stderr=str(e))
     except subprocess.TimeoutExpired as e:
-        logger.warning(f"Command timed out: {' '.join(cmd)}")
-        return subprocess.CompletedProcess(cmd, -9, stdout=e.stdout or "", stderr=e.stderr or "")
+        logger.warning(f"Command timed out after {timeout}s: {' '.join(cmd)}")
+        return subprocess.CompletedProcess(cmd, -15, stdout=e.stdout or "", stderr=e.stderr or "")
     except Exception as e:
         logger.exception(f"An unexpected error occurred while running command: {' '.join(cmd)}")
         return subprocess.CompletedProcess(cmd, -1, stdout="", stderr=str(e))
 
 
-def deep_merge(base: Dict, override: Dict) -> Dict:
+def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
     """
     Recursively merges the `override` dictionary into the `base` dictionary.
     """

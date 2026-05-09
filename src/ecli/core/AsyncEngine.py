@@ -98,6 +98,7 @@ class AsyncEngine:
         # to_ui_queue sends only dictionaries with results
         self.to_ui_queue: queue.Queue[dict[str, Any]] = to_ui_queue
         self._tasks: set[asyncio.Task[Any]] = set()
+        self._tasks_lock = threading.Lock()
         self.config: dict[str, Any] = config
         self._stop_event = asyncio.Event()
 
@@ -152,8 +153,9 @@ class AsyncEngine:
 
                 # Run the task processing as a background asyncio.Task
                 task = self.loop.create_task(self.dispatch_task(task_data))
-                self._tasks.add(task)
-                task.add_done_callback(self._tasks.discard)
+                with self._tasks_lock:
+                    self._tasks.add(task)
+                task.add_done_callback(self._remove_task)
 
             except Exception as e:
                 # If the loop is still running, this is a real error
@@ -226,12 +228,19 @@ class AsyncEngine:
         """Thread-safe method for the UI thread to submit a task."""
         self.from_ui_queue.put(task_data)
 
+    def _remove_task(self, task: asyncio.Task[Any]) -> None:
+        """Remove a completed task from the tracking set."""
+        with self._tasks_lock:
+            self._tasks.discard(task)
+
     async def _shutdown_tasks(self) -> None:
         """Internal coroutine to cancel all running async tasks."""
-        if not self._tasks:
+        with self._tasks_lock:
+            tasks_to_cancel = list(self._tasks)
+
+        if not tasks_to_cancel:
             return
-        logging.info(f"Cancelling {len(self._tasks)} outstanding async tasks...")
-        tasks_to_cancel = list(self._tasks)
+        logging.info(f"Cancelling {len(tasks_to_cancel)} outstanding async tasks...")
         for task in tasks_to_cancel:
             task.cancel()
 

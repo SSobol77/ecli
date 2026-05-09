@@ -113,16 +113,16 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
     if config is None:
         config = {}
     # Main Application Logger (e.g., for editor.log)
-    log_filename = "editor.log"
+    log_dir = os.path.join(os.path.expanduser("~"), ".config", "ecli", "logs")
+    log_filename = os.path.join(log_dir, "editor.log")
     # Use .get safely for nested dictionaries
     logging_config = config.get("logging", {})
     log_file_level_str = logging_config.get("file_level", "DEBUG").upper()
     log_file_level = getattr(logging, log_file_level_str, logging.DEBUG)
 
-    log_dir = os.path.dirname(log_filename)
-    if log_dir and not os.path.exists(log_dir):
+    if not os.path.exists(log_dir):
         try:
-            os.makedirs(log_dir)
+            os.makedirs(log_dir, exist_ok=True)
         except OSError as e_mkdir:
             print(
                 f"Error creating log directory '{log_dir}': {e_mkdir}", file=sys.stderr
@@ -164,11 +164,11 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
     separate_error_log_enabled = logging_config.get("separate_error_log", False)
     error_file_handler = None
     if separate_error_log_enabled:
-        error_log_filename = "error.log"
+        error_log_filename = os.path.join(log_dir, "error.log")
         try:
             error_log_dir = os.path.dirname(error_log_filename)
             if error_log_dir and not os.path.exists(error_log_dir):
-                os.makedirs(error_log_dir)
+                os.makedirs(error_log_dir, exist_ok=True)
 
             error_file_handler = logging.handlers.RotatingFileHandler(
                 error_log_filename,
@@ -198,6 +198,9 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
     root_logger.setLevel(
         log_file_level
     )  # Set root to the most verbose level needed by file handlers
+    logging.getLogger("aiohttp").setLevel(logging.WARNING)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger("asyncio").setLevel(logging.INFO)
 
     # Key Event Logger
     key_event_logger = logging.getLogger("ecli.keyevents")
@@ -208,10 +211,10 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
 
     if os.environ.get("MOOPS2_KEYTRACE", "").lower() in {"1", "true", "yes"}:
         try:
-            key_trace_filename = "keytrace.log"
+            key_trace_filename = os.path.join(log_dir, "keytrace.log")
             key_trace_log_dir = os.path.dirname(key_trace_filename)
             if key_trace_log_dir and not os.path.exists(key_trace_log_dir):
-                os.makedirs(key_trace_log_dir)
+                os.makedirs(key_trace_log_dir, exist_ok=True)
 
             key_trace_handler = logging.handlers.RotatingFileHandler(
                 key_trace_filename,

@@ -1406,6 +1406,8 @@ class Ecli:
             self._auto_save_stop_event.set()
         if self.async_engine:
             self.async_engine.stop()
+        if self.linter_bridge:
+            self.linter_bridge.shutdown()
 
     # -------------  Sets Pygments lexer - 4 methods:  ------------
     def detect_language(self) -> None:

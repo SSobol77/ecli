@@ -1,0 +1,31 @@
+<!--
+Path: docs/planning/migration-map.md
+File: migration-map.md
+Project: Ecli
+Site: www.ecli.io
+Author: Siergej Sobolewski
+License: Apache License, Version 2.0
+Date: 19/04/2026
+-->
+# Documentation Migration Map
+
+## Granular Migration Table
+
+| Old file | New location(s) | Migration type | Status | Validation notes |
+|---|---|---|---|---|
+| `docs/architecture.md` | `docs/architecture/current-architecture.md`, `target-architecture.md`, `module-contracts.md` | split + rewrite | Complete | traceability and matrix coverage added |
+| `docs/audit_report.md` | archived + mapped into planning/config/release docs | archive + redistribute | Complete | risk mapping maintained in `risk-register.md` |
+| `docs/roadmap.md` | `docs/planning/roadmap.md` | rewrite | Complete | phase governance expanded |
+| `docs/engineering_task.md` | `docs/planning/engineering-plan.md`, `execution-sequencing.md` | split + rewrite | Complete | execution gates added |
+| `docs/BUILD_FROM_SOURCE.md` | `docs/contributor/build-from-source.md` | rewrite | Complete | operational matrix added |
+| `docs/INSTALL.md` | `docs/contributor/install.md` | rewrite | Complete | support matrix added |
+| `docs/freebsd-pkg-build-scripts-list.md` | `docs/release/packaging-flows.md` | normalize + merge | Complete | governance integrated with release contract |
+
+## Unresolved Leftovers
+
+- Validation-required details for exact legacy config key inventory remain open and tracked in `docs/config/config-migration-policy.md`.
+
+## Archive Status Notes
+
+- Legacy placeholders in `docs/archive/` are historical pointers only.
+- Active references must target non-archive docs.

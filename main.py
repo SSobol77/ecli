@@ -31,11 +31,12 @@ from dotenv import load_dotenv
 try:
     user_config_dir = Path.home() / ".config" / "ecli"
     dotenv_path = user_config_dir / ".env"
-    load_dotenv(dotenv_path=dotenv_path)
-except Exception:
-    # If HOME is missing or any edge-case occurs, ignore silently here.
-    # Later, the app may fail gracefully if a required key is absent.
-    pass
+    if dotenv_path.exists():
+        load_dotenv(dotenv_path=dotenv_path)
+except (RuntimeError, PermissionError, OSError) as e:
+    print(f"Warning: Could not load .env file: {e}", file=sys.stderr)
+except Exception as e:
+    print(f"Warning: Unexpected error loading .env, continuing with defaults: {e}", file=sys.stderr)
 
 # --- Step 2: Set up the Python Path ---
 # Ensure the 'ecli' package is importable for both source and bundled runs.
@@ -78,8 +79,17 @@ def _resolve_cli_path(argv: list[str]) -> Optional[Path]:
     if not raw:
         return None
     try:
-        return Path(raw).expanduser()
-    except Exception:
+        candidate = Path(raw).expanduser()
+        path_str = str(candidate)
+        if len(path_str) > 4096:
+            logger.warning("Provided path is too long: %r", raw)
+            return None
+        return candidate
+    except (RuntimeError, ValueError) as e:
+        logger.warning("Invalid path provided: %r - %s", raw, e)
+        return None
+    except Exception as e:
+        logger.error("Unexpected error resolving path %r: %s", raw, e)
         return None
 
 
