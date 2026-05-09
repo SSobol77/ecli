@@ -28,6 +28,48 @@ Copyright: (c) 2026 Siergej Sobolewski
 - Missing required artifacts must block release.
 - Workflow references to non-existent files must be resolved as release blockers.
 
+## PyPI Namespace Pre-Reservation
+
+The Python distribution name is `ecli-editor`; the import package and console
+script remain `ecli`.
+
+Before enabling a publish workflow for a new package name:
+
+1. Confirm the configured distribution name:
+
+   ```sh
+   python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["name"])'
+   ```
+
+2. Check whether the PyPI namespace already exists:
+
+   ```sh
+   python3 -m pip index versions ecli-editor
+   ```
+
+3. If the project does not exist, build and upload a minimal placeholder release
+   from a clean maintainer workstation using a scoped PyPI API token:
+
+   ```sh
+   python3 -m build
+   python3 -m twine check --strict dist/*
+   python3 -m twine upload dist/*
+   ```
+
+4. Rotate or replace any token used for the bootstrap upload with a
+   project-scoped token. Store only the scoped token in GitHub Secrets until
+   Trusted Publishers is configured.
+
+5. Re-run the namespace guard:
+
+   ```sh
+   python3 -m pip index versions ecli-editor
+   ```
+
+Do not embed PyPI API tokens in repository files, workflow YAML, release notes,
+or documentation. Phase 1 should migrate publishing to PyPI Trusted Publishers
+(OIDC) so GitHub Actions can publish without a static API token.
+
 ## Future Hardening
 
 Protected GitHub environments are recommended once the project has at least two

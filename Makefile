@@ -36,20 +36,7 @@ WIN_ARCH ?= x86_64
 -include $(RELEASE_DIR)/.win.env
 
 define verify_sha256
-	@artifact="$(1)"; \
-	sidecar="$$artifact.sha256"; \
-	test -f "$$artifact" || (echo "Missing $$artifact"; exit 2); \
-	test -f "$$sidecar" || (echo "Missing $$sidecar"; exit 3); \
-	dir="$$(dirname "$$artifact")"; \
-	base="$$(basename "$$artifact")"; \
-	if command -v sha256sum >/dev/null 2>&1; then \
-		(cd "$$dir" && sha256sum -c "$$base.sha256") || (echo "checksum mismatch: $$artifact"; exit 4); \
-	elif command -v shasum >/dev/null 2>&1; then \
-		(cd "$$dir" && shasum -a 256 -c "$$base.sha256") || (echo "checksum mismatch: $$artifact"; exit 4); \
-	else \
-		echo "Missing SHA256 tool: sha256sum or shasum"; \
-		exit 5; \
-	fi
+	@scripts/verify-artifact.sh "$(1)"
 endef
 
 define validate_if_present
