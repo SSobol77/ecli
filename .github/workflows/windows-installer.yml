@@ -1,15 +1,19 @@
 name: Windows Installer
 
-on:
+"on":
   workflow_dispatch:
   push:
     branches: [ "main" ]
     paths:
+      - ".github/workflows/windows-installer.yml"
       - "src/**"
       - "scripts/build-and-package-windows.ps1"
       - "packaging/windows/nsis/**"
       - "ecli.spec"
       - "pyproject.toml"
+
+permissions:
+  contents: read
 
 jobs:
   build-windows:
@@ -24,13 +28,14 @@ jobs:
           architecture: "x64"
 
       - name: Install NSIS
-        run: choco install nsis -y
+        shell: pwsh
+        run: |
+          choco install nsis -y
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
       - name: Build Installer
         shell: pwsh
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install pyinstaller aiohttp aiosignal yarl multidict frozenlist python-dotenv toml chardet pyperclip wcwidth pygments tato PyYAML
           ./scripts/build-and-package-windows.ps1
 
       - name: Read version
@@ -40,6 +45,18 @@ jobs:
           VER=$(awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $2; exit}' pyproject.toml)
           echo "version=$VER" >> "$GITHUB_OUTPUT"
 
+      - name: Verify artifact contract
+        shell: pwsh
+        run: |
+          $version = "${{ steps.ver.outputs.version }}"
+          $exe = "releases\$version\ecli_${version}_win_x64.exe"
+          $sha = "$exe.sha256"
+          if (-not (Test-Path $exe)) { throw "Missing $exe" }
+          if (-not (Test-Path $sha)) { throw "Missing $sha" }
+          $expected = (Get-Content $sha -Raw).Trim().Split()[0].ToUpperInvariant()
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToUpperInvariant()
+          if ($actual -ne $expected) { throw "SHA256 mismatch for $exe" }
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -47,3 +64,4 @@ jobs:
           path: |
             releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x64.exe
             releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x64.exe.sha256
+          if-no-files-found: error

@@ -1,13 +1,37 @@
-# .github/workflows/ci.yml
 name: CI
 
-on:
+"on":
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/ci.yml"
+      - "main.py"
+      - "pyproject.toml"
+      - "src/**"
+      - "tests/**"
   pull_request:
     branches: [main]
+    paths:
+      - ".github/workflows/ci.yml"
+      - "main.py"
+      - "pyproject.toml"
+      - "src/**"
+      - "tests/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -20,22 +44,36 @@ jobs:
         run: pipx install uv
 
       - name: Sync deps
-        run: uv sync --frozen
+        run: |
+          if [ -f uv.lock ]; then
+            uv sync --frozen --extra dev
+          else
+            uv sync --extra dev
+          fi
 
       - name: Lint (ruff)
-        run: uv run ruff check src tests
+        run: |
+          if [ -d tests ]; then
+            uv run ruff check src tests
+          else
+            uv run ruff check src
+          fi
 
       - name: Format check (ruff)
-        run: uv run ruff format --check src tests
+        run: |
+          if [ -d tests ]; then
+            uv run ruff format --check src tests
+          else
+            uv run ruff format --check src
+          fi
 
       - name: Pytest with coverage
+        if: ${{ hashFiles('tests/**') != '' }}
         run: uv run pytest --cov -q
 
       - name: SonarQube Scan
+        if: ${{ env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' && hashFiles('coverage.xml') != '' }}
         uses: sonarsource/sonarqube-scan-action@v2
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
         with:
           args: >
             -Dsonar.projectKey=ecli

@@ -1,11 +1,11 @@
-# .github/workflows/freebsd-pkg.yml
 name: FreeBSD 14 .pkg
 
-on:
+"on":
   workflow_dispatch:
   push:
     branches: [ "main" ]
     paths:
+      - ".github/workflows/freebsd-pkg.yml"
       - "src/**"
       - "packaging/**"
       - "scripts/build-and-package-freebsd.sh"
@@ -13,7 +13,7 @@ on:
       - "pyproject.toml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-freebsd-pkg:
@@ -48,20 +48,31 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          mapfile -t PKGS < <(ls -1 releases/*/ecli-*.pkg 2>/dev/null || true)
-          mapfile -t SHAS < <(ls -1 releases/*/ecli-*.pkg.sha256 2>/dev/null || true)
+          mapfile -t PKGS < <(ls -1 releases/*/ecli_*_amd64.pkg 2>/dev/null || true)
+          mapfile -t SHAS < <(ls -1 releases/*/ecli_*_amd64.pkg.sha256 2>/dev/null || true)
           if (( ${#PKGS[@]} == 0 )); then
             echo "No .pkg files found under releases/**/ — build failed or copyback disabled" >&2
             exit 2
           fi
-          echo "pkg_path=${PKGS[-1]}"       >> "$GITHUB_OUTPUT"
-          if (( ${#SHAS[@]} )); then
-            echo "checksum_path=${SHAS[-1]}" >> "$GITHUB_OUTPUT"
-          else
-            echo "checksum_path="            >> "$GITHUB_OUTPUT"
+          if (( ${#SHAS[@]} == 0 )); then
+            echo "No .pkg.sha256 files found under releases/**/" >&2
+            exit 3
           fi
-          echo "Found: ${PKGS[-1]}"
-          [[ -n "${SHAS[-1]:-}" ]] && echo "Found checksum: ${SHAS[-1]}"
+          echo "pkg_path=${PKGS[-1]}" >> "$GITHUB_OUTPUT"
+          echo "checksum_path=${SHAS[-1]}" >> "$GITHUB_OUTPUT"
+          echo "Found package: ${PKGS[-1]}"
+          echo "Found checksum: ${SHAS[-1]}"
+
+      - name: Verify checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          PKG="${{ steps.find_pkg.outputs.pkg_path }}"
+          SHA="${{ steps.find_pkg.outputs.checksum_path }}"
+          expected="$(awk '{print $1; exit}' "$SHA")"
+          actual="$(sha256sum "$PKG" | awk '{print $1}')"
+          test "$actual" = "$expected"
+          echo "Verified $PKG"
 
       - name: Upload artifact (.pkg and checksum)
         uses: actions/upload-artifact@v4
@@ -71,17 +82,3 @@ jobs:
             ${{ steps.find_pkg.outputs.pkg_path }}
             ${{ steps.find_pkg.outputs.checksum_path }}
           if-no-files-found: error
-
-      - name: Commit .pkg and checksum into repository
-        if: ${{ github.ref == 'refs/heads/main' }}
-        shell: bash
-        run: |
-            set -euo pipefail
-            PKG="${{ steps.find_pkg.outputs.pkg_path }}"
-            CHECKSUM="${{ steps.find_pkg.outputs.checksum_path }}"
-            git config user.name  "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git add "$PKG"
-            if [[ -n "$CHECKSUM" ]]; then git add "$CHECKSUM"; fi
-            git commit -m "ci(freebsd): add built pkg artifact $PKG and checksum [skip ci]" || echo "No changes to commit"
-            git push
