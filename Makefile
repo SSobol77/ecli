@@ -27,7 +27,7 @@ PACKAGE_VERSION := $(shell $(PYTHON) -c 'import pathlib, tomllib; print(tomllib.
 RELEASE_DIR := releases/$(PACKAGE_VERSION)
 LINUX_ARCH ?= $(ARCH_NORMALIZED)
 FREEBSD_ARCH ?= $(ARCH_NORMALIZED)
-MACOS_ARCH ?= $(ARCH_NORMALIZED)
+MACOS_ARCH ?= universal2
 WIN_ARCH ?= x86_64
 
 -include $(RELEASE_DIR)/.linux.env
@@ -715,7 +715,7 @@ MACOS_SHA_FILE    ?= $(MACOS_PKG_FILE).sha256
 
 .PHONY: package-macos
 package-macos: clean
-	sh ./scripts/build-and-package-macos.sh
+	./scripts/build-and-package-macos.sh
 	$(MAKE) package-macos-assert
 
 .PHONY: package-macos-assert

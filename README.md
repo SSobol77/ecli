@@ -60,7 +60,7 @@ sudo dnf install ./ecli_0.1.0_amd64.rpm
 .\ecli_0.1.0_win_x64.exe
 
 # macOS
-open ecli_0.1.0_macos_x86_64.dmg
+open ecli_0.1.0_macos_universal2.dmg
 ```
 
 All packages available at [GitHub Releases](https://github.com/SSobol77/ecli/releases)
@@ -132,7 +132,7 @@ Download from [GitHub Releases](https://github.com/SSobol77/ecli/releases):
 
 - **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL), `.AppImage` (any Linux), `.tar.gz`
 - **FreeBSD**: `.pkg`
-- **macOS**: `.dmg`
+- **macOS**: `.dmg` ([install notes](docs/install/macos.md))
 - **Windows**: `.exe`
 
 **Option B: PyPI (Python Package Index)**

@@ -8,6 +8,7 @@ name: macOS DMG
       - ".github/workflows/macos-dmg.yml"
       - "src/**"
       - "scripts/build-and-package-macos.sh"
+      - "packaging/pyinstaller/ecli.spec"
       - "ecli.spec"
       - "pyproject.toml"
 
@@ -16,13 +17,19 @@ permissions:
 
 jobs:
   build-macos:
-    runs-on: macos-13
+    # macos-14 is selected for the Apple Silicon host needed to build the
+    # arm64 leg natively; Rosetta provides the x86_64 leg for Universal2.
+    runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+
+      - name: Install Rosetta for x86_64 build leg
+        if: runner.arch == 'ARM64'
+        run: softwareupdate --install-rosetta --agree-to-license
 
       - name: Build DMG
         run: |
@@ -38,6 +45,30 @@ jobs:
         run: |
           VER=$(awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $2; exit}' pyproject.toml)
           echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test Universal2 binary inside DMG
+        run: |
+          set -euo pipefail
+          version="${{ steps.ver.outputs.version }}"
+          dmg="releases/${version}/ecli_${version}_macos_universal2.dmg"
+          mountpoint="$RUNNER_TEMP/ecli-dmg"
+          mkdir -p "$mountpoint"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "$dmg"
+          trap 'hdiutil detach "$mountpoint"' EXIT
+          if [ -x "$mountpoint/ecli" ]; then
+            binary="$mountpoint/ecli"
+          elif [ -x "$mountpoint/ECLI.app/Contents/MacOS/ecli" ]; then
+            binary="$mountpoint/ECLI.app/Contents/MacOS/ecli"
+          else
+            echo "No ECLI binary found inside mounted DMG."
+            find "$mountpoint" -maxdepth 4 -print
+            exit 1
+          fi
+          info="$(lipo -info "$binary")"
+          echo "$info"
+          echo "$info" | grep -q x86_64
+          echo "$info" | grep -q arm64
+          codesign --verify --verbose "$binary"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

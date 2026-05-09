@@ -58,6 +58,8 @@ pip-wheel-metadata/
 *.egg-info/
 *.manifest
 *.spec
+!ecli.spec
+!packaging/pyinstaller/ecli.spec
 *.dll
 *.exe
 *.lib
