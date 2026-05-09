@@ -198,7 +198,7 @@ publish-pypi: package-pypi-assert
 # Resolve version once to match [project].version in pyproject.toml.
 DEB_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
 DEB_PKG_DIR     ?= releases/$(DEB_PKG_VERSION)
-DEB_PKG_FILE    ?= $(DEB_PKG_DIR)/ecli_$(DEB_PKG_VERSION)_amd64.deb
+DEB_PKG_FILE    ?= $(DEB_PKG_DIR)/ecli_$(DEB_PKG_VERSION)_linux_$(ARCH_NORMALIZED).deb
 DEB_SHA_FILE    ?= $(DEB_PKG_FILE).sha256
 
 .PHONY: package-deb
@@ -228,7 +228,7 @@ package-deb-assert:
 .PHONY: show-deb-artifacts
 show-deb-artifacts:
 	@echo "Version: $(DEB_PKG_VERSION)"
-	@ls -l $(DEB_PKG_DIR)/ecli_*_amd64.deb* 2>/dev/null || echo "(no artifacts yet)"
+	@ls -l $(DEB_PKG_DIR)/ecli_*_linux_*.deb* 2>/dev/null || echo "(no artifacts yet)"
 
 # --- Release publisher: upload DEB to GitHub Release --------------------------
 # Requires: GitHub CLI 'gh' (gh auth login) or GH_TOKEN/GITHUB_TOKEN in env.
@@ -251,7 +251,7 @@ release-deb: package-deb-assert
 	@gh release view "v$(DEB_PKG_VERSION)" >/dev/null 2>&1 || \
 	gh release create "v$(DEB_PKG_VERSION)" \
 		--title "ECLI v$(DEB_PKG_VERSION)" \
-		--notes "Debian/Ubuntu package for ECLI v$(DEB_PKG_VERSION).\n\nArtifacts:\n- ecli_$(DEB_PKG_VERSION)_amd64.deb\n- ecli_$(DEB_PKG_VERSION)_amd64.deb.sha256"
+		--notes "Debian/Ubuntu package for ECLI v$(DEB_PKG_VERSION).\n\nArtifacts:\n- ecli_$(DEB_PKG_VERSION)_linux_$(ARCH_NORMALIZED).deb\n- ecli_$(DEB_PKG_VERSION)_linux_$(ARCH_NORMALIZED).deb.sha256"
 	@echo "--> Uploading DEB artifacts to GitHub Release..."
 	@gh release upload "v$(DEB_PKG_VERSION)" \
 		"$(DEB_PKG_FILE)" \
@@ -275,7 +275,7 @@ release-deb: package-deb-assert
 # Resolve version once to match [project].version in pyproject.toml.
 RPM_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
 RPM_PKG_DIR     ?= releases/$(RPM_PKG_VERSION)
-RPM_PKG_FILE    ?= $(RPM_PKG_DIR)/ecli_$(RPM_PKG_VERSION)_amd64.rpm
+RPM_PKG_FILE    ?= $(RPM_PKG_DIR)/ecli_$(RPM_PKG_VERSION)_linux_$(ARCH_NORMALIZED).rpm
 RPM_SHA_FILE    ?= $(RPM_PKG_FILE).sha256
 
 .PHONY: package-rpm
@@ -302,7 +302,7 @@ package-rpm-assert:
 .PHONY: show-rpm-artifacts
 show-rpm-artifacts:
 	@echo "Version: $(RPM_PKG_VERSION)"
-	@ls -l $(RPM_PKG_DIR)/ecli_*_amd64.rpm* 2>/dev/null || echo "(no artifacts yet)"
+	@ls -l $(RPM_PKG_DIR)/ecli_*_linux_*.rpm* 2>/dev/null || echo "(no artifacts yet)"
 
 # --- Release publisher: upload RPM to GitHub Release --------------------------
 # Requires: GitHub CLI 'gh' (gh auth login) or GH_TOKEN/GITHUB_TOKEN in env.
@@ -325,7 +325,7 @@ release-rpm: package-rpm-assert
 	@gh release view "v$(RPM_PKG_VERSION)" >/dev/null 2>&1 || \
 	gh release create "v$(RPM_PKG_VERSION)" \
 		--title "ECLI v$(RPM_PKG_VERSION)" \
-		--notes "RHEL/AlmaLinux/Rocky/Fedora package for ECLI v$(RPM_PKG_VERSION).\n\nArtifacts:\n- ecli_$(RPM_PKG_VERSION)_amd64.rpm\n- ecli_$(RPM_PKG_VERSION)_amd64.rpm.sha256"
+		--notes "RHEL/AlmaLinux/Rocky/Fedora package for ECLI v$(RPM_PKG_VERSION).\n\nArtifacts:\n- ecli_$(RPM_PKG_VERSION)_linux_$(ARCH_NORMALIZED).rpm\n- ecli_$(RPM_PKG_VERSION)_linux_$(ARCH_NORMALIZED).rpm.sha256"
 	@echo "--> Uploading RPM artifacts to GitHub Release..."
 	@gh release upload "v$(RPM_PKG_VERSION)" \
 		"$(RPM_PKG_FILE)" \
@@ -350,14 +350,14 @@ release-rpm: package-rpm-assert
 
 APPIMAGE_VERSION ?= $(PACKAGE_VERSION)
 APPIMAGE_PKG_DIR ?= $(RELEASE_DIR)
-APPIMAGE_FILE    ?= $(APPIMAGE_PKG_DIR)/ecli_$(APPIMAGE_VERSION)_Linux_$(ARCH_NORMALIZED).AppImage
+APPIMAGE_FILE    ?= $(APPIMAGE_PKG_DIR)/ecli_$(APPIMAGE_VERSION)_linux_$(ARCH_NORMALIZED).AppImage
 APPIMAGE_SHA_FILE?= $(APPIMAGE_FILE).sha256
 
 .PHONY: package-appimage
 package-appimage: clean
 	@command -v appimagetool >/dev/null 2>&1 || (echo "appimagetool not found. Install AppImageKit: https://github.com/AppImage/AppImageKit"; exit 1)
 	@echo "--> Building AppImage..."
-	sh ./scripts/package_appimage.sh
+	bash ./scripts/package_appimage.sh "$(APPIMAGE_VERSION)" "$(ARCH_NORMALIZED)"
 	@mkdir -p $(APPIMAGE_PKG_DIR)
 	@test -f "$(APPIMAGE_FILE)" || (echo "AppImage build may have failed"; exit 1)
 	@echo "--> Generating checksum..."
@@ -375,7 +375,7 @@ package-appimage-assert:
 .PHONY: show-appimage-artifacts
 show-appimage-artifacts:
 	@echo "Version: $(APPIMAGE_VERSION) Arch: $(ARCH_NORMALIZED)"
-	@ls -lh $(APPIMAGE_PKG_DIR)/ecli_*_Linux_*.AppImage* 2>/dev/null || echo "(no artifacts yet)"
+	@ls -lh $(APPIMAGE_PKG_DIR)/ecli_*_linux_*.AppImage* 2>/dev/null || echo "(no artifacts yet)"
 
 .PHONY: release-appimage
 release-appimage: package-appimage-assert
@@ -408,7 +408,7 @@ release-appimage: package-appimage-assert
 
 SNAP_VERSION  ?= $(PACKAGE_VERSION)
 SNAP_PKG_DIR  ?= .
-SNAP_FILE     ?= $(SNAP_PKG_DIR)/ecli_$(SNAP_VERSION)_amd64.snap
+SNAP_FILE     ?= $(SNAP_PKG_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap
 
 .PHONY: package-snap
 package-snap:
@@ -417,13 +417,13 @@ package-snap:
 	@echo "--> Building Snap..."
 	snapcraft
 	@mkdir -p $(RELEASE_DIR)
-	@test -f "*.snap" && mv *.snap $(RELEASE_DIR)/ecli_$(SNAP_VERSION)_amd64.snap || true
+	@test -f "*.snap" && mv *.snap $(RELEASE_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap || true
 	$(MAKE) package-snap-assert
 
 .PHONY: package-snap-assert
 package-snap-assert:
-	@test -f "$(RELEASE_DIR)/ecli_$(SNAP_VERSION)_amd64.snap" || (echo "Snap build may have failed"; ls -R $(RELEASE_DIR) || true; exit 1)
-	@echo "--> OK: $(RELEASE_DIR)/ecli_$(SNAP_VERSION)_amd64.snap"
+	@test -f "$(RELEASE_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap" || (echo "Snap build may have failed"; ls -R $(RELEASE_DIR) || true; exit 1)
+	@echo "--> OK: $(RELEASE_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap"
 
 .PHONY: show-snap-artifacts
 show-snap-artifacts:
@@ -448,7 +448,7 @@ release-snap: package-snap-assert
 
 TAR_VERSION   ?= $(PACKAGE_VERSION)
 TAR_PKG_DIR   ?= $(RELEASE_DIR)
-TAR_LINUX_FILE?= $(TAR_PKG_DIR)/ecli_$(TAR_VERSION)_Linux_$(ARCH_NORMALIZED).tar.gz
+TAR_LINUX_FILE?= $(TAR_PKG_DIR)/ecli_$(TAR_VERSION)_linux_$(ARCH_NORMALIZED).tar.gz
 
 .PHONY: package-tar-linux
 package-tar-linux: clean
@@ -494,7 +494,7 @@ show-tar-artifacts:
 # This must match [project].version in pyproject.toml.
 FREEBSD_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
 FREEBSD_PKG_DIR     ?= releases/$(FREEBSD_PKG_VERSION)
-FREEBSD_PKG_FILE    ?= $(FREEBSD_PKG_DIR)/ecli_$(FREEBSD_PKG_VERSION)_amd64.pkg
+FREEBSD_PKG_FILE    ?= $(FREEBSD_PKG_DIR)/ecli_$(FREEBSD_PKG_VERSION)_freebsd_$(ARCH_NORMALIZED).pkg
 FREEBSD_SHA_FILE    ?= $(FREEBSD_PKG_FILE).sha256
 
 # --- CI (GitHub Actions) ------------------------------------------------------
@@ -545,7 +545,7 @@ package-freebsd-assert:
 .PHONY: show-freebsd-artifacts
 show-freebsd-artifacts:
 	@echo "Version: $(FREEBSD_PKG_VERSION)"
-	@ls -l $(FREEBSD_PKG_DIR)/ecli_*_amd64.pkg* 2>/dev/null || echo "(no artifacts yet)"
+	@ls -l $(FREEBSD_PKG_DIR)/ecli_*_freebsd_*.pkg* 2>/dev/null || echo "(no artifacts yet)"
 
 # --- Not supported via Docker --------------------------------------------------
 # FreeBSD userland cannot be containerized on a Linux kernel Docker host.
@@ -580,7 +580,7 @@ release-freebsd: package-freebsd-assert
 	@gh release view "v$(FREEBSD_PKG_VERSION)" >/dev/null 2>&1 || \
 	gh release create "v$(FREEBSD_PKG_VERSION)" \
 		--title "ECLI v$(FREEBSD_PKG_VERSION)" \
-		--notes "FreeBSD amd64 package for ECLI v$(FREEBSD_PKG_VERSION).\n\nArtifacts:\n- ecli_$(FREEBSD_PKG_VERSION)_amd64.pkg\n- ecli_$(FREEBSD_PKG_VERSION)_amd64.pkg.sha256"
+		--notes "FreeBSD package for ECLI v$(FREEBSD_PKG_VERSION).\n\nArtifacts:\n- ecli_$(FREEBSD_PKG_VERSION)_freebsd_$(ARCH_NORMALIZED).pkg\n- ecli_$(FREEBSD_PKG_VERSION)_freebsd_$(ARCH_NORMALIZED).pkg.sha256"
 	@echo "--> Uploading artifacts to GitHub Release..."
 	@gh release upload "v$(FREEBSD_PKG_VERSION)" \
 		"$(FREEBSD_PKG_FILE)" \
@@ -666,8 +666,8 @@ release-macos: package-macos-assert
 #
 # Notes:
 #  - Output files (strict):
-#       releases/<version>/ecli_<version>_win_x64.exe
-#       releases/<version>/ecli_<version>_win_x64.exe.sha256
+#       releases/<version>/ecli_<version>_win_x86_64.exe
+#       releases/<version>/ecli_<version>_win_x86_64.exe.sha256
 #  - For CI builds, see `.github/workflows/windows-installer.yml`.
 #  - If code signing is required, integrate `signtool` before checksum generation.
 # ---------------------------
@@ -675,7 +675,7 @@ release-macos: package-macos-assert
 
 WIN_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
 WIN_PKG_DIR     ?= releases/$(WIN_PKG_VERSION)
-WIN_PKG_FILE    ?= $(WIN_PKG_DIR)/ecli_$(WIN_PKG_VERSION)_win_x64.exe
+WIN_PKG_FILE    ?= $(WIN_PKG_DIR)/ecli_$(WIN_PKG_VERSION)_win_x86_64.exe
 WIN_SHA_FILE    ?= $(WIN_PKG_FILE).sha256
 
 # Local Windows build (run in PowerShell on Windows host)
@@ -695,7 +695,7 @@ package-windows-assert:
 .PHONY: show-windows-artifacts
 show-windows-artifacts:
 	@echo "Version: $(WIN_PKG_VERSION)"
-	@ls -l $(WIN_PKG_DIR)/ecli_*_win_x64.exe* 2>/dev/null || echo "(no artifacts yet)"
+	@ls -l $(WIN_PKG_DIR)/ecli_*_win_*.exe* 2>/dev/null || echo "(no artifacts yet)"
 
 # Publish to GitHub Release
 .PHONY: release-windows
@@ -767,25 +767,25 @@ show-artifacts:
 	@ls -lh dist/*.whl dist/*.tar.gz 2>/dev/null || echo "  (not built)"
 	@echo ""
 	@echo "Linux (Debian/Ubuntu):"
-	@ls -lh $(RELEASE_DIR)/ecli_*_amd64.deb* 2>/dev/null || echo "  (not built)"
+	@ls -lh $(RELEASE_DIR)/ecli_*_linux_*.deb* 2>/dev/null || echo "  (not built)"
 	@echo ""
 	@echo "Linux (Fedora/RHEL/Rocky):"
-	@ls -lh $(RELEASE_DIR)/ecli_*_amd64.rpm* 2>/dev/null || echo "  (not built)"
+	@ls -lh $(RELEASE_DIR)/ecli_*_linux_*.rpm* 2>/dev/null || echo "  (not built)"
 	@echo ""
 	@echo "Linux (AppImage):"
-	@ls -lh $(RELEASE_DIR)/ecli_*_Linux_*.AppImage* 2>/dev/null || echo "  (not built)"
+	@ls -lh $(RELEASE_DIR)/ecli_*_linux_*.AppImage* 2>/dev/null || echo "  (not built)"
 	@echo ""
 	@echo "Linux (Archives):"
 	@ls -lh $(RELEASE_DIR)/*.tar.gz* 2>/dev/null || echo "  (not built)"
 	@echo ""
 	@echo "FreeBSD:"
-	@ls -lh $(RELEASE_DIR)/ecli_*_amd64.pkg* 2>/dev/null || echo "  (not built)"
+	@ls -lh $(RELEASE_DIR)/ecli_*_freebsd_*.pkg* 2>/dev/null || echo "  (not built)"
 	@echo ""
 	@echo "macOS:"
 	@ls -lh $(RELEASE_DIR)/ecli_*_macos_*.dmg* 2>/dev/null || echo "  (not built)"
 	@echo ""
 	@echo "Windows:"
-	@ls -lh $(RELEASE_DIR)/ecli_*_win_x64.exe* 2>/dev/null || echo "  (not built)"
+	@ls -lh $(RELEASE_DIR)/ecli_*_win_*.exe* 2>/dev/null || echo "  (not built)"
 	@echo ""
 
 # =============================================================================

@@ -2,8 +2,8 @@
 ===============================================================================
 ECLI — Windows packaging (PyInstaller → NSIS)
 Strict outputs:
-  releases\<version>\ecli_<version>_win_x64.exe
-  releases\<version>\ecli_<version>_win_x64.exe.sha256
+  releases\<version>\ecli_<version>_win_x86_64.exe
+  releases\<version>\ecli_<version>_win_x86_64.exe.sha256
 
 Requirements:
 - Windows 10/11 x64, Python 3.11 (x64), NSIS (makensis in PATH)
@@ -30,7 +30,7 @@ if ([string]::IsNullOrWhiteSpace($version)) { Write-Err "Cannot read version"; e
 Write-Ok "Version: $version"
 
 $releasesDir = "releases\$version"
-$exeNameBase = "ecli_${version}_win_x64.exe"
+$exeNameBase = "ecli_${version}_win_x86_64.exe"
 $exePath = Join-Path $releasesDir $exeNameBase
 $shaPath = "$exePath.sha256"
 

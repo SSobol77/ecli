@@ -118,8 +118,8 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          pkgs=(releases/*/ecli_*_amd64.pkg)
-          shas=(releases/*/ecli_*_amd64.pkg.sha256)
+          pkgs=(releases/*/ecli_*_freebsd_*.pkg)
+          shas=(releases/*/ecli_*_freebsd_*.pkg.sha256)
           (( ${#pkgs[@]} == 1 ))
           (( ${#shas[@]} == 1 ))
           expected="$(awk '{print $1; exit}' "${shas[0]}")"
@@ -191,7 +191,7 @@ jobs:
       - name: Verify installer
         shell: pwsh
         run: |
-          $artifacts = Get-ChildItem -Path releases -Recurse -Filter "ecli_*_win_x64.exe"
+          $artifacts = Get-ChildItem -Path releases -Recurse -Filter "ecli_*_win_x86_64.exe"
           if ($artifacts.Count -ne 1) { throw "Expected exactly one Windows installer, found $($artifacts.Count)" }
           $exe = $artifacts[0].FullName
           $sha = "$exe.sha256"

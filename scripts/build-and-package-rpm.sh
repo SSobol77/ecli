@@ -8,7 +8,7 @@
 #   3) Builds a standalone binary via PyInstaller (uses ecli.spec if present).
 #   4) Stages a minimal FHS payload for RPM.
 #   5) Builds .rpm with FPM, places artifacts under releases/<version>/.
-#   6) Normalizes file name to ecli_<version>_amd64.rpm and generates .sha256.
+#   6) Normalizes file name to ecli_<version>_linux_<arch>.rpm and generates .sha256.
 #
 # Requirements in the build environment:
 #   - python3.11 + pip, pyinstaller
@@ -35,8 +35,13 @@ HOMEPAGE="${HOMEPAGE:-https://ecli.io}"
 LICENSE="${LICENSE:-MIT}"
 CATEGORY="${CATEGORY:-editors}"  # shows as "Group" in some RPM tools
 
-# CPU arch label used in the *normalized* filename (we keep amd64 for parity with .deb)
-NORMALIZED_ARCH="amd64"
+# CPU arch label used in the normalized filename.
+RAW_ARCH="$(uname -m 2>/dev/null || echo x86_64)"
+case "${RAW_ARCH}" in
+  amd64|x86_64) NORMALIZED_ARCH="x86_64" ;;
+  aarch64|arm64) NORMALIZED_ARCH="arm64" ;;
+  *) NORMALIZED_ARCH="${RAW_ARCH}" ;;
+esac
 
 # ------------------------------------------------------------------------------
 # Read version from pyproject.toml (works on Py 3.10/3.11)
@@ -229,7 +234,7 @@ ACTUAL_RPM="$(ls -1 "${RELEASES_DIR}"/${PACKAGE_NAME}-*.rpm 2>/dev/null | head -
 # ------------------------------------------------------------------------------
 # Normalize file name and generate SHA256
 # ------------------------------------------------------------------------------
-NORMALIZED_RPM="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_${NORMALIZED_ARCH}.rpm"
+NORMALIZED_RPM="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_linux_${NORMALIZED_ARCH}.rpm"
 if [[ "${ACTUAL_RPM}" != "${NORMALIZED_RPM}" ]]; then
   cp -f "${ACTUAL_RPM}" "${NORMALIZED_RPM}"
 fi

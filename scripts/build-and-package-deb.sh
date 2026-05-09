@@ -47,8 +47,14 @@ PY
 [ -n "${VERSION}" ] || { echo "Cannot read version from pyproject.toml"; exit 1; }
 
 ARCH_DEB="amd64"
+RAW_ARCH="$(uname -m 2>/dev/null || echo x86_64)"
+case "${RAW_ARCH}" in
+  amd64|x86_64) FILENAME_ARCH="x86_64" ;;
+  aarch64|arm64) FILENAME_ARCH="arm64" ;;
+  *) FILENAME_ARCH="${RAW_ARCH}" ;;
+esac
 RELEASES_DIR="releases/${VERSION}"
-FINAL_DEB_PATH="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_${ARCH_DEB}.deb"
+FINAL_DEB_PATH="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_linux_${FILENAME_ARCH}.deb"
 STAGING_DIR="build/deb_staging"
 
 echo "==> Version: ${VERSION}"

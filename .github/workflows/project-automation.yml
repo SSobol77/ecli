@@ -19,6 +19,7 @@ jobs:
     steps:
       - name: Move PR to "In Progress"
         if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened')
+        continue-on-error: true
         uses: alex-page/github-project-automation-plus@v0.8.3
         with:
           project: Ecli
@@ -27,6 +28,7 @@ jobs:
 
       - name: Move PR to "Contract Review"
         if: github.event_name == 'pull_request' && (github.event.action == 'ready_for_review' || github.event.action == 'review_requested')
+        continue-on-error: true
         uses: alex-page/github-project-automation-plus@v0.8.3
         with:
           project: Ecli
@@ -35,6 +37,7 @@ jobs:
 
       - name: Move merged PR to "Gate 2 Passed"
         if: github.event_name == 'pull_request' && github.event.action == 'closed' && github.event.pull_request.merged == true
+        continue-on-error: true
         uses: alex-page/github-project-automation-plus@v0.8.3
         with:
           project: Ecli
@@ -43,6 +46,7 @@ jobs:
 
       - name: Move issue to "QA" when qa label is added
         if: github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'qa'
+        continue-on-error: true
         uses: alex-page/github-project-automation-plus@v0.8.3
         with:
           project: Ecli

@@ -15,13 +15,13 @@
 #      - do-install installs staged files into ${STAGEDIR}
 #   4) Runs `make -C /usr/ports/editors/ecli_local makesum package`.
 #   5) Copies & renames the resulting package to:
-#         releases/<version>/ecli_<version>_amd64.pkg
-#         releases/<version>/ecli_<version>_amd64.pkg.sha256
+#         releases/<version>/ecli_<version>_freebsd_<arch>.pkg
+#         releases/<version>/ecli_<version>_freebsd_<arch>.pkg.sha256
 #
 # REQUIREMENTS
 #   - Run on FreeBSD 14.x (root privileges required).
-#   - /usr/ports tree present (if нет — подскажет команду portsnap fetch extract).
-#   - Internet for pkg(8) repositories (to install build deps if не хватает).
+#   - /usr/ports tree present. The script prints the portsnap command if needed.
+#   - Internet for pkg(8) repositories to install missing build dependencies.
 #
 # USAGE
 #   $ sudo sh scripts/build_freebsd_port.sh
@@ -60,7 +60,7 @@ PY
 ok "Version: $VERSION"
 
 PORT_CAT="editors"
-PORT_NAME="ecli_local"            # локальное имя порта, без конфликтов
+PORT_NAME="ecli_local"            # Local port name, avoiding repository conflicts.
 PORTDIR="/usr/ports/${PORT_CAT}/${PORT_NAME}"
 DISTDIR="/tmp"
 DISTFILE="ecli-${VERSION}.tar.gz"
@@ -68,7 +68,8 @@ DISTPATH="${DISTDIR}/${DISTFILE}"
 
 RAW_ARCH="$(uname -m 2>/dev/null || echo amd64)"
 case "$RAW_ARCH" in
-  amd64|x86_64) ARCH="amd64" ;;
+  amd64|x86_64) ARCH="x86_64" ;;
+  aarch64|arm64) ARCH="arm64" ;;
   *) ARCH="${RAW_ARCH}" ;;
 esac
 
@@ -83,7 +84,7 @@ fi
 # --- Create source tarball ----------------------------------------------------
 info "Creating source tarball: ${DISTPATH}"
 rm -f "$DISTPATH"
-# архивируем весь проект, исключая .git и сборочные артефакты
+# Archive the project while excluding VCS and build artifacts.
 ( cd "$PROJECT_ROOT" && \
   tar --exclude .git --exclude build --exclude dist --exclude .pytest_cache \
       --exclude .ruff_cache --exclude .mypy_cache \
@@ -206,7 +207,7 @@ fi
 ok "Found: $PKG_FROM_PORTS"
 
 RELEASES_DIR="${PROJECT_ROOT}/releases/${VERSION}"
-DEST_PKG="${RELEASES_DIR}/ecli_${VERSION}_${ARCH}.pkg"
+DEST_PKG="${RELEASES_DIR}/ecli_${VERSION}_freebsd_${ARCH}.pkg"
 DEST_SHA="${DEST_PKG}.sha256"
 
 mkdir -p "$RELEASES_DIR"

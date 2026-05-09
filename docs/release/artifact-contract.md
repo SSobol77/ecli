@@ -18,11 +18,38 @@ Defines canonical artifact names, locations, and verification expectations for r
 
 ## Canonical Naming Rules
 
-- DEB: `ecli_<version>_amd64.deb`
-- RPM: `ecli_<version>_amd64.rpm`
-- FreeBSD: `ecli_<version>_amd64.pkg`
-- Windows: `ecli_<version>_win_x64.exe`
-- macOS: `ecli_<version>_macos_<arch>.dmg` (`<arch>`: `x86_64` or `arm64`)
+Final release artifact names must use this schema:
+
+`ecli_<version>_<os>_<arch>.<ext>`
+
+Short form: `ecli_<v>_<os>_<arch>.<ext>`
+
+Allowed `<os>` tokens:
+
+- `linux`
+- `freebsd`
+- `macos`
+- `win`
+
+Allowed `<arch>` tokens:
+
+- `x86_64`
+- `arm64`
+
+Current artifact forms:
+
+- DEB: `ecli_<version>_linux_<arch>.deb`
+- RPM: `ecli_<version>_linux_<arch>.rpm`
+- AppImage: `ecli_<version>_linux_<arch>.AppImage`
+- Linux tarball: `ecli_<version>_linux_<arch>.tar.gz`
+- Snap: `ecli_<version>_linux_<arch>.snap`
+- FreeBSD: `ecli_<version>_freebsd_<arch>.pkg`
+- Windows: `ecli_<version>_win_<arch>.exe`
+- macOS: `ecli_<version>_macos_<arch>.dmg`
+
+The DEB internal `Architecture` field remains package-manager native
+(`amd64` on x86_64). Only the final release filename uses the canonical
+architecture token.
 
 For each artifact, a checksum file must exist:
 - `<artifact>.sha256`
@@ -37,8 +64,24 @@ For each artifact, a checksum file must exist:
 Canonical script entrypoints are those referenced by `Makefile` and active workflows under `.github/workflows/`.
 
 Current-state note:
-- repository/workflows/scripts reference `ecli.spec`, but the file is currently absent.
-- this mismatch must be resolved before claiming deterministic release parity.
+- repository/workflows/scripts reference `ecli.spec`, and the file is present.
+- deterministic release parity depends on keeping `ecli.spec`, Makefile targets,
+  workflows, and packaging scripts aligned on the canonical output names.
+
+## Naming Migration Notes
+
+Gate 2 Phase 0 replaces legacy platform-specific filename conventions with one
+cross-platform schema. The removed legacy forms include:
+
+- `ecli_<version>_amd64.deb`
+- `ecli_<version>_amd64.rpm`
+- `ecli_<version>_amd64.pkg`
+- `ecli_<version>_Linux_x86_64.AppImage`
+- `ecli_<version>_Linux_x86_64.tar.gz`
+- `ecli_<version>_win_x64.exe`
+
+The migration makes artifact discovery deterministic for CI and release
+automation while preserving package-manager metadata inside each artifact.
 
 ## CI Validation Requirements
 
