@@ -1,0 +1,45 @@
+name: Windows Contract Validate
+
+"on":
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/windows-validate.yml"
+      - "Makefile"
+      - "pyproject.toml"
+      - "scripts/build-and-package-windows.ps1"
+      - "packaging/windows/**"
+      - "src/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          architecture: "x64"
+
+      - name: Install tools
+        shell: pwsh
+        run: |
+          choco install make nsis -y
+          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Build Windows installer
+        shell: pwsh
+        run: make package-windows
+
+      - name: Validate Windows contract
+        shell: pwsh
+        run: make validate-windows-contract

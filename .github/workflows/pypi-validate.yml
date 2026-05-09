@@ -1,0 +1,57 @@
+name: PyPI Contract Validate
+
+"on":
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/pypi-validate.yml"
+      - "Makefile"
+      - "pyproject.toml"
+      - "src/**"
+      - "tests/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pipx install uv
+
+      - name: Sync dependencies
+        run: uv sync --extra dev
+
+      - name: Build PyPI distributions
+        run: uv run make PYTHON="uv run python" package-pypi
+
+      - name: Verify corrupted sidecar is rejected
+        shell: bash
+        run: |
+          set -euo pipefail
+          wheel_sha="dist/ecli_editor-0.1.0-py3-none-any.whl.sha256"
+          cp "$wheel_sha" "$wheel_sha.bak"
+          awk '{print "ffff" substr($1, 5) "  " $2}' "$wheel_sha.bak" > "$wheel_sha"
+          set +e
+          uv run make PYTHON="uv run python" validate-pypi-contract > tamper.log 2>&1
+          rc=$?
+          set -e
+          cat tamper.log
+          mv "$wheel_sha.bak" "$wheel_sha"
+          test "$rc" -ne 0
+          grep -q "Error 4" tamper.log
+
+      - name: Validate PyPI contract
+        run: uv run make PYTHON="uv run python" validate-pypi-contract

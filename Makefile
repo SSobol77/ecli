@@ -52,6 +52,14 @@ define verify_sha256
 	fi
 endef
 
+define validate_if_present
+	@if [ -f "$(1)" ] || [ -f "$(1).sha256" ]; then \
+		$(MAKE) $(2); \
+	else \
+		echo "SKIP: $(3) artifact not built: $(1)"; \
+	fi
+endef
+
 .DEFAULT_GOAL := help
 
 # ---- FreeBSD .pkg (via vmactions/freebsd-vm) -------------------------------
@@ -106,6 +114,7 @@ help:
 	@echo "  make package-linux          - Build all Linux packages (deb, rpm, appimage)"
 	@echo "  make package-docker         - Build containers only (deb, rpm)"
 	@echo "  make publish-all            - Publish all artifacts to GitHub Release"
+	@echo "  make validate-gate2         - Validate built Gate 2 release contracts"
 	@echo ""
 	@echo "ARTIFACT MANAGEMENT:"
 	@echo "  make show-artifacts         - List all built packages"
@@ -918,6 +927,66 @@ publish-all:
 	@echo "╔═══════════════════════════════════════════════════════════════════════╗"
 	@echo "║             AVAILABLE ARTIFACTS PUBLISH FLOW COMPLETED                ║"
 	@echo "╚═══════════════════════════════════════════════════════════════════════╝"
+
+
+# =============================================================================
+# Gate 2 Contract Validation
+# =============================================================================
+
+.PHONY: validate-version-consistency
+validate-version-consistency:
+	@$(PYTHON) -c 'import pathlib, sys, tomllib; pyproject=tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]; expected=pyproject["version"]; src=pathlib.Path("src/ecli/__init__.py").read_text(); sys.path.insert(0, "src"); import ecli; actual=ecli.__version__; ok=(actual == expected or actual == "0.0.0+local") and "version(\"ecli-editor\")" in src; print(f"pyproject={expected} ecli.__version__={actual}"); sys.exit(0 if ok else 1)'
+
+.PHONY: validate-pypi-contract
+validate-pypi-contract:
+	@test -f "$(PYPI_WHEEL_FILE)" || (echo "Missing $(PYPI_WHEEL_FILE)"; exit 2)
+	@test -f "$(PYPI_SDIST_FILE)" || (echo "Missing $(PYPI_SDIST_FILE)"; exit 2)
+	@test -f "$(PYPI_WHEEL_FILE).sha256" || (echo "Missing $(PYPI_WHEEL_FILE).sha256"; exit 3)
+	@test -f "$(PYPI_SDIST_FILE).sha256" || (echo "Missing $(PYPI_SDIST_FILE).sha256"; exit 3)
+	@$(PYTHON) -m twine --version >/dev/null 2>&1 || (echo "Missing tooling: twine"; exit 5)
+	@$(PYTHON) -m twine check --strict "$(PYPI_WHEEL_FILE)" "$(PYPI_SDIST_FILE)" || exit 1
+	$(call verify_sha256,$(PYPI_WHEEL_FILE))
+	$(call verify_sha256,$(PYPI_SDIST_FILE))
+	@echo "--> OK: PyPI contract"
+
+.PHONY: validate-deb-contract
+validate-deb-contract: package-deb-assert
+	@echo "--> OK: DEB contract"
+
+.PHONY: validate-rpm-contract
+validate-rpm-contract: package-rpm-assert
+	@echo "--> OK: RPM contract"
+
+.PHONY: validate-appimage-contract
+validate-appimage-contract: package-appimage-assert
+	@echo "--> OK: AppImage contract"
+
+.PHONY: validate-freebsd-contract
+validate-freebsd-contract: package-freebsd-assert
+	@echo "--> OK: FreeBSD contract"
+
+.PHONY: validate-macos-contract
+validate-macos-contract: package-macos-assert
+	@echo "--> OK: macOS contract"
+
+.PHONY: validate-windows-contract
+validate-windows-contract: package-windows-assert
+	@echo "--> OK: Windows contract"
+
+.PHONY: validate-gate2
+validate-gate2: validate-version-consistency
+	@if [ -f "$(PYPI_WHEEL_FILE)" ] || [ -f "$(PYPI_WHEEL_FILE).sha256" ] || [ -f "$(PYPI_SDIST_FILE)" ] || [ -f "$(PYPI_SDIST_FILE).sha256" ]; then \
+		$(MAKE) validate-pypi-contract; \
+	else \
+		echo "SKIP: PyPI artifacts not built under $(PYPI_PKG_DIR)"; \
+	fi
+	$(call validate_if_present,$(DEB_PKG_FILE),validate-deb-contract,DEB)
+	$(call validate_if_present,$(RPM_PKG_FILE),validate-rpm-contract,RPM)
+	$(call validate_if_present,$(APPIMAGE_FILE),validate-appimage-contract,AppImage)
+	$(call validate_if_present,$(FREEBSD_PKG_FILE),validate-freebsd-contract,FreeBSD)
+	$(call validate_if_present,$(MACOS_PKG_FILE),validate-macos-contract,macOS)
+	$(call validate_if_present,$(WIN_PKG_FILE),validate-windows-contract,Windows)
+	@echo "--> OK: Gate 2 validation completed for built artifacts"
 
 
 # =============================================================================
