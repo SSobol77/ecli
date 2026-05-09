@@ -10,6 +10,7 @@ Copyright: (c) 2026 Siergej Sobolewski
 
 - [ ] Version in `pyproject.toml` is correct.
 - [ ] Artifact contract names are configured and validated.
+- [ ] `make validate-gate2` passes before any publish step.
 - [ ] Required packaging scripts exist and are executable.
 - [ ] Workflow references are valid (no missing files such as packaging specs).
 - [ ] Checksums are generated for all release artifacts.

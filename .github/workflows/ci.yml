@@ -71,6 +71,9 @@ jobs:
         if: ${{ hashFiles('tests/**') != '' }}
         run: uv run pytest --cov -q
 
+      - name: Gate 2 contract validation
+        run: uv run make PYTHON="uv run python" validate-gate2
+
       - name: SonarQube Scan
         if: ${{ env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' && hashFiles('coverage.xml') != '' }}
         uses: sonarsource/sonarqube-scan-action@v2

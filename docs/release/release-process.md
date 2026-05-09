@@ -24,5 +24,15 @@ Copyright: (c) 2026 Siergej Sobolewski
 ## Required Controls
 
 - Contract validation must happen before publish.
+- `make validate-gate2` is the required pre-publish validation gate.
 - Missing required artifacts must block release.
 - Workflow references to non-existent files must be resolved as release blockers.
+
+## Future Hardening
+
+Protected GitHub environments are recommended once the project has at least two
+active maintainers. At that point, release publication jobs should bind to
+protected environments such as `pypi` or `production` and require maintainer
+review before external publication. Gate 2 Phase 0 intentionally ships without
+workflow `environment:` bindings because protected environments are not yet
+configured for this repository.
