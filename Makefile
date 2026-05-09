@@ -184,6 +184,28 @@ publish-pypi: package-pypi-assert
 	sh ./scripts/publish_pypi.sh
 	@echo "--> Python packages published to PyPI."
 
+.PHONY: _ensure-tag
+_ensure-tag:
+	@test -n "$(VERSION)" || (echo "VERSION is required"; exit 1)
+	@tag="v$(VERSION)"; \
+	echo "--> Ensuring git tag $$tag exists..."; \
+	git fetch --tags origin "$$tag" >/dev/null 2>&1 || true; \
+	if git show-ref --tags --verify --quiet "refs/tags/$$tag"; then \
+		echo "Tag $$tag already exists locally."; \
+		exit 0; \
+	fi; \
+	if git ls-remote --exit-code --tags origin "refs/tags/$$tag" >/dev/null 2>&1; then \
+		echo "Tag $$tag exists on origin; fetching it."; \
+		git fetch origin "refs/tags/$$tag:refs/tags/$$tag"; \
+		exit 0; \
+	fi; \
+	git tag "$$tag"; \
+	if ! git push origin "$$tag"; then \
+		echo "Tag push raced or failed; fetching origin tag for $$tag."; \
+		git fetch origin "refs/tags/$$tag:refs/tags/$$tag" >/dev/null 2>&1 || true; \
+		git show-ref --tags --verify --quiet "refs/tags/$$tag" || (echo "Unable to ensure tag $$tag"; exit 1); \
+	fi
+
 
 
 # Use:
@@ -207,7 +229,7 @@ package-deb: clean
 	$(MAKE) package-deb-assert
 
 .PHONY: package-deb-docker
-package-deb-docker:
+package-deb-docker: clean
 	docker build -f docker/build-linux-deb.Dockerfile \
 		--build-arg PYTHON_VERSION=3.11 \
 		--build-arg DEBIAN_RELEASE=bullseye \
@@ -240,18 +262,20 @@ show-deb-artifacts:
 .PHONY: release-deb
 release-deb: package-deb-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required. Install: https://cli.github.com/"; exit 1)
-	@echo "--> Ensuring git tag v$(DEB_PKG_VERSION) exists..."
-	@if ! git rev-parse "v$(DEB_PKG_VERSION)" >/dev/null 2>&1; then \
-		git tag "v$(DEB_PKG_VERSION)"; \
-		git push origin "v$(DEB_PKG_VERSION)"; \
-	else \
-		echo "Tag v$(DEB_PKG_VERSION) already exists."; \
-	fi
+	@$(MAKE) _ensure-tag VERSION="$(DEB_PKG_VERSION)"
 	@echo "--> Creating GitHub Release if missing..."
-	@gh release view "v$(DEB_PKG_VERSION)" >/dev/null 2>&1 || \
+	@tmpfile="$$(mktemp)"; \
+	trap 'rm -f "$$tmpfile"' EXIT; \
+	printf '%s\n' \
+		"Debian/Ubuntu package for ECLI v$(DEB_PKG_VERSION)." \
+		"" \
+		"Artifacts:" \
+		"- $$(basename "$(DEB_PKG_FILE)")" \
+		"- $$(basename "$(DEB_SHA_FILE)")" > "$$tmpfile"; \
+	gh release view "v$(DEB_PKG_VERSION)" >/dev/null 2>&1 || \
 	gh release create "v$(DEB_PKG_VERSION)" \
 		--title "ECLI v$(DEB_PKG_VERSION)" \
-		--notes "Debian/Ubuntu package for ECLI v$(DEB_PKG_VERSION).\n\nArtifacts:\n- ecli_$(DEB_PKG_VERSION)_linux_$(ARCH_NORMALIZED).deb\n- ecli_$(DEB_PKG_VERSION)_linux_$(ARCH_NORMALIZED).deb.sha256"
+		--notes-file "$$tmpfile"
 	@echo "--> Uploading DEB artifacts to GitHub Release..."
 	@gh release upload "v$(DEB_PKG_VERSION)" \
 		"$(DEB_PKG_FILE)" \
@@ -284,7 +308,7 @@ package-rpm: clean
 	$(MAKE) package-rpm-assert
 
 .PHONY: package-rpm-docker
-package-rpm-docker:
+package-rpm-docker: clean
 	docker build -f docker/build-linux-rpm.Dockerfile -t ecli-rpm:alma9 .
 	docker run --rm -v "$$(pwd):/app" -w /app ecli-rpm:alma9
 	$(MAKE) package-rpm-assert
@@ -314,18 +338,20 @@ show-rpm-artifacts:
 .PHONY: release-rpm
 release-rpm: package-rpm-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required. Install: https://cli.github.com/"; exit 1)
-	@echo "--> Ensuring git tag v$(RPM_PKG_VERSION) exists..."
-	@if ! git rev-parse "v$(RPM_PKG_VERSION)" >/dev/null 2>&1; then \
-		git tag "v$(RPM_PKG_VERSION)"; \
-		git push origin "v$(RPM_PKG_VERSION)"; \
-	else \
-		echo "Tag v$(RPM_PKG_VERSION) already exists."; \
-	fi
+	@$(MAKE) _ensure-tag VERSION="$(RPM_PKG_VERSION)"
 	@echo "--> Creating GitHub Release if missing..."
-	@gh release view "v$(RPM_PKG_VERSION)" >/dev/null 2>&1 || \
+	@tmpfile="$$(mktemp)"; \
+	trap 'rm -f "$$tmpfile"' EXIT; \
+	printf '%s\n' \
+		"RHEL/AlmaLinux/Rocky/Fedora package for ECLI v$(RPM_PKG_VERSION)." \
+		"" \
+		"Artifacts:" \
+		"- $$(basename "$(RPM_PKG_FILE)")" \
+		"- $$(basename "$(RPM_SHA_FILE)")" > "$$tmpfile"; \
+	gh release view "v$(RPM_PKG_VERSION)" >/dev/null 2>&1 || \
 	gh release create "v$(RPM_PKG_VERSION)" \
 		--title "ECLI v$(RPM_PKG_VERSION)" \
-		--notes "RHEL/AlmaLinux/Rocky/Fedora package for ECLI v$(RPM_PKG_VERSION).\n\nArtifacts:\n- ecli_$(RPM_PKG_VERSION)_linux_$(ARCH_NORMALIZED).rpm\n- ecli_$(RPM_PKG_VERSION)_linux_$(ARCH_NORMALIZED).rpm.sha256"
+		--notes-file "$$tmpfile"
 	@echo "--> Uploading RPM artifacts to GitHub Release..."
 	@gh release upload "v$(RPM_PKG_VERSION)" \
 		"$(RPM_PKG_FILE)" \
@@ -380,12 +406,19 @@ show-appimage-artifacts:
 .PHONY: release-appimage
 release-appimage: package-appimage-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required"; exit 1)
-	@if ! git rev-parse "v$(APPIMAGE_VERSION)" >/dev/null 2>&1; then \
-		git tag "v$(APPIMAGE_VERSION)"; git push origin "v$(APPIMAGE_VERSION)"; \
-	fi
-	@gh release view "v$(APPIMAGE_VERSION)" >/dev/null 2>&1 || \
-	  gh release create "v$(APPIMAGE_VERSION)" --title "ECLI v$(APPIMAGE_VERSION)" \
-	    --notes "AppImage (cross-distro) for Linux $(ARCH_NORMALIZED) - ECLI v$(APPIMAGE_VERSION)."
+	@$(MAKE) _ensure-tag VERSION="$(APPIMAGE_VERSION)"
+	@tmpfile="$$(mktemp)"; \
+	trap 'rm -f "$$tmpfile"' EXIT; \
+	printf '%s\n' \
+		"AppImage package for Linux $(ARCH_NORMALIZED) - ECLI v$(APPIMAGE_VERSION)." \
+		"" \
+		"Artifacts:" \
+		"- $$(basename "$(APPIMAGE_FILE)")" \
+		"- $$(basename "$(APPIMAGE_SHA_FILE)")" > "$$tmpfile"; \
+	gh release view "v$(APPIMAGE_VERSION)" >/dev/null 2>&1 || \
+	gh release create "v$(APPIMAGE_VERSION)" \
+		--title "ECLI v$(APPIMAGE_VERSION)" \
+		--notes-file "$$tmpfile"
 	@gh release upload "v$(APPIMAGE_VERSION)" "$(APPIMAGE_FILE)" "$(APPIMAGE_SHA_FILE)" --clobber
 	@echo "--> Release v$(APPIMAGE_VERSION) updated with AppImage artifacts."
 
@@ -411,13 +444,23 @@ SNAP_PKG_DIR  ?= .
 SNAP_FILE     ?= $(SNAP_PKG_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap
 
 .PHONY: package-snap
-package-snap:
+package-snap: clean
 	@command -v snapcraft >/dev/null 2>&1 || (echo "snapcraft not found. Install: sudo snap install snapcraft --classic"; exit 1)
 	@test -f snapcraft.yaml || (echo "snapcraft.yaml not found in project root"; exit 1)
 	@echo "--> Building Snap..."
 	snapcraft
 	@mkdir -p $(RELEASE_DIR)
-	@test -f "*.snap" && mv *.snap $(RELEASE_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap || true
+	@set -- *.snap; \
+	if [ "$$1" = "*.snap" ]; then \
+		echo "Snap build did not produce a .snap artifact"; \
+		exit 1; \
+	fi; \
+	if [ "$$#" -ne 1 ]; then \
+		echo "Expected exactly one .snap artifact, found $$#"; \
+		printf '%s\n' "$$@"; \
+		exit 1; \
+	fi; \
+	mv "$$1" "$(RELEASE_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap"
 	$(MAKE) package-snap-assert
 
 .PHONY: package-snap-assert
@@ -454,7 +497,6 @@ TAR_LINUX_FILE?= $(TAR_PKG_DIR)/ecli_$(TAR_VERSION)_linux_$(ARCH_NORMALIZED).tar
 package-tar-linux: clean
 	@echo "--> Creating Linux tar.gz archive..."
 	@mkdir -p $(TAR_PKG_DIR)
-	@$(PYTHON) -m pip install --user -q . 2>/dev/null || true
 	@echo "ECLI v$(TAR_VERSION)" > RELEASE_NOTES.txt
 	@tar --exclude='.git' --exclude='.venv' --exclude='build' --exclude='dist' \
 		--exclude='__pycache__' --exclude='.pytest_cache' \
@@ -569,18 +611,20 @@ package-freebsd-docker:
 .PHONY: release-freebsd
 release-freebsd: package-freebsd-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required. Install: https://cli.github.com/"; exit 1)
-	@echo "--> Ensuring git tag v$(FREEBSD_PKG_VERSION) exists..."
-	@if ! git rev-parse "v$(FREEBSD_PKG_VERSION)" >/dev/null 2>&1; then \
-		git tag "v$(FREEBSD_PKG_VERSION)"; \
-		git push origin "v$(FREEBSD_PKG_VERSION)"; \
-	else \
-		echo "Tag v$(FREEBSD_PKG_VERSION) already exists."; \
-	fi
+	@$(MAKE) _ensure-tag VERSION="$(FREEBSD_PKG_VERSION)"
 	@echo "--> Creating GitHub Release if missing..."
-	@gh release view "v$(FREEBSD_PKG_VERSION)" >/dev/null 2>&1 || \
+	@tmpfile="$$(mktemp)"; \
+	trap 'rm -f "$$tmpfile"' EXIT; \
+	printf '%s\n' \
+		"FreeBSD package for ECLI v$(FREEBSD_PKG_VERSION)." \
+		"" \
+		"Artifacts:" \
+		"- $$(basename "$(FREEBSD_PKG_FILE)")" \
+		"- $$(basename "$(FREEBSD_SHA_FILE)")" > "$$tmpfile"; \
+	gh release view "v$(FREEBSD_PKG_VERSION)" >/dev/null 2>&1 || \
 	gh release create "v$(FREEBSD_PKG_VERSION)" \
 		--title "ECLI v$(FREEBSD_PKG_VERSION)" \
-		--notes "FreeBSD package for ECLI v$(FREEBSD_PKG_VERSION).\n\nArtifacts:\n- ecli_$(FREEBSD_PKG_VERSION)_freebsd_$(ARCH_NORMALIZED).pkg\n- ecli_$(FREEBSD_PKG_VERSION)_freebsd_$(ARCH_NORMALIZED).pkg.sha256"
+		--notes-file "$$tmpfile"
 	@echo "--> Uploading artifacts to GitHub Release..."
 	@gh release upload "v$(FREEBSD_PKG_VERSION)" \
 		"$(FREEBSD_PKG_FILE)" \
@@ -640,12 +684,19 @@ show-macos-artifacts:
 .PHONY: release-macos
 release-macos: package-macos-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' required"; exit 1)
-	@if ! git rev-parse "v$(MACOS_PKG_VERSION)" >/dev/null 2>&1; then \
-		git tag "v$(MACOS_PKG_VERSION)"; git push origin "v$(MACOS_PKG_VERSION)"; \
-	fi
-	@gh release view "v$(MACOS_PKG_VERSION)" >/dev/null 2>&1 || \
-	  gh release create "v$(MACOS_PKG_VERSION)" --title "ECLI v$(MACOS_PKG_VERSION)" \
-	    --notes "macOS package (DMG) for ECLI v$(MACOS_PKG_VERSION)."
+	@$(MAKE) _ensure-tag VERSION="$(MACOS_PKG_VERSION)"
+	@tmpfile="$$(mktemp)"; \
+	trap 'rm -f "$$tmpfile"' EXIT; \
+	printf '%s\n' \
+		"macOS package (DMG) for ECLI v$(MACOS_PKG_VERSION)." \
+		"" \
+		"Artifacts:" \
+		"- $$(basename "$(MACOS_PKG_FILE)")" \
+		"- $$(basename "$(MACOS_SHA_FILE)")" > "$$tmpfile"; \
+	gh release view "v$(MACOS_PKG_VERSION)" >/dev/null 2>&1 || \
+	gh release create "v$(MACOS_PKG_VERSION)" \
+		--title "ECLI v$(MACOS_PKG_VERSION)" \
+		--notes-file "$$tmpfile"
 	@gh release upload "v$(MACOS_PKG_VERSION)" "$(MACOS_PKG_FILE)" "$(MACOS_SHA_FILE)" --clobber
 	@echo "--> Release v$(MACOS_PKG_VERSION) updated with macOS artifacts."
 
@@ -701,12 +752,19 @@ show-windows-artifacts:
 .PHONY: release-windows
 release-windows: package-windows-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' required"; exit 1)
-	@if ! git rev-parse "v$(WIN_PKG_VERSION)" >/dev/null 2>&1; then \
-		git tag "v$(WIN_PKG_VERSION)"; git push origin "v$(WIN_PKG_VERSION)"; \
-	fi
-	@gh release view "v$(WIN_PKG_VERSION)" >/dev/null 2>&1 || \
-	  gh release create "v$(WIN_PKG_VERSION)" --title "ECLI v$(WIN_PKG_VERSION)" \
-	    --notes "Windows x64 installer for ECLI v$(WIN_PKG_VERSION)."
+	@$(MAKE) _ensure-tag VERSION="$(WIN_PKG_VERSION)"
+	@tmpfile="$$(mktemp)"; \
+	trap 'rm -f "$$tmpfile"' EXIT; \
+	printf '%s\n' \
+		"Windows x86_64 installer for ECLI v$(WIN_PKG_VERSION)." \
+		"" \
+		"Artifacts:" \
+		"- $$(basename "$(WIN_PKG_FILE)")" \
+		"- $$(basename "$(WIN_SHA_FILE)")" > "$$tmpfile"; \
+	gh release view "v$(WIN_PKG_VERSION)" >/dev/null 2>&1 || \
+	gh release create "v$(WIN_PKG_VERSION)" \
+		--title "ECLI v$(WIN_PKG_VERSION)" \
+		--notes-file "$$tmpfile"
 	@gh release upload "v$(WIN_PKG_VERSION)" "$(WIN_PKG_FILE)" "$(WIN_SHA_FILE)" --clobber
 	@echo "--> Release v$(WIN_PKG_VERSION) updated with Windows artifacts."
 
