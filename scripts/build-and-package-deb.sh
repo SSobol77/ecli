@@ -100,6 +100,7 @@ mkdir -p \
   "${STAGING_DIR}/usr/share/doc/${PACKAGE_NAME}" \
   "${STAGING_DIR}/usr/share/man/man1" \
   "${RELEASES_DIR}"
+printf 'LINUX_ARCH := %s\n' "${FILENAME_ARCH}" > "${RELEASES_DIR}/.linux.env"
 
 install -m 755 "${EXECUTABLE}" "${STAGING_DIR}/usr/bin/${PACKAGE_NAME}"
 
@@ -188,18 +189,18 @@ dpkg-deb --contents "${FINAL_DEB_PATH}" | head -20 || true
 
 echo "==> Generating SHA-256 checksum"
 if command -v sha256sum >/dev/null 2>&1; then
-  sha256sum "${FINAL_DEB_PATH}" > "${FINAL_DEB_PATH}.sha256"
+  (cd "${RELEASES_DIR}" && sha256sum "$(basename "${FINAL_DEB_PATH}")" > "$(basename "${FINAL_DEB_PATH}").sha256")
 elif command -v shasum >/dev/null 2>&1; then
-  shasum -a 256 "${FINAL_DEB_PATH}" > "${FINAL_DEB_PATH}.sha256"
+  (cd "${RELEASES_DIR}" && shasum -a 256 "$(basename "${FINAL_DEB_PATH}")" > "$(basename "${FINAL_DEB_PATH}").sha256")
 else
   echo "WARNING: no sha256 tool found (sha256sum/shasum). Skipping checksum." >&2
 fi
 
 # instant validation
 if command -v sha256sum >/dev/null 2>&1; then
-  sha256sum -c "${FINAL_DEB_PATH}.sha256" || true
+  (cd "${RELEASES_DIR}" && sha256sum -c "$(basename "${FINAL_DEB_PATH}").sha256") || true
 elif command -v shasum >/dev/null 2>&1; then
-  shasum -a 256 -c "${FINAL_DEB_PATH}.sha256" || true
+  (cd "${RELEASES_DIR}" && shasum -a 256 -c "$(basename "${FINAL_DEB_PATH}").sha256") || true
 fi
 
 echo "✅ DONE: ${FINAL_DEB_PATH}"

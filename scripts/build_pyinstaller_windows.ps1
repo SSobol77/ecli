@@ -136,9 +136,9 @@ $version = (Get-Content pyproject.toml) -match '^\s*version\s*=\s*"(.*)"' | ForE
 if ([string]::IsNullOrWhiteSpace($version)) { Err "Cannot read version"; exit 1 }
 Ok "Version: $version"
 
-$ARCH = "win_x86_64"
+$winArch = "x86_64"
 $releasesDir = Join-Path "releases" $version
-$outInstaller = Join-Path $releasesDir ("ecli_{0}_{1}.exe" -f $version,$ARCH)
+$outInstaller = Join-Path $releasesDir ("ecli_{0}_win_{1}.exe" -f $version,$winArch)
 $outSha = "$outInstaller.sha256"
 
 # Output dirs for PyInstaller
@@ -188,6 +188,7 @@ if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
 
 # Ensure releases dir
 New-Item -ItemType Directory -Force -Path $releasesDir | Out-Null
+"WIN_ARCH := $winArch`n" | Out-File -Encoding ascii -NoNewline -FilePath (Join-Path $releasesDir ".win.env")
 
 # Build installer with strict OUTFILE and defines
 $nsis = "packaging/windows/nsis/ecli.nsi"
@@ -207,7 +208,8 @@ if (-not (Test-Path $outInstaller)) {
 # SHA256 sidecar
 Info "Writing SHA256..."
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $outInstaller).Hash
-$hash | Out-File -Encoding ascii -NoNewline $outSha
+"{0}  {1}`n" -f $hash.ToLower(), (Split-Path $outInstaller -Leaf) `
+    | Out-File -Encoding ascii -NoNewline -FilePath $outSha
 
 # Assertions
 if (-not (Test-Path $outSha)) { Err "Missing checksum $outSha"; exit 3 }

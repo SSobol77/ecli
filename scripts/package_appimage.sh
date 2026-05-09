@@ -18,6 +18,7 @@ OUT_DIR="$PROJECT_ROOT/releases/$VERSION"
 APPDIR="$PROJECT_ROOT/packaging/linux/appimage/AppDir"
 
 mkdir -p "$OUT_DIR"
+printf 'LINUX_ARCH := %s\n' "$ARCH" > "$OUT_DIR/.linux.env"
 # 1) Build the PyInstaller binary (if it hasn't been built yet)
 bash "$PROJECT_ROOT/scripts/build_pyinstaller_linux.sh"
 

@@ -212,12 +212,14 @@ DEST_SHA="${DEST_PKG}.sha256"
 
 mkdir -p "$RELEASES_DIR"
 cp -f "$PKG_FROM_PORTS" "$DEST_PKG"
+printf 'FREEBSD_ARCH := %s\n' "$ARCH" > "$RELEASES_DIR/.freebsd.env"
 
-# checksum рядом
+# SHA256 sidecar.
 if command -v sha256 >/dev/null 2>&1; then
-  sha256 -q "$DEST_PKG" > "$DEST_SHA"
+  hash="$(sha256 -q "$DEST_PKG")"
+  printf '%s  %s\n' "$hash" "$(basename "$DEST_PKG")" > "$DEST_SHA"
 elif command -v shasum >/dev/null 2>&1; then
-  shasum -a 256 "$DEST_PKG" | awk '{print $1}' > "$DEST_SHA"
+  (cd "$RELEASES_DIR" && shasum -a 256 "$(basename "$DEST_PKG")" > "$(basename "$DEST_PKG").sha256")
 else
   warn "No sha256/shasum available; skipping checksum."
 fi

@@ -30,7 +30,8 @@ if ([string]::IsNullOrWhiteSpace($version)) { Write-Err "Cannot read version"; e
 Write-Ok "Version: $version"
 
 $releasesDir = "releases\$version"
-$exeNameBase = "ecli_${version}_win_x86_64.exe"
+$winArch = "x86_64"
+$exeNameBase = "ecli_${version}_win_${winArch}.exe"
 $exePath = Join-Path $releasesDir $exeNameBase
 $shaPath = "$exePath.sha256"
 
@@ -96,6 +97,7 @@ $defines = "/DVERSION=$version /DOUTFILE=""$exePath"""
 
 # Ensure output dir
 New-Item -ItemType Directory -Force -Path $releasesDir | Out-Null
+"WIN_ARCH := $winArch`n" | Out-File -Encoding ascii -NoNewline -FilePath (Join-Path $releasesDir ".win.env")
 
 # Run NSIS
 & makensis $defines $nsisScript | Write-Host
@@ -108,7 +110,8 @@ if (-not (Test-Path $exePath)) {
 # SHA256
 Write-Info "Writing SHA256..."
 $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exePath).Hash
-$hash | Out-File -Encoding ascii -NoNewline $shaPath
+"{0}  {1}`n" -f $hash.ToLower(), (Split-Path $exePath -Leaf) `
+    | Out-File -Encoding ascii -NoNewline -FilePath $shaPath
 
 # Assert strict outputs
 if (-not (Test-Path $exePath)) { Write-Err "Missing $exePath"; exit 2 }
