@@ -13,6 +13,7 @@ Copyright: (c) 2026 Siergej Sobolewski
 - Artifact filename must follow the naming convention specified in `artifact-contract.md`
 - File location is `releases/<version>/`
 - Checksum file exists and matches generated digest
+- Checksum sidecar format is `<hex>  <artifact basename>`
 
 ## Example Verification Commands
 
@@ -20,10 +21,11 @@ Linux:
 - `sha256sum -c releases/<version>/<artifact>.sha256`
 
 macOS:
-- `shasum -c releases/<version>/<artifact>.sha256`
+- `shasum -a 256 -c releases/<version>/<artifact>.sha256`
 
 FreeBSD:
-- `sha256 -c releases/<version>/<artifact>.sha256`
+- `shasum -a 256 -c releases/<version>/<artifact>.sha256`
+- If `shasum` is unavailable, compare `sha256 -q releases/<version>/<artifact>` with the first field in the sidecar.
 
 Windows (PowerShell):
 ```powershell

@@ -31,11 +31,11 @@ flowchart LR
 | Target artifact | Script / entrypoint | Environment | Expected output | Validation step |
 |---|---|---|---|---|
 | Linux binary | `scripts/build_pyinstaller_linux.sh` | Linux | `dist/` executable | smoke run + file existence |
-| DEB | `scripts/build-and-package-deb.sh` | Linux | `releases/<ver>/ecli_<ver>_amd64.deb` | checksum + contract check |
-| RPM | `scripts/build-and-package-rpm.sh` | Linux/RPM tooling | `releases/<ver>/ecli_<ver>_amd64.rpm` | checksum + contract check |
-| FreeBSD PKG | `scripts/build-and-package-freebsd.sh` | FreeBSD host/VM | `releases/<ver>/ecli_<ver>_amd64.pkg` | checksum + contract check |
+| DEB | `scripts/build-and-package-deb.sh` | Linux | `releases/<ver>/ecli_<ver>_linux_<arch>.deb` | checksum + contract check |
+| RPM | `scripts/build-and-package-rpm.sh` | Linux/RPM tooling | `releases/<ver>/ecli_<ver>_linux_<arch>.rpm` | checksum + contract check |
+| FreeBSD PKG | `scripts/build-and-package-freebsd.sh` | FreeBSD host/VM | `releases/<ver>/ecli_<ver>_freebsd_<arch>.pkg` | checksum + contract check |
 | macOS DMG | `scripts/build-and-package-macos.sh` | macOS | `releases/<ver>/ecli_<ver>_macos_<arch>.dmg` | checksum + contract check |
-| Windows EXE | `scripts/build-and-package-windows.ps1` | Windows + NSIS | `releases/<ver>/ecli_<ver>_win_x64.exe` | checksum + contract check |
+| Windows EXE | `scripts/build-and-package-windows.ps1` | Windows + NSIS | `releases/<ver>/ecli_<ver>_win_x86_64.exe` | checksum + contract check |
 
 ## Known Unsupported/Constrained Combinations
 

@@ -54,6 +54,14 @@ architecture token.
 For each artifact, a checksum file must exist:
 - `<artifact>.sha256`
 
+Checksum sidecars use coreutils-compatible format:
+
+```text
+<64 lowercase hex characters>  <artifact basename>
+```
+
+The artifact basename must not include a directory component.
+
 ## Forbidden Variants
 
 - Mixed hyphen/underscore variants for final released names are forbidden.

@@ -367,12 +367,14 @@ EOF
 
   DEST_PKG="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_freebsd_${ARCH}.pkg"
   [ "$ORIG_PKG" != "$DEST_PKG" ] && mv -f "$ORIG_PKG" "$DEST_PKG"
+  printf 'FREEBSD_ARCH := %s\n' "$ARCH" > "$RELEASES_DIR/.freebsd.env"
 
   # SHA256 sidecar
   if command -v sha256 >/dev/null 2>&1; then
-    sha256 -q "$DEST_PKG" > "${DEST_PKG}.sha256"
+    hash="$(sha256 -q "$DEST_PKG")"
+    printf '%s  %s\n' "$hash" "$(basename "$DEST_PKG")" > "${DEST_PKG}.sha256"
   elif command -v shasum >/dev/null 2>&1; then
-    shasum -a 256 "$DEST_PKG" | awk '{print $1}' > "${DEST_PKG}.sha256"
+    (cd "$RELEASES_DIR" && shasum -a 256 "$(basename "$DEST_PKG")" > "$(basename "$DEST_PKG").sha256")
   else
     print_warn "No sha256/shasum available; skipping checksum."
   fi

@@ -50,7 +50,7 @@ PKG_NAME_BASE="ecli_${VERSION}_macos_${MAC_ARCH}"
 DMG_PATH="${RELEASES_DIR}/${PKG_NAME_BASE}.dmg"
 SHA_PATH="${DMG_PATH}.sha256"
 
-# --- Python deps (optional locally; in CI ставим до запуска) ------------------
+# --- Python deps (optional locally; CI installs these before packaging) --------
 log "Ensuring Python deps present (PyInstaller + runtime stack)..."
 python3.11 -m pip install --upgrade pip wheel setuptools >/dev/null 2>&1 || true
 python3.11 -m pip install \
@@ -138,6 +138,7 @@ EOF
 # --- Create DMG with drag-to-Applications layout ------------------------------
 log "Creating DMG image..."
 mkdir -p "$RELEASES_DIR"
+printf 'MACOS_ARCH := %s\n' "$MAC_ARCH" > "$RELEASES_DIR/.macos.env"
 
 # Staging for DMG
 DMG_STAGING="build/macos_dmg"
@@ -153,15 +154,16 @@ DMG_TMP="${DMG_PATH%.dmg}-tmp.dmg"
 
 # Create read-write DMG, set up layout, then convert to compressed
 hdiutil create -volname "$VOL_NAME" -srcfolder "$DMG_STAGING" -ov -fs HFS+ -format UDRW "$DMG_TMP"
-# (Optional) Customize Finder window via AppleScript — опускаем для простоты.
+# Finder window customization via AppleScript is intentionally omitted here.
 hdiutil convert "$DMG_TMP" -format UDZO -imagekey zlib-level=9 -o "$DMG_PATH"
 rm -f "$DMG_TMP"
 
 # Checksum
 if command -v shasum >/dev/null 2>&1; then
-  shasum -a 256 "$DMG_PATH" | awk '{print $1}' > "$SHA_PATH"
+  (cd "$RELEASES_DIR" && shasum -a 256 "$(basename "$DMG_PATH")" > "$(basename "$DMG_PATH").sha256")
 else
-  /usr/bin/openssl dgst -sha256 "$DMG_PATH" | awk '{print $2}' > "$SHA_PATH"
+  hash="$(/usr/bin/openssl dgst -sha256 "$DMG_PATH" | awk '{print $2}')"
+  printf '%s  %s\n' "$hash" "$(basename "$DMG_PATH")" > "$SHA_PATH"
 fi
 
 ok "DMG: $DMG_PATH"

@@ -21,12 +21,36 @@ else
 	ARCH_NORMALIZED := $(ARCH)
 endif
 
-# Read version from pyproject.toml without multiline $(shell)
-# We expect a line like: version = "0.1.0"
-PACKAGE_VERSION := $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null || echo 0.0.0)
+PACKAGE_VERSION := $(shell $(PYTHON) -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])' 2>/dev/null || awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null || echo 0.0.0)
 
 # Release directory
 RELEASE_DIR := releases/$(PACKAGE_VERSION)
+LINUX_ARCH ?= $(ARCH_NORMALIZED)
+FREEBSD_ARCH ?= $(ARCH_NORMALIZED)
+MACOS_ARCH ?= $(ARCH_NORMALIZED)
+WIN_ARCH ?= x86_64
+
+-include $(RELEASE_DIR)/.linux.env
+-include $(RELEASE_DIR)/.freebsd.env
+-include $(RELEASE_DIR)/.macos.env
+-include $(RELEASE_DIR)/.win.env
+
+define verify_sha256
+	@artifact="$(1)"; \
+	sidecar="$$artifact.sha256"; \
+	test -f "$$artifact" || (echo "Missing $$artifact"; exit 2); \
+	test -f "$$sidecar" || (echo "Missing $$sidecar"; exit 3); \
+	dir="$$(dirname "$$artifact")"; \
+	base="$$(basename "$$artifact")"; \
+	if command -v sha256sum >/dev/null 2>&1; then \
+		(cd "$$dir" && sha256sum -c "$$base.sha256") || (echo "checksum mismatch: $$artifact"; exit 4); \
+	elif command -v shasum >/dev/null 2>&1; then \
+		(cd "$$dir" && shasum -a 256 -c "$$base.sha256") || (echo "checksum mismatch: $$artifact"; exit 4); \
+	else \
+		echo "Missing SHA256 tool: sha256sum or shasum"; \
+		exit 5; \
+	fi
+endef
 
 .DEFAULT_GOAL := help
 
@@ -50,7 +74,8 @@ help:
 	@echo "QUICK START:"
 	@echo "  make install                - Install dependencies"
 	@echo "  make run                    - Run from source"
-	@echo "  make clean                  - Clean all build artifacts"
+	@echo "  make clean                  - Clean intermediate build artifacts"
+	@echo "  make distclean              - Clean intermediates and release outputs"
 	@echo ""
 	@echo "LINUX PACKAGES:"
 	@echo "  make package-deb            - Build Debian/Ubuntu .deb (local)"
@@ -76,7 +101,8 @@ help:
 	@echo "  make publish-pypi           - Publish to PyPI (requires credentials)"
 	@echo ""
 	@echo "MULTI & META TARGETS:"
-	@echo "  make package-all            - Build all platform packages (requires native tools)"
+	@echo "  make package-all-host       - Build packages supported by this host OS"
+	@echo "  make package-all            - Alias for package-all-host"
 	@echo "  make package-linux          - Build all Linux packages (deb, rpm, appimage)"
 	@echo "  make package-docker         - Build containers only (deb, rpm)"
 	@echo "  make publish-all            - Publish all artifacts to GitHub Release"
@@ -125,8 +151,11 @@ sysinfo:
 .PHONY: install
 install:
 	@echo "--> Installing dependencies..."
-	$(UV) pip install --system -r requirements.txt
-	-@[ -f requirements-dev.txt ] && $(UV) pip install --system -r requirements-dev.txt || true
+	@$(UV) pip install --system -e ".[dev]" || \
+		( \
+			echo "--> System Python rejected install; syncing local uv environment instead."; \
+			$(UV) sync --extra dev; \
+		)
 
 .PHONY: run
 run:
@@ -134,10 +163,15 @@ run:
 
 .PHONY: clean
 clean:
-	rm -rf build/ dist/ releases/ .pytest_cache/ .ruff_cache/ .mypy_cache/ __pycache__
+	rm -rf build/ dist/ .pytest_cache/ .ruff_cache/ .mypy_cache/ __pycache__
 	-find . -type d -name "__pycache__" -exec rm -rf {} +
 	-find . -type f -name "*.pyc" -delete
-	@echo "--> Build artifacts cleaned."
+	@echo "--> Intermediate build artifacts cleaned."
+
+.PHONY: distclean
+distclean: clean
+	rm -rf releases/
+	@echo "--> Release artifacts cleaned."
 
 
 # =============================================================================
@@ -156,22 +190,38 @@ clean:
 
 PYPI_VERSION    ?= $(PACKAGE_VERSION)
 PYPI_PKG_DIR    ?= dist
-PYPI_WHEEL_FILE ?= $(PYPI_PKG_DIR)/ecli-$(PYPI_VERSION)-py3-none-any.whl
-PYPI_SDIST_FILE ?= $(PYPI_PKG_DIR)/ecli-$(PYPI_VERSION).tar.gz
+PYPI_DIST_NAME   ?= ecli_editor
+PYPI_WHEEL_FILE ?= $(PYPI_PKG_DIR)/$(PYPI_DIST_NAME)-$(PYPI_VERSION)-py3-none-any.whl
+PYPI_SDIST_FILE ?= $(PYPI_PKG_DIR)/$(PYPI_DIST_NAME)-$(PYPI_VERSION).tar.gz
 
 .PHONY: package-pypi
 package-pypi: clean
 	@echo "--> Building Python packages (wheel + sdist)..."
 	$(PYTHON) -m build
+	$(PYTHON) -m twine check --strict dist/*.whl dist/*.tar.gz
+	@for artifact in "$(PYPI_WHEEL_FILE)" "$(PYPI_SDIST_FILE)"; do \
+		dir="$$(dirname "$$artifact")"; \
+		base="$$(basename "$$artifact")"; \
+		if command -v sha256sum >/dev/null 2>&1; then \
+			(cd "$$dir" && sha256sum "$$base" > "$$base.sha256"); \
+		elif command -v shasum >/dev/null 2>&1; then \
+			(cd "$$dir" && shasum -a 256 "$$base" > "$$base.sha256"); \
+		else \
+			echo "Missing SHA256 tool: sha256sum or shasum"; \
+			exit 5; \
+		fi; \
+	done
 	$(MAKE) package-pypi-assert
 
 .PHONY: package-pypi-assert
 package-pypi-assert:
 	@test -n "$(PYPI_VERSION)" || (echo "PYPI_VERSION is empty"; exit 1)
-	@test -f "$(PYPI_WHEEL_FILE)" || (echo "Missing $(PYPI_WHEEL_FILE)"; ls -R dist || true; exit 2)
-	@test -f "$(PYPI_SDIST_FILE)" || (echo "Missing $(PYPI_SDIST_FILE)"; ls -R dist || true; exit 2)
+	$(call verify_sha256,$(PYPI_WHEEL_FILE))
+	$(call verify_sha256,$(PYPI_SDIST_FILE))
 	@echo "--> OK: $(PYPI_WHEEL_FILE)"
+	@echo "--> OK: $(PYPI_WHEEL_FILE).sha256"
 	@echo "--> OK: $(PYPI_SDIST_FILE)"
+	@echo "--> OK: $(PYPI_SDIST_FILE).sha256"
 
 .PHONY: show-python-artifacts
 show-python-artifacts:
@@ -218,9 +268,9 @@ _ensure-tag:
 # ---------------------------
 
 # Resolve version once to match [project].version in pyproject.toml.
-DEB_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
+DEB_PKG_VERSION ?= $(PACKAGE_VERSION)
 DEB_PKG_DIR     ?= releases/$(DEB_PKG_VERSION)
-DEB_PKG_FILE    ?= $(DEB_PKG_DIR)/ecli_$(DEB_PKG_VERSION)_linux_$(ARCH_NORMALIZED).deb
+DEB_PKG_FILE    ?= $(DEB_PKG_DIR)/ecli_$(DEB_PKG_VERSION)_linux_$(LINUX_ARCH).deb
 DEB_SHA_FILE    ?= $(DEB_PKG_FILE).sha256
 
 .PHONY: package-deb
@@ -241,8 +291,7 @@ package-deb-docker: clean
 .PHONY: package-deb-assert
 package-deb-assert:
 	@test -n "$(DEB_PKG_VERSION)" || (echo "DEB_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
-	@test -f "$(DEB_PKG_FILE)" || (echo "Missing $(DEB_PKG_FILE)"; ls -R releases || true; exit 2)
-	@test -f "$(DEB_SHA_FILE)" || (echo "Missing $(DEB_SHA_FILE)"; ls -R releases || true; exit 2)
+	$(call verify_sha256,$(DEB_PKG_FILE))
 	@echo "--> OK: $(DEB_PKG_FILE)"
 	@echo "--> OK: $(DEB_SHA_FILE)"
 
@@ -297,9 +346,9 @@ release-deb: package-deb-assert
 # ---------------------------
 
 # Resolve version once to match [project].version in pyproject.toml.
-RPM_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
+RPM_PKG_VERSION ?= $(PACKAGE_VERSION)
 RPM_PKG_DIR     ?= releases/$(RPM_PKG_VERSION)
-RPM_PKG_FILE    ?= $(RPM_PKG_DIR)/ecli_$(RPM_PKG_VERSION)_linux_$(ARCH_NORMALIZED).rpm
+RPM_PKG_FILE    ?= $(RPM_PKG_DIR)/ecli_$(RPM_PKG_VERSION)_linux_$(LINUX_ARCH).rpm
 RPM_SHA_FILE    ?= $(RPM_PKG_FILE).sha256
 
 .PHONY: package-rpm
@@ -317,8 +366,7 @@ package-rpm-docker: clean
 .PHONY: package-rpm-assert
 package-rpm-assert:
 	@test -n "$(RPM_PKG_VERSION)" || (echo "RPM_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
-	@test -f "$(RPM_PKG_FILE)" || (echo "Missing $(RPM_PKG_FILE)"; ls -R releases || true; exit 2)
-	@test -f "$(RPM_SHA_FILE)" || (echo "Missing $(RPM_SHA_FILE)"; ls -R releases || true; exit 2)
+	$(call verify_sha256,$(RPM_PKG_FILE))
 	@echo "--> OK: $(RPM_PKG_FILE)"
 	@echo "--> OK: $(RPM_SHA_FILE)"
 
@@ -376,14 +424,14 @@ release-rpm: package-rpm-assert
 
 APPIMAGE_VERSION ?= $(PACKAGE_VERSION)
 APPIMAGE_PKG_DIR ?= $(RELEASE_DIR)
-APPIMAGE_FILE    ?= $(APPIMAGE_PKG_DIR)/ecli_$(APPIMAGE_VERSION)_linux_$(ARCH_NORMALIZED).AppImage
+APPIMAGE_FILE    ?= $(APPIMAGE_PKG_DIR)/ecli_$(APPIMAGE_VERSION)_linux_$(LINUX_ARCH).AppImage
 APPIMAGE_SHA_FILE?= $(APPIMAGE_FILE).sha256
 
 .PHONY: package-appimage
 package-appimage: clean
 	@command -v appimagetool >/dev/null 2>&1 || (echo "appimagetool not found. Install AppImageKit: https://github.com/AppImage/AppImageKit"; exit 1)
 	@echo "--> Building AppImage..."
-	bash ./scripts/package_appimage.sh "$(APPIMAGE_VERSION)" "$(ARCH_NORMALIZED)"
+	bash ./scripts/package_appimage.sh "$(APPIMAGE_VERSION)" "$(LINUX_ARCH)"
 	@mkdir -p $(APPIMAGE_PKG_DIR)
 	@test -f "$(APPIMAGE_FILE)" || (echo "AppImage build may have failed"; exit 1)
 	@echo "--> Generating checksum..."
@@ -393,14 +441,13 @@ package-appimage: clean
 .PHONY: package-appimage-assert
 package-appimage-assert:
 	@test -n "$(APPIMAGE_VERSION)" || (echo "APPIMAGE_VERSION is empty"; exit 1)
-	@test -f "$(APPIMAGE_FILE)" || (echo "Missing $(APPIMAGE_FILE)"; ls -R $(RELEASE_DIR) || true; exit 2)
-	@test -f "$(APPIMAGE_SHA_FILE)" || (echo "Missing $(APPIMAGE_SHA_FILE)"; ls -R $(RELEASE_DIR) || true; exit 2)
+	$(call verify_sha256,$(APPIMAGE_FILE))
 	@echo "--> OK: $(APPIMAGE_FILE)"
 	@echo "--> OK: $(APPIMAGE_SHA_FILE)"
 
 .PHONY: show-appimage-artifacts
 show-appimage-artifacts:
-	@echo "Version: $(APPIMAGE_VERSION) Arch: $(ARCH_NORMALIZED)"
+	@echo "Version: $(APPIMAGE_VERSION) Arch: $(LINUX_ARCH)"
 	@ls -lh $(APPIMAGE_PKG_DIR)/ecli_*_linux_*.AppImage* 2>/dev/null || echo "(no artifacts yet)"
 
 .PHONY: release-appimage
@@ -410,7 +457,7 @@ release-appimage: package-appimage-assert
 	@tmpfile="$$(mktemp)"; \
 	trap 'rm -f "$$tmpfile"' EXIT; \
 	printf '%s\n' \
-		"AppImage package for Linux $(ARCH_NORMALIZED) - ECLI v$(APPIMAGE_VERSION)." \
+		"AppImage package for Linux $(LINUX_ARCH) - ECLI v$(APPIMAGE_VERSION)." \
 		"" \
 		"Artifacts:" \
 		"- $$(basename "$(APPIMAGE_FILE)")" \
@@ -440,8 +487,9 @@ release-appimage: package-appimage-assert
 # ---------------------------
 
 SNAP_VERSION  ?= $(PACKAGE_VERSION)
-SNAP_PKG_DIR  ?= .
-SNAP_FILE     ?= $(SNAP_PKG_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap
+SNAP_PKG_DIR  ?= $(RELEASE_DIR)
+SNAP_FILE     ?= $(SNAP_PKG_DIR)/ecli_$(SNAP_VERSION)_linux_$(LINUX_ARCH).snap
+SNAP_SHA_FILE ?= $(SNAP_FILE).sha256
 
 .PHONY: package-snap
 package-snap: clean
@@ -460,13 +508,15 @@ package-snap: clean
 		printf '%s\n' "$$@"; \
 		exit 1; \
 	fi; \
-	mv "$$1" "$(RELEASE_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap"
+	mv "$$1" "$(SNAP_FILE)"
+	@cd "$(SNAP_PKG_DIR)" && sha256sum "$$(basename "$(SNAP_FILE)")" > "$$(basename "$(SNAP_SHA_FILE)")"
 	$(MAKE) package-snap-assert
 
 .PHONY: package-snap-assert
 package-snap-assert:
-	@test -f "$(RELEASE_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap" || (echo "Snap build may have failed"; ls -R $(RELEASE_DIR) || true; exit 1)
-	@echo "--> OK: $(RELEASE_DIR)/ecli_$(SNAP_VERSION)_linux_$(ARCH_NORMALIZED).snap"
+	$(call verify_sha256,$(SNAP_FILE))
+	@echo "--> OK: $(SNAP_FILE)"
+	@echo "--> OK: $(SNAP_SHA_FILE)"
 
 .PHONY: show-snap-artifacts
 show-snap-artifacts:
@@ -491,7 +541,8 @@ release-snap: package-snap-assert
 
 TAR_VERSION   ?= $(PACKAGE_VERSION)
 TAR_PKG_DIR   ?= $(RELEASE_DIR)
-TAR_LINUX_FILE?= $(TAR_PKG_DIR)/ecli_$(TAR_VERSION)_linux_$(ARCH_NORMALIZED).tar.gz
+TAR_LINUX_FILE?= $(TAR_PKG_DIR)/ecli_$(TAR_VERSION)_linux_$(LINUX_ARCH).tar.gz
+TAR_SHA_FILE  ?= $(TAR_LINUX_FILE).sha256
 
 .PHONY: package-tar-linux
 package-tar-linux: clean
@@ -499,17 +550,23 @@ package-tar-linux: clean
 	@mkdir -p $(TAR_PKG_DIR)
 	@echo "ECLI v$(TAR_VERSION)" > RELEASE_NOTES.txt
 	@tar --exclude='.git' --exclude='.venv' --exclude='build' --exclude='dist' \
-		--exclude='__pycache__' --exclude='.pytest_cache' \
+		--exclude='releases' --exclude='__pycache__' --exclude='.pytest_cache' \
 		-czf "$(TAR_LINUX_FILE)" . \
 		--transform 's,^,ecli-$(TAR_VERSION)/,'
 	@rm -f RELEASE_NOTES.txt
-	@cd $(TAR_PKG_DIR) && sha256sum $$(basename $(TAR_LINUX_FILE)) > $$(basename $(TAR_LINUX_FILE)).sha256
+	@cd $(TAR_PKG_DIR) && sha256sum $$(basename $(TAR_LINUX_FILE)) > $$(basename $(TAR_SHA_FILE))
+	$(MAKE) package-tar-linux-assert
+
+.PHONY: package-tar-linux-assert
+package-tar-linux-assert:
+	@test -n "$(TAR_VERSION)" || (echo "TAR_VERSION is empty"; exit 1)
+	$(call verify_sha256,$(TAR_LINUX_FILE))
 	@echo "--> OK: $(TAR_LINUX_FILE)"
-	@echo "--> OK: $(TAR_LINUX_FILE).sha256"
+	@echo "--> OK: $(TAR_SHA_FILE)"
 
 .PHONY: show-tar-artifacts
 show-tar-artifacts:
-	@echo "Version: $(TAR_VERSION) Arch: $(ARCH_NORMALIZED)"
+	@echo "Version: $(TAR_VERSION) Arch: $(LINUX_ARCH)"
 	@ls -lh $(TAR_PKG_DIR)/*.tar.gz* 2>/dev/null || echo "(no tar artifacts yet)"
 
 
@@ -534,9 +591,9 @@ show-tar-artifacts:
 
 # Resolve version once (fallback to parsing pyproject.toml if not set above).
 # This must match [project].version in pyproject.toml.
-FREEBSD_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
+FREEBSD_PKG_VERSION ?= $(PACKAGE_VERSION)
 FREEBSD_PKG_DIR     ?= releases/$(FREEBSD_PKG_VERSION)
-FREEBSD_PKG_FILE    ?= $(FREEBSD_PKG_DIR)/ecli_$(FREEBSD_PKG_VERSION)_freebsd_$(ARCH_NORMALIZED).pkg
+FREEBSD_PKG_FILE    ?= $(FREEBSD_PKG_DIR)/ecli_$(FREEBSD_PKG_VERSION)_freebsd_$(FREEBSD_ARCH).pkg
 FREEBSD_SHA_FILE    ?= $(FREEBSD_PKG_FILE).sha256
 
 # --- CI (GitHub Actions) ------------------------------------------------------
@@ -578,8 +635,7 @@ package-freebsd-port: clean
 .PHONY: package-freebsd-assert
 package-freebsd-assert:
 	@test -n "$(FREEBSD_PKG_VERSION)" || (echo "FREEBSD_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
-	@test -f "$(FREEBSD_PKG_FILE)" || (echo "Missing $(FREEBSD_PKG_FILE)"; ls -R releases || true; exit 2)
-	@test -f "$(FREEBSD_SHA_FILE)" || (echo "Missing $(FREEBSD_SHA_FILE)"; ls -R releases || true; exit 2)
+	$(call verify_sha256,$(FREEBSD_PKG_FILE))
 	@echo "--> OK: $(FREEBSD_PKG_FILE)"
 	@echo "--> OK: $(FREEBSD_SHA_FILE)"
 
@@ -656,8 +712,7 @@ release-freebsd: package-freebsd-assert
 #  - For CI builds, see `.github/workflows/macos-dmg.yml`.
 # ---------------------------
 
-MACOS_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
-MACOS_ARCH        ?= $(shell uname -m)
+MACOS_PKG_VERSION ?= $(PACKAGE_VERSION)
 MACOS_PKG_DIR     ?= releases/$(MACOS_PKG_VERSION)
 MACOS_PKG_FILE    ?= $(MACOS_PKG_DIR)/ecli_$(MACOS_PKG_VERSION)_macos_$(MACOS_ARCH).dmg
 MACOS_SHA_FILE    ?= $(MACOS_PKG_FILE).sha256
@@ -670,8 +725,7 @@ package-macos: clean
 .PHONY: package-macos-assert
 package-macos-assert:
 	@test -n "$(MACOS_PKG_VERSION)" || (echo "MACOS_PKG_VERSION empty (pyproject.toml)"; exit 1)
-	@test -f "$(MACOS_PKG_FILE)"    || (echo "Missing $(MACOS_PKG_FILE)"; ls -R releases || true; exit 2)
-	@test -f "$(MACOS_SHA_FILE)"    || (echo "Missing $(MACOS_SHA_FILE)"; ls -R releases || true; exit 3)
+	$(call verify_sha256,$(MACOS_PKG_FILE))
 	@echo "--> OK: $(MACOS_PKG_FILE)"
 	@echo "--> OK: $(MACOS_SHA_FILE)"
 
@@ -724,9 +778,9 @@ release-macos: package-macos-assert
 # ---------------------------
 
 
-WIN_PKG_VERSION ?= $(shell awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null)
+WIN_PKG_VERSION ?= $(PACKAGE_VERSION)
 WIN_PKG_DIR     ?= releases/$(WIN_PKG_VERSION)
-WIN_PKG_FILE    ?= $(WIN_PKG_DIR)/ecli_$(WIN_PKG_VERSION)_win_x86_64.exe
+WIN_PKG_FILE    ?= $(WIN_PKG_DIR)/ecli_$(WIN_PKG_VERSION)_win_$(WIN_ARCH).exe
 WIN_SHA_FILE    ?= $(WIN_PKG_FILE).sha256
 
 # Local Windows build (run in PowerShell on Windows host)
@@ -738,8 +792,7 @@ package-windows: clean
 .PHONY: package-windows-assert
 package-windows-assert:
 	@test -n "$(WIN_PKG_VERSION)" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
-	@test -f "$(WIN_PKG_FILE)"    || (echo "Missing $(WIN_PKG_FILE)"; ls -R releases || true; exit 2)
-	@test -f "$(WIN_SHA_FILE)"    || (echo "Missing $(WIN_SHA_FILE)"; ls -R releases || true; exit 3)
+	$(call verify_sha256,$(WIN_PKG_FILE))
 	@echo "--> OK: $(WIN_PKG_FILE)"
 	@echo "--> OK: $(WIN_SHA_FILE)"
 
@@ -773,14 +826,36 @@ release-windows: package-windows-assert
 # Meta Targets - Build Multiple Packages
 # =============================================================================
 
-# Build all platform packages (requires all native tools)
-.PHONY: package-all
-package-all: package-pypi package-deb-docker package-rpm-docker package-appimage package-freebsd package-macos package-windows
+# Build packages supported by the current host OS.
+.PHONY: package-all-host
+package-all-host:
+	@case "$(OS)" in \
+		Linux) \
+			$(MAKE) package-deb-docker package-rpm-docker package-appimage package-tar-linux package-pypi; \
+			;; \
+		FreeBSD) \
+			$(MAKE) package-freebsd package-tar-linux package-pypi; \
+			;; \
+		Darwin) \
+			$(MAKE) package-pypi package-macos; \
+			;; \
+		MINGW*|MSYS*|CYGWIN*) \
+			$(MAKE) package-pypi package-windows; \
+			;; \
+		*) \
+			echo "Unsupported host OS for package-all-host: $(OS)"; \
+			exit 1; \
+			;; \
+	esac
 	@echo ""
 	@echo "╔═══════════════════════════════════════════════════════════════════════╗"
-	@echo "║                  ALL PACKAGES BUILT SUCCESSFULLY                      ║"
+	@echo "║              HOST-SUPPORTED PACKAGES BUILT SUCCESSFULLY               ║"
 	@echo "╚═══════════════════════════════════════════════════════════════════════╝"
 	@$(MAKE) show-artifacts
+
+# Backward-compatible alias.
+.PHONY: package-all
+package-all: package-all-host
 
 # Build all Linux packages (Docker containers)
 .PHONY: package-docker
@@ -801,12 +876,47 @@ package-linux: package-deb-docker package-rpm-docker package-appimage package-ta
 package-desktop: package-macos package-windows
 	@echo "--> All desktop packages built."
 
-# Publish all packages to GitHub Release
+# Publish artifacts that already exist; skip absent platform artifacts.
 .PHONY: publish-all
-publish-all: release-deb release-rpm release-appimage release-freebsd release-macos release-windows publish-pypi
+publish-all:
+	@if [ -f "$(DEB_PKG_FILE)" ]; then \
+		$(MAKE) release-deb; \
+	else \
+		echo "SKIP: DEB artifact not found: $(DEB_PKG_FILE)"; \
+	fi
+	@if [ -f "$(RPM_PKG_FILE)" ]; then \
+		$(MAKE) release-rpm; \
+	else \
+		echo "SKIP: RPM artifact not found: $(RPM_PKG_FILE)"; \
+	fi
+	@if [ -f "$(APPIMAGE_FILE)" ]; then \
+		$(MAKE) release-appimage; \
+	else \
+		echo "SKIP: AppImage artifact not found: $(APPIMAGE_FILE)"; \
+	fi
+	@if [ -f "$(FREEBSD_PKG_FILE)" ]; then \
+		$(MAKE) release-freebsd; \
+	else \
+		echo "SKIP: FreeBSD artifact not found: $(FREEBSD_PKG_FILE)"; \
+	fi
+	@if [ -f "$(MACOS_PKG_FILE)" ]; then \
+		$(MAKE) release-macos; \
+	else \
+		echo "SKIP: macOS artifact not found: $(MACOS_PKG_FILE)"; \
+	fi
+	@if [ -f "$(WIN_PKG_FILE)" ]; then \
+		$(MAKE) release-windows; \
+	else \
+		echo "SKIP: Windows artifact not found: $(WIN_PKG_FILE)"; \
+	fi
+	@if ls dist/*.whl dist/*.tar.gz >/dev/null 2>&1; then \
+		$(MAKE) publish-pypi; \
+	else \
+		echo "SKIP: PyPI artifacts not found under dist/"; \
+	fi
 	@echo ""
 	@echo "╔═══════════════════════════════════════════════════════════════════════╗"
-	@echo "║              ALL PACKAGES PUBLISHED TO GITHUB RELEASE                 ║"
+	@echo "║             AVAILABLE ARTIFACTS PUBLISH FLOW COMPLETED                ║"
 	@echo "╚═══════════════════════════════════════════════════════════════════════╝"
 
 

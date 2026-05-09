@@ -553,30 +553,35 @@ EOF
 
     print_step "Package created: $(basename "$pkg_path")"
 
-    # Normalize filename to ecli_<version>_<arch>.pkg
+    # Normalize filename to the canonical release contract.
     local arch
     arch="$(uname -m || echo amd64)"
-    [ "$arch" = "x86_64" ] && arch="amd64"
+    case "$arch" in
+        amd64|x86_64) arch="x86_64" ;;
+        aarch64|arm64) arch="arm64" ;;
+    esac
 
-    local normalized_pkg="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_${arch}.pkg"
+    local normalized_pkg="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_freebsd_${arch}.pkg"
     [ -f "$normalized_pkg" ] && rm -f "$normalized_pkg"
     mv "$pkg_path" "$normalized_pkg"
     pkg_path="$normalized_pkg"
     print_step "Renamed artifact → $(basename "$pkg_path")"
+    printf 'FREEBSD_ARCH := %s\n' "$arch" > "$RELEASES_DIR/.freebsd.env"
 
     # Generate checksum for normalized name
     rm -f "${pkg_path}.sha256" 2>/dev/null || true
     if command -v sha256sum >/dev/null 2>&1; then
-        sha256sum "$pkg_path" > "${pkg_path}.sha256"
+        (cd "$RELEASES_DIR" && sha256sum "$(basename "$pkg_path")" > "$(basename "$pkg_path").sha256")
     elif command -v shasum >/dev/null 2>&1; then
-        shasum -a 256 "$pkg_path" > "${pkg_path}.sha256"
+        (cd "$RELEASES_DIR" && shasum -a 256 "$(basename "$pkg_path")" > "$(basename "$pkg_path").sha256")
     elif command -v sha256 >/dev/null 2>&1; then
-        sha256 -q "$pkg_path" > "${pkg_path}.sha256"
+        hash="$(sha256 -q "$pkg_path")"
+        printf '%s  %s\n' "$hash" "$(basename "$pkg_path")" > "${pkg_path}.sha256"
     else
         print_warning "No checksum utility found (sha256sum/shasum/sha256)"
     fi
 
-    # Optionally: upload debug manifests as release assets later via CI/gh (не копируем в repo)
+    # Optionally: upload debug manifests as release assets later via CI/gh.
     # cp "$manifest_file" "$RELEASES_DIR/manifest.txt" 2>/dev/null || true
     # cp "$ucl_manifest"  "$RELEASES_DIR/manifest.ucl" 2>/dev/null || true
     # find "$STAGING_ROOT" -type f > "$RELEASES_DIR/staged_files.txt" 2>/dev/null || true

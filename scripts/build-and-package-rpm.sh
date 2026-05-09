@@ -82,6 +82,7 @@ ICON_DIR="${STAGING_DIR}/usr/share/icons/hicolor/256x256/apps"
 
 RELEASES_DIR="${RELEASES_DIR:-releases/${VERSION}}"
 mkdir -p "${RELEASES_DIR}"
+printf 'LINUX_ARCH := %s\n' "${NORMALIZED_ARCH}" > "${RELEASES_DIR}/.linux.env"
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -241,9 +242,9 @@ fi
 
 echo "==> Generating SHA-256 checksum"
 if command -v sha256sum >/dev/null 2>&1; then
-  sha256sum "${NORMALIZED_RPM}" > "${NORMALIZED_RPM}.sha256"
+  (cd "${RELEASES_DIR}" && sha256sum "$(basename "${NORMALIZED_RPM}")" > "$(basename "${NORMALIZED_RPM}").sha256")
 elif command -v shasum >/dev/null 2>&1; then
-  shasum -a 256 "${NORMALIZED_RPM}" > "${NORMALIZED_RPM}.sha256"
+  (cd "${RELEASES_DIR}" && shasum -a 256 "$(basename "${NORMALIZED_RPM}")" > "$(basename "${NORMALIZED_RPM}").sha256")
 else
   echo "WARNING: no sha256 tool found (sha256sum/shasum). Skipping checksum." >&2
 fi
