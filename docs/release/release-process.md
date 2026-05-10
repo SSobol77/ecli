@@ -99,10 +99,10 @@ dist/ecli-editor-<version>.cdx.json
 dist/ecli-editor-<version>.cdx.json.sha256
 ```
 
-The SBOM is generated with `cyclonedx-py environment` in JSON format and
-CycloneDX schema version 1.5. The workflow invokes `cyclonedx-py` with
-`--validate`, so malformed SBOM output fails the release build before artifact
-upload.
+The SBOM is generated with the `cyclonedx-bom` Python distribution, invoked as
+`python3 -m cyclonedx_py environment`, in JSON format and CycloneDX schema
+version 1.5. The workflow invokes the generator with `--validate`, so malformed
+SBOM output fails the release build before artifact upload.
 
 The SBOM and its SHA256 sidecar are uploaded as workflow artifacts and attached
 to the GitHub Release. PyPI does not accept arbitrary release attachments, so the
