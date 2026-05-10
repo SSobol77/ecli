@@ -67,8 +67,46 @@ Before enabling a publish workflow for a new package name:
    ```
 
 Do not embed PyPI API tokens in repository files, workflow YAML, release notes,
-or documentation. Phase 1 should migrate publishing to PyPI Trusted Publishers
-(OIDC) so GitHub Actions can publish without a static API token.
+or documentation.
+
+## PyPI Publishing - Phase 1 Static Token
+
+Phase 1 publishes `ecli-editor` to PyPI from the tag-triggered release workflow
+using the GitHub secret `PYPI_API_TOKEN`.
+
+Token policy:
+
+- The token must be project-scoped to `ecli-editor`.
+- The token is stored only in GitHub Secrets.
+- The token must be rotated after any public exposure event, suspected runner
+  compromise, maintainer offboarding, or accidental local logging.
+- The workflow must not request `id-token: write` for PyPI publishing while the
+  static-token path is active.
+
+The PyPI namespace guard remains mandatory before publish. It verifies that
+`pyproject.toml` declares `ecli-editor` and that the project exists on PyPI
+before the upload step can run.
+
+Trusted Publishers (OIDC) are deferred to v0.2. That migration will remove the
+static token requirement.
+
+## SBOM
+
+Release builds emit a CycloneDX SBOM for the Python distribution:
+
+```text
+dist/ecli-editor-<version>.cdx.json
+dist/ecli-editor-<version>.cdx.json.sha256
+```
+
+The SBOM is generated with the `cyclonedx-bom` Python distribution, invoked as
+`python3 -m cyclonedx_py environment`, in JSON format and CycloneDX schema
+version 1.5. The workflow invokes the generator with `--validate`, so malformed
+SBOM output fails the release build before artifact upload.
+
+The SBOM and its SHA256 sidecar are uploaded as workflow artifacts and attached
+to the GitHub Release. PyPI does not accept arbitrary release attachments, so the
+SBOM is not uploaded to PyPI in Phase 1.
 
 ## Future Hardening
 
