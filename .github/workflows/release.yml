@@ -143,6 +143,11 @@ jobs:
           prepare: |
             set -eux
             env ASSUME_ALWAYS_YES=yes pkg update -f
+            # Rust toolchain is required because libcst (a transitive
+            # dependency) has no FreeBSD prebuilt wheel and must be
+            # compiled from source. Other build essentials cover any
+            # additional native deps that may need on-VM compilation.
+            env ASSUME_ALWAYS_YES=yes pkg install -y rust pkgconf
           run: |
             set -eux
             sh ./scripts/build-and-package-freebsd.sh
