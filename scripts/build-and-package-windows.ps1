@@ -77,6 +77,8 @@ $portableName = "ecli_${version}_win_${winArch}.exe"
 $installerName = "ecli_${version}_win_${winArch}_setup.exe"
 $portablePath = Join-Path $releaseDir $portableName
 $installerPath = Join-Path $releaseDir $installerName
+$portableFullPath = Join-Path $projectRoot.Path $portablePath
+$installerFullPath = Join-Path $projectRoot.Path $installerPath
 $buildRoot = Join-Path $projectRoot "build\windows"
 $distDir = Join-Path $buildRoot "dist"
 $workDir = Join-Path $buildRoot "work"
@@ -127,8 +129,8 @@ Write-Info "Building NSIS installer..."
 $nsisScript = Join-Path $projectRoot "packaging\windows\nsis\ecli.nsi"
 $nsisDefines = @(
   "/DVERSION=$version",
-  "/DOUTFILE=$installerPath",
-  "/DINPUT_EXE=$portablePath"
+  "/DOUTFILE=$installerFullPath",
+  "/DINPUT_EXE=$portableFullPath"
 )
 & $makensis $nsisDefines $nsisScript
 

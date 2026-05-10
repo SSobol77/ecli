@@ -1086,3 +1086,67 @@ Linux workstation:
 
 No PyPI publish, tag push, GitHub Release creation, or real GitHub Release asset
 upload was performed.
+
+### CI Correction: NSIS Relative INPUT_EXE Resolution
+
+First PR CI attempt: 1 failure. The Windows validate workflow built the
+PyInstaller portable EXE, then NSIS failed to resolve the relative
+`INPUT_EXE=releases\...` path from the NSIS script context. The fix is to pass
+absolute `OUTFILE` and `INPUT_EXE` defines to `makensis` while preserving the
+same release artifact basenames.
+
+Command:
+
+```sh
+gh run view 25619232222 --job 75202713888 --log
+```
+
+Relevant output excerpt:
+
+```text
+validate	Build Windows artifacts	2026-05-10T03:57:36.4758623Z OK  Portable executable: releases\0.1.0\ecli_0.1.0_win_x86_64.exe
+validate	Build Windows artifacts	2026-05-10T03:57:36.4765009Z ==> Writing portable SHA256...
+validate	Build Windows artifacts	2026-05-10T03:57:36.5482125Z ==> Building NSIS installer...
+validate	Build Windows artifacts	2026-05-10T03:57:36.6157253Z Command line defined: "VERSION=0.1.0"
+validate	Build Windows artifacts	2026-05-10T03:57:36.6157955Z Command line defined: "OUTFILE=releases\0.1.0\ecli_0.1.0_win_x86_64_setup.exe"
+validate	Build Windows artifacts	2026-05-10T03:57:36.6158458Z Command line defined: "INPUT_EXE=releases\0.1.0\ecli_0.1.0_win_x86_64.exe"
+validate	Build Windows artifacts	2026-05-10T03:57:36.6158893Z Processing config: C:\Program Files (x86)\NSIS\nsisconf.nsh
+validate	Build Windows artifacts	2026-05-10T03:57:36.6224026Z Processing script file: "D:\a\ecli\ecli\packaging\windows\nsis\ecli.nsi" (ACP)
+validate	Build Windows artifacts	2026-05-10T03:57:36.7124262Z File: "releases\0.1.0\ecli_0.1.0_win_x86_64.exe" -> no files found.
+validate	Build Windows artifacts	2026-05-10T03:57:36.7125141Z Usage: File [/nonfatal] [/a] ([/r] [/x filespec [...]] filespec [...] |
+validate	Build Windows artifacts	2026-05-10T03:57:36.7125814Z    /oname=outfile one_file_only)
+validate	Build Windows artifacts	2026-05-10T03:57:36.7126624Z Error in script "D:\a\ecli\ecli\packaging\windows\nsis\ecli.nsi" on line 51 -- aborting creation process
+validate	Build Windows artifacts	2026-05-10T03:57:36.7204222Z ERR Installer not produced at releases\0.1.0\ecli_0.1.0_win_x86_64_setup.exe
+validate	Build Windows artifacts	2026-05-10T03:57:36.7371401Z make: *** [Makefile:793: package-windows] Error 2
+validate	Build Windows artifacts	2026-05-10T03:57:36.8291801Z ##[error]Process completed with exit code 1.
+```
+
+### Verification: Post-Correction Makefile Windows Package Dry Run
+
+Command:
+
+```sh
+make -n package-windows
+```
+
+Output:
+
+```text
+rm -rf build/ dist/ .pytest_cache/ .ruff_cache/ .mypy_cache/ __pycache__
+find . -type d -name "__pycache__" -exec rm -rf {} +
+find . -type f -name "*.pyc" -delete
+echo "--> Intermediate build artifacts cleaned."
+pwsh -File ./scripts/build-and-package-windows.ps1
+make package-windows-assert
+make[1]: Entering directory '/home/ssb/Code/Ecli/ecli'
+test -n "0.1.0" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
+scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe.sha256"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe.sha256"
+make[1]: Leaving directory '/home/ssb/Code/Ecli/ecli'
+```
+
+Result: passed.
