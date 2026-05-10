@@ -143,6 +143,13 @@ jobs:
           prepare: |
             set -eux
             env ASSUME_ALWAYS_YES=yes pkg update -f
+            # Rust toolchain is required because libcst (a transitive
+            # dependency) has no FreeBSD prebuilt wheel and must be
+            # compiled from source. Other build essentials cover any
+            # additional native deps that may need on-VM compilation.
+            env ASSUME_ALWAYS_YES=yes pkg install -y rust cargo pkgconf
+            rustc --version
+            cargo --version
           run: |
             set -eux
             sh ./scripts/build-and-package-freebsd.sh
@@ -242,10 +249,16 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: "x64"
 
-      - name: Verify NSIS
+      - name: Install NSIS
         shell: pwsh
         run: |
           $nsisPath = "C:\Program Files (x86)\NSIS"
+          if (-not (Test-Path (Join-Path $nsisPath "makensis.exe"))) {
+            Write-Host "NSIS not pre-installed; installing via Chocolatey..."
+            choco install nsis -y --no-progress
+          } else {
+            Write-Host "NSIS already pre-installed at $nsisPath"
+          }
           if (Test-Path $nsisPath) {
             Add-Content -Path $env:GITHUB_PATH -Value $nsisPath -Encoding utf8
           }
@@ -256,9 +269,10 @@ jobs:
               $makensis = Get-Item -LiteralPath $candidate
             }
           }
-          if (-not $makensis) { throw "makensis not found" }
+          if (-not $makensis) { throw "makensis not found after install attempt" }
           $makensisPath = if ($makensis.Source) { $makensis.Source } else { $makensis.FullName }
           Write-Host "Using $makensisPath"
+          & $makensisPath /VERSION
 
       - name: Build Windows artifacts
         shell: pwsh
@@ -331,7 +345,8 @@ jobs:
           path: dist
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@v1.10.3
+        # Pinned from pypa/gh-action-pypi-publish release/v1 on 2026-05-10.
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         with:
           password: ${{ secrets.PYPI_API_TOKEN }}
           attestations: false

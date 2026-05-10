@@ -46,10 +46,8 @@ RUN dnf -y --setopt=install_weak_deps=False install \
 # Install fpm via RubyGems
 RUN gem install --no-document fpm
 
-# Install uv and expose it on PATH
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
- && ln -s /root/.local/bin/uv /usr/local/bin/uv
-ENV PATH="/root/.local/bin:${PATH}"
+# Install uv without executing a downloaded installer script.
+RUN python3.11 -m pip install --no-cache-dir uv
 
 # Force uv to use Python 3.11 (EL9 default python3 may be 3.9)
 ENV UV_PYTHON=python3.11
