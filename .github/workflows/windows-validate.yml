@@ -10,6 +10,7 @@ name: Windows Contract Validate
       - "pyproject.toml"
       - "scripts/build-and-package-windows.ps1"
       - "packaging/windows/**"
+      - "packaging/pyinstaller/ecli.spec"
       - "src/**"
 
 permissions:
@@ -36,7 +37,7 @@ jobs:
           choco install make nsis -y
           "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-      - name: Build Windows installer
+      - name: Build Windows artifacts
         shell: pwsh
         run: make package-windows
 

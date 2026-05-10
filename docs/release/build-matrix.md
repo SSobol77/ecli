@@ -13,7 +13,7 @@ Copyright: (c) 2026 Siergej Sobolewski
 - Linux: DEB/RPM/AppImage scripts and workflows
 - FreeBSD: native `.pkg` via script and VM workflow
 - macOS: DMG build workflow and script
-- Windows: NSIS installer workflow and script
+- Windows: portable EXE plus NSIS installer workflow and script
 
 ## Build Environment Notes
 

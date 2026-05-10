@@ -9,7 +9,7 @@ name: Windows Installer
       - "src/**"
       - "scripts/build-and-package-windows.ps1"
       - "packaging/windows/nsis/**"
-      - "ecli.spec"
+      - "packaging/pyinstaller/ecli.spec"
       - "pyproject.toml"
 
 permissions:
@@ -27,13 +27,44 @@ jobs:
           python-version: "3.11"
           architecture: "x64"
 
-      - name: Install NSIS
+      - name: Verify NSIS
         shell: pwsh
         run: |
-          choco install nsis -y
-          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $nsisPath = "C:\Program Files (x86)\NSIS"
+          if (Test-Path $nsisPath) {
+            Add-Content -Path $env:GITHUB_PATH -Value $nsisPath -Encoding utf8
+          }
+          $makensis = Get-Command makensis -ErrorAction SilentlyContinue
+          if (-not $makensis) {
+            $candidate = Join-Path $nsisPath "makensis.exe"
+            if (Test-Path $candidate) {
+              $makensis = Get-Item -LiteralPath $candidate
+            }
+          }
+          if (-not $makensis) { throw "makensis not found" }
+          $makensisPath = if ($makensis.Source) { $makensis.Source } else { $makensis.FullName }
+          Write-Host "Using $makensisPath"
 
-      - name: Build Installer
+      - name: Verify GNU Make
+        shell: pwsh
+        run: |
+          $make = Get-Command make -ErrorAction SilentlyContinue
+          if (-not $make) {
+            $msysMake = "C:\msys64\usr\bin\make.exe"
+            if (Test-Path $msysMake) {
+              Add-Content -Path $env:GITHUB_PATH -Value "C:\msys64\usr\bin" -Encoding utf8
+              $env:PATH = "C:\msys64\usr\bin;$env:PATH"
+              $make = Get-Command make -ErrorAction SilentlyContinue
+            }
+          }
+          if (-not $make) {
+            choco install make -y
+            $make = Get-Command make -ErrorAction SilentlyContinue
+          }
+          if (-not $make) { throw "make not found" }
+          make --version
+
+      - name: Build Windows artifacts
         shell: pwsh
         run: |
           ./scripts/build-and-package-windows.ps1
@@ -49,19 +80,83 @@ jobs:
         shell: pwsh
         run: |
           $version = "${{ steps.ver.outputs.version }}"
-          $exe = "releases\$version\ecli_${version}_win_x86_64.exe"
-          $sha = "$exe.sha256"
-          if (-not (Test-Path $exe)) { throw "Missing $exe" }
-          if (-not (Test-Path $sha)) { throw "Missing $sha" }
-          $expected = (Get-Content $sha -Raw).Trim().Split()[0].ToUpperInvariant()
-          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToUpperInvariant()
-          if ($actual -ne $expected) { throw "SHA256 mismatch for $exe" }
+          $artifacts = @(
+            "releases\$version\ecli_${version}_win_x86_64.exe",
+            "releases\$version\ecli_${version}_win_x86_64_setup.exe"
+          )
 
-      - name: Upload artifact
+          foreach ($exe in $artifacts) {
+            $sha = "$exe.sha256"
+            if (-not (Test-Path $exe)) { throw "Missing $exe" }
+            if (-not (Test-Path $sha)) { throw "Missing $sha" }
+            if ((Get-Item -LiteralPath $exe).Length -le 0) { throw "Empty EXE: $exe" }
+
+            $signature = Get-AuthenticodeSignature -FilePath $exe
+            if ([string]::IsNullOrWhiteSpace([string]$signature.Status)) {
+              throw "Authenticode signature status unavailable for $exe"
+            }
+            Write-Host "$exe Authenticode status: $($signature.Status)"
+
+            $bytes = [System.IO.File]::ReadAllBytes($sha)
+            if ($bytes.Length -eq 0 -or $bytes[$bytes.Length - 1] -ne 0x0A) {
+              throw "SHA256 sidecar is not LF-terminated: $sha"
+            }
+            if ($bytes -contains 0x0D) {
+              throw "SHA256 sidecar contains CR bytes: $sha"
+            }
+            if ($bytes.Length -ge 3 -and $bytes[0] -eq 0xEF -and $bytes[1] -eq 0xBB -and $bytes[2] -eq 0xBF) {
+              throw "SHA256 sidecar has UTF-8 BOM: $sha"
+            }
+            foreach ($byte in $bytes) {
+              if ($byte -gt 0x7F) { throw "SHA256 sidecar is not ASCII: $sha" }
+            }
+
+            $content = [System.Text.Encoding]::ASCII.GetString($bytes)
+            $basename = Split-Path $exe -Leaf
+            if ($content -notmatch "^[0-9a-f]{64}  $([regex]::Escape($basename))`n$") {
+              throw "Malformed SHA256 sidecar: $sha"
+            }
+            $expected = $content.Trim().Split()[0].ToUpperInvariant()
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToUpperInvariant()
+            if ($actual -ne $expected) { throw "SHA256 mismatch for $exe" }
+          }
+
+          make validate-windows-contract
+
+      - name: Verify NSIS Programs and Features registration
+        shell: pwsh
+        run: |
+          $version = "${{ steps.ver.outputs.version }}"
+          $installer = "releases\$version\ecli_${version}_win_x86_64_setup.exe"
+          $process = Start-Process -FilePath $installer -ArgumentList "/S" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Installer exited with $($process.ExitCode)" }
+
+          $key = "HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\ECLI"
+          if (-not (Test-Path $key)) { throw "Missing uninstall registry key: $key" }
+          $props = Get-ItemProperty -Path $key
+          if ($props.DisplayName -ne "ECLI") { throw "Bad DisplayName: $($props.DisplayName)" }
+          if ($props.DisplayVersion -ne $version) { throw "Bad DisplayVersion: $($props.DisplayVersion)" }
+          if ($props.Publisher -ne "Cartesian School") { throw "Bad Publisher: $($props.Publisher)" }
+          if ([string]::IsNullOrWhiteSpace($props.InstallLocation)) { throw "Missing InstallLocation" }
+          if ([string]::IsNullOrWhiteSpace($props.UninstallString)) { throw "Missing UninstallString" }
+
+          $uninstaller = Join-Path $props.InstallLocation "Uninstall.exe"
+          if (-not (Test-Path $uninstaller)) { throw "Missing uninstaller: $uninstaller" }
+          if ($props.UninstallString -notmatch [regex]::Escape($uninstaller)) {
+            throw "UninstallString does not reference $uninstaller"
+          }
+
+          $uninstall = Start-Process -FilePath $uninstaller -ArgumentList "/S" -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw "Uninstaller exited with $($uninstall.ExitCode)" }
+          if (Test-Path $key) { throw "Uninstall registry key remained after uninstall: $key" }
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-installer
+          name: windows-dual-artifacts
           path: |
             releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x86_64.exe
             releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x86_64.exe.sha256
+            releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x86_64_setup.exe
+            releases/${{ steps.ver.outputs.version }}/ecli_${{ steps.ver.outputs.version }}_win_x86_64_setup.exe.sha256
           if-no-files-found: error

@@ -57,9 +57,9 @@ sudo apt install ./ecli_0.1.0_linux_x86_64.deb
 sudo dnf install ./ecli_0.1.0_linux_x86_64.rpm
 
 # Windows (PowerShell)
-.\ecli_0.1.0_win_x86_64.exe
-# SmartScreen warns on unsigned EXE; click "More info" -> "Run anyway".
-# Code signing is planned for v0.2.
+.\ecli_0.1.0_win_x86_64_setup.exe
+# Portable alternative: .\ecli_0.1.0_win_x86_64.exe
+# See docs/install/windows.md for checksum verification and SmartScreen notes.
 
 # macOS
 open ecli_0.1.0_macos_universal2.dmg
@@ -140,7 +140,7 @@ Download from [GitHub Releases](https://github.com/SSobol77/ecli/releases):
 - **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL), `.AppImage` (any Linux), `.tar.gz`
 - **FreeBSD**: `.pkg`
 - **macOS**: `.dmg` ([install notes](docs/install/macos.md))
-- **Windows**: `.exe`
+- **Windows**: `.exe` installer or portable executable ([install notes](docs/install/windows.md))
 
 **Option B: PyPI (Python Package Index)**
 
@@ -208,7 +208,7 @@ make sysinfo
 make package-linux      # All Linux packages (deb, rpm, AppImage)
 make package-pypi       # Python wheel + source distribution
 make package-macos      # macOS DMG
-make package-windows    # Windows installer
+make package-windows    # Windows portable EXE + installer
 make package-freebsd    # FreeBSD package
 
 # Release to GitHub (requires GitHub CLI)

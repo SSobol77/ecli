@@ -35,7 +35,7 @@ flowchart LR
 | RPM | `scripts/build-and-package-rpm.sh` | Linux/RPM tooling | `releases/<ver>/ecli_<ver>_linux_<arch>.rpm` | checksum + contract check |
 | FreeBSD PKG | `scripts/build-and-package-freebsd.sh` | FreeBSD host/VM | `releases/<ver>/ecli_<ver>_freebsd_<arch>.pkg` | checksum + contract check |
 | macOS DMG | `scripts/build-and-package-macos.sh` | macOS | `releases/<ver>/ecli_<ver>_macos_<arch>.dmg` | checksum + contract check |
-| Windows EXE | `scripts/build-and-package-windows.ps1` | Windows + NSIS | `releases/<ver>/ecli_<ver>_win_x86_64.exe` | checksum + contract check |
+| Windows EXEs | `scripts/build-and-package-windows.ps1` | Windows + NSIS | `releases/<ver>/ecli_<ver>_win_x86_64.exe` and `releases/<ver>/ecli_<ver>_win_x86_64_setup.exe` | checksum + contract check |
 
 ## Known Unsupported/Constrained Combinations
 

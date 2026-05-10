@@ -2,8 +2,8 @@
 ; ECLI — Windows Installer (NSIS, Unicode, x64)
 ; Accepts defines:
 ;   /DVERSION=0.1.0
-;   /DOUTFILE="releases\0.1.0\ecli_0.1.0_win_x64.exe"
-;   /DINPUT_EXE="build\windows\dist\ecli.exe"
+;   /DOUTFILE="releases\0.1.0\ecli_0.1.0_win_x86_64_setup.exe"
+;   /DINPUT_EXE="releases\0.1.0\ecli_0.1.0_win_x86_64.exe"
 ; Defaults are provided for local runs.
 ; =============================================================================
 
@@ -18,10 +18,10 @@ SetCompressorDictSize 32
   !define VERSION "0.1.0"
 !endif
 !ifndef INPUT_EXE
-  !define INPUT_EXE "..\..\build\windows\dist\ecli.exe"
+  !define INPUT_EXE "build\windows\dist\ecli.exe"
 !endif
 !ifndef OUTFILE
-  !define OUTFILE "ecli-${VERSION}-setup.exe"
+  !define OUTFILE "ecli_${VERSION}_win_x86_64_setup.exe"
 !endif
 
 OutFile "${OUTFILE}"
@@ -43,48 +43,10 @@ VIAddVersionKey "FileVersion"     "${VERSION}"
 !insertmacro MUI_UNPAGE_INSTFILES
 !insertmacro MUI_LANGUAGE "English"
 
-; -------------- Helpers: PATH update with dedupe + broadcast ------------------
-!define ENV_KEY 'SYSTEM\CurrentControlSet\Control\Session Manager\Environment'
-!macro EnvPathAppend PathToAdd
-  Push $0
-  Push $1
-  ReadRegStr $0 HKLM ${ENV_KEY} "Path"
-  StrCpy $1 "$0"
-  ; ensure semicolon separation
-  StrCpy $1 "$1;"
-  StrCpy $1 "$1$%PathToAdd%"
-  StrCpy $1 "$1;"
-  ; dedupe: remove duplicate occurrences of ;%PathToAdd%;
-  ; (simple approach; avoids plugin dependency)
-  StrReplace $1 $1 ";%PathToAdd%;;" ";" ; collapse
-  StrReplace $1 $1 ";%PathToAdd%;;" ";" ; twice for safety
-  ; if not present, append
-  FindStr $0 "$0" "%PathToAdd%" ; crude check
-  StrCmp $0 "" 0 +3
-    StrCpy $1 "$0;%PathToAdd%"
-    WriteRegExpandStr HKLM ${ENV_KEY} "Path" "$1"
-    System::Call 'USER32::SendMessageA(i -1, i ${WM_SETTINGCHANGE}, i 0, t "Environment")'
-  Pop $1
-  Pop $0
-!macroend
-
-!macro EnvPathRemove PathToRemove
-  Push $0
-  Push $1
-  ReadRegStr $0 HKLM ${ENV_KEY} "Path"
-  ; remove ;PathToRemove and PathToRemove; and standalone
-  StrReplace $1 $0 ";%PathToRemove%" ""
-  StrReplace $1 $1 "%PathToRemove%;" ""
-  StrReplace $1 $1 "%PathToRemove%" ""
-  WriteRegExpandStr HKLM ${ENV_KEY} "Path" "$1"
-  System::Call 'USER32::SendMessageA(i -1, i ${WM_SETTINGCHANGE}, i 0, t "Environment")'
-  Pop $1
-  Pop $0
-!macroend
-
 ; ------------------------------- Sections -------------------------------------
 
 Section "Install" SEC_MAIN
+  SetRegView 64
   SetOutPath "$INSTDIR"
   File "/oname=ecli.exe" "${INPUT_EXE}"
 
@@ -99,7 +61,15 @@ Section "Install" SEC_MAIN
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
     "InstallLocation" "$INSTDIR"
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
-    "UninstallString" "$INSTDIR\Uninstall.exe"
+    "UninstallString" "$\"$INSTDIR\Uninstall.exe$\""
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
+    "QuietUninstallString" "$\"$INSTDIR\Uninstall.exe$\" /S"
+  WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
+    "DisplayIcon" "$INSTDIR\ecli.exe"
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
+    "NoModify" 1
+  WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APPNAME}" \
+    "NoRepair" 1
 
   ; Create uninstaller
   WriteUninstaller "$INSTDIR\Uninstall.exe"
@@ -107,15 +77,10 @@ Section "Install" SEC_MAIN
   ; Start Menu shortcut in folder
   CreateDirectory "$SMPROGRAMS\${COMPANY}"
   CreateShortCut "$SMPROGRAMS\${COMPANY}\${APPNAME}.lnk" "$INSTDIR\ecli.exe"
-
-  ; Add to PATH (machine) and broadcast change
-  !insertmacro EnvPathAppend "$INSTDIR"
 SectionEnd
 
 Section "Uninstall"
-  ; Remove PATH entry and broadcast
-  !insertmacro EnvPathRemove "$INSTDIR"
-
+  SetRegView 64
   ; Remove shortcut
   Delete "$SMPROGRAMS\${COMPANY}\${APPNAME}.lnk"
   RMDir  "$SMPROGRAMS\${COMPANY}"

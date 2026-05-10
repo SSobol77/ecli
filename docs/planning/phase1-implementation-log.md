@@ -828,3 +828,325 @@ docs/release/release-process.md:103:`python3 -m cyclonedx_py environment`, in JS
 
 Result: passed. The `id-token` grep and `git diff --check` produced empty
 output.
+
+## Workstream C - Windows Portable EXE + NSIS Installer
+
+Timestamp: 2026-05-10T05:53:16+02:00
+
+Branch: `feat/phase1-windows-dual-artifacts`
+
+Base commit:
+
+```text
+73b4914
+```
+
+### Verification: Windows Tooling Boundary
+
+Command:
+
+```sh
+command -v pwsh || true; command -v makensis || true
+```
+
+Output:
+
+```text
+```
+
+Result: host boundary recorded. This Linux workstation does not have PowerShell
+or NSIS, so the real Windows PyInstaller/NSIS build and Programs & Features
+registry assertion are delegated to `windows-latest` CI.
+
+### Verification: Single Windows Packaging Script
+
+Command:
+
+```sh
+find scripts -maxdepth 1 -name '*windows*.ps1' -print | sort
+```
+
+Output:
+
+```text
+scripts/build-and-package-windows.ps1
+```
+
+Result: passed. The duplicate `scripts/build_pyinstaller_windows.ps1` was
+removed after merging its superior root/build-dir and strict-output behavior
+into the Makefile-wired script.
+
+### Verification: Workflow YAML Parse
+
+Command:
+
+```sh
+python3 - <<'PY'
+from pathlib import Path
+import yaml
+for path in [Path('.github/workflows/windows-installer.yml'), Path('.github/workflows/windows-validate.yml'), Path('.github/workflows/release.yml')]:
+    with path.open('r', encoding='utf-8') as f:
+        yaml.safe_load(f)
+    print(f'OK {path}')
+PY
+```
+
+Output:
+
+```text
+OK .github/workflows/windows-installer.yml
+OK .github/workflows/windows-validate.yml
+OK .github/workflows/release.yml
+```
+
+Result: passed.
+
+### Verification: Makefile Windows Package Dry Run
+
+Command:
+
+```sh
+make -n package-windows
+```
+
+Output:
+
+```text
+rm -rf build/ dist/ .pytest_cache/ .ruff_cache/ .mypy_cache/ __pycache__
+find . -type d -name "__pycache__" -exec rm -rf {} +
+find . -type f -name "*.pyc" -delete
+echo "--> Intermediate build artifacts cleaned."
+pwsh -File ./scripts/build-and-package-windows.ps1
+make package-windows-assert
+make[1]: Entering directory '/home/ssb/Code/Ecli/ecli'
+test -n "0.1.0" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
+scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe.sha256"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe.sha256"
+make[1]: Leaving directory '/home/ssb/Code/Ecli/ecli'
+```
+
+Result: passed. The package target asserts both Windows artifacts.
+
+### Verification: Makefile Windows Contract Dry Run
+
+Command:
+
+```sh
+make -n validate-windows-contract
+```
+
+Output:
+
+```text
+test -n "0.1.0" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
+scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe.sha256"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe.sha256"
+echo "--> OK: Windows contract"
+```
+
+Result: passed. The simpler path was chosen: extend
+`validate-windows-contract` through `package-windows-assert` rather than adding
+a parallel installer-only target.
+
+### Verification: Dual Artifact Contract with Generated Test Files
+
+Command:
+
+```sh
+set -e
+version=$(python3 -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])')
+dir="releases/$version"
+portable="ecli_${version}_win_x86_64.exe"
+installer="ecli_${version}_win_x86_64_setup.exe"
+printf 'portable-test-artifact\n' > "$dir/$portable"
+printf 'installer-test-artifact\n' > "$dir/$installer"
+(cd "$dir" && sha256sum "$portable" > "$portable.sha256" && sha256sum "$installer" > "$installer.sha256")
+printf 'WIN_ARCH=x86_64\nWIN_PORTABLE_FILENAME=%s\nWIN_INSTALLER_FILENAME=%s\n' "$portable" "$installer" > "$dir/.win.env"
+make validate-windows-contract
+file "$dir/$portable.sha256" "$dir/$installer.sha256"
+hexdump -C "$dir/$portable.sha256"
+hexdump -C "$dir/$installer.sha256"
+rm -f "$dir/$portable" "$dir/$portable.sha256" "$dir/$installer" "$dir/$installer.sha256" "$dir/.win.env"
+```
+
+Output:
+
+```text
+ecli_0.1.0_win_x86_64.exe: OK
+ecli_0.1.0_win_x86_64_setup.exe: OK
+--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe
+--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe.sha256
+--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe
+--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe.sha256
+--> OK: Windows contract
+releases/0.1.0/ecli_0.1.0_win_x86_64.exe.sha256:       ASCII text
+releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe.sha256: ASCII text
+00000000  30 62 63 39 34 39 31 63  64 34 35 33 66 37 30 36  |0bc9491cd453f706|
+00000010  31 32 33 33 30 61 35 35  32 63 38 33 64 66 30 38  |12330a552c83df08|
+00000020  39 37 62 32 38 39 34 62  66 37 32 39 36 62 37 39  |97b2894bf7296b79|
+00000030  36 65 61 34 61 37 61 32  32 62 30 33 64 62 62 30  |6ea4a7a22b03dbb0|
+00000040  20 20 65 63 6c 69 5f 30  2e 31 2e 30 5f 77 69 6e  |  ecli_0.1.0_win|
+00000050  5f 78 38 36 5f 36 34 2e  65 78 65 0a              |_x86_64.exe.|
+0000005c
+00000000  35 63 62 30 32 64 36 37  62 63 64 63 63 62 32 32  |5cb02d67bcdccb22|
+00000010  39 66 61 30 65 32 61 37  37 36 32 36 61 64 35 35  |9fa0e2a77626ad55|
+00000020  36 37 32 65 30 34 65 61  30 38 38 66 33 34 30 61  |672e04ea088f340a|
+00000030  65 32 61 63 39 38 66 31  33 61 63 65 65 62 66 62  |e2ac98f13aceebfb|
+00000040  20 20 65 63 6c 69 5f 30  2e 31 2e 30 5f 77 69 6e  |  ecli_0.1.0_win|
+00000050  5f 78 38 36 5f 36 34 5f  73 65 74 75 70 2e 65 78  |_x86_64_setup.ex|
+00000060  65 0a                                             |e.|
+00000062
+```
+
+Result: passed. Test artifacts were removed after validation.
+
+### Verification: PyInstaller Spec Syntax
+
+Command:
+
+```sh
+python3 -m py_compile packaging/pyinstaller/ecli.spec
+```
+
+Output:
+
+```text
+```
+
+Result: passed.
+
+### Verification: Existing Smoke Tests
+
+Command:
+
+```sh
+python3 -m pytest tests/test_smoke.py -v
+```
+
+Output:
+
+```text
+============================= test session starts ==============================
+platform linux -- Python 3.13.5, pytest-9.0.3, pluggy-1.5.0 -- /usr/bin/python3
+cachedir: .pytest_cache
+rootdir: /home/ssb/Code/Ecli/ecli
+configfile: pyproject.toml
+plugins: mock-3.15.1, asyncio-1.3.0, aiohttp-1.1.0, cov-7.1.0, anyio-4.8.0, typeguard-4.4.2
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 2 items
+
+tests/test_smoke.py::test_package_imports PASSED                         [ 50%]
+tests/test_smoke.py::test_version_format PASSED                          [100%]
+
+============================== 2 passed in 0.02s ===============================
+```
+
+Result: passed.
+
+### Verification: Diff Hygiene
+
+Command:
+
+```sh
+git diff --check
+```
+
+Output:
+
+```text
+```
+
+Result: passed.
+
+### Windows-Only Verification Boundary
+
+The following checks are implemented in `.github/workflows/windows-installer.yml`
+and `.github/workflows/windows-validate.yml`, but were not executed on this
+Linux workstation:
+
+- Build the portable PyInstaller EXE from `packaging/pyinstaller/ecli.spec`.
+- Build the unsigned NSIS installer that bundles the portable EXE.
+- Verify both EXEs are non-empty and return an Authenticode status without
+  running the portable curses application.
+- Verify both `.sha256` sidecars are ASCII, BOM-free, LF-terminated, and match
+  `Get-FileHash`.
+- Run `make validate-windows-contract` against the real Windows-built outputs.
+- Silent-install the NSIS installer and assert Programs & Features registry
+  values under `HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\ECLI`,
+  including `DisplayName`, `DisplayVersion`, `Publisher`, `InstallLocation`,
+  `UninstallString`, and the registered uninstaller.
+
+No PyPI publish, tag push, GitHub Release creation, or real GitHub Release asset
+upload was performed.
+
+### CI Correction: NSIS Relative INPUT_EXE Resolution
+
+First PR CI attempt: 1 failure. The Windows validate workflow built the
+PyInstaller portable EXE, then NSIS failed to resolve the relative
+`INPUT_EXE=releases\...` path from the NSIS script context. The fix is to pass
+absolute `OUTFILE` and `INPUT_EXE` defines to `makensis` while preserving the
+same release artifact basenames.
+
+Command:
+
+```sh
+gh run view 25619232222 --job 75202713888 --log
+```
+
+Relevant output excerpt:
+
+```text
+validate	Build Windows artifacts	2026-05-10T03:57:36.4758623Z OK  Portable executable: releases\0.1.0\ecli_0.1.0_win_x86_64.exe
+validate	Build Windows artifacts	2026-05-10T03:57:36.4765009Z ==> Writing portable SHA256...
+validate	Build Windows artifacts	2026-05-10T03:57:36.5482125Z ==> Building NSIS installer...
+validate	Build Windows artifacts	2026-05-10T03:57:36.6157253Z Command line defined: "VERSION=0.1.0"
+validate	Build Windows artifacts	2026-05-10T03:57:36.6157955Z Command line defined: "OUTFILE=releases\0.1.0\ecli_0.1.0_win_x86_64_setup.exe"
+validate	Build Windows artifacts	2026-05-10T03:57:36.6158458Z Command line defined: "INPUT_EXE=releases\0.1.0\ecli_0.1.0_win_x86_64.exe"
+validate	Build Windows artifacts	2026-05-10T03:57:36.6158893Z Processing config: C:\Program Files (x86)\NSIS\nsisconf.nsh
+validate	Build Windows artifacts	2026-05-10T03:57:36.6224026Z Processing script file: "D:\a\ecli\ecli\packaging\windows\nsis\ecli.nsi" (ACP)
+validate	Build Windows artifacts	2026-05-10T03:57:36.7124262Z File: "releases\0.1.0\ecli_0.1.0_win_x86_64.exe" -> no files found.
+validate	Build Windows artifacts	2026-05-10T03:57:36.7125141Z Usage: File [/nonfatal] [/a] ([/r] [/x filespec [...]] filespec [...] |
+validate	Build Windows artifacts	2026-05-10T03:57:36.7125814Z    /oname=outfile one_file_only)
+validate	Build Windows artifacts	2026-05-10T03:57:36.7126624Z Error in script "D:\a\ecli\ecli\packaging\windows\nsis\ecli.nsi" on line 51 -- aborting creation process
+validate	Build Windows artifacts	2026-05-10T03:57:36.7204222Z ERR Installer not produced at releases\0.1.0\ecli_0.1.0_win_x86_64_setup.exe
+validate	Build Windows artifacts	2026-05-10T03:57:36.7371401Z make: *** [Makefile:793: package-windows] Error 2
+validate	Build Windows artifacts	2026-05-10T03:57:36.8291801Z ##[error]Process completed with exit code 1.
+```
+
+### Verification: Post-Correction Makefile Windows Package Dry Run
+
+Command:
+
+```sh
+make -n package-windows
+```
+
+Output:
+
+```text
+rm -rf build/ dist/ .pytest_cache/ .ruff_cache/ .mypy_cache/ __pycache__
+find . -type d -name "__pycache__" -exec rm -rf {} +
+find . -type f -name "*.pyc" -delete
+echo "--> Intermediate build artifacts cleaned."
+pwsh -File ./scripts/build-and-package-windows.ps1
+make package-windows-assert
+make[1]: Entering directory '/home/ssb/Code/Ecli/ecli'
+test -n "0.1.0" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
+scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe.sha256"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe.sha256"
+make[1]: Leaving directory '/home/ssb/Code/Ecli/ecli'
+```
+
+Result: passed.

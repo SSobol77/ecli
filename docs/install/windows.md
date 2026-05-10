@@ -1,0 +1,85 @@
+<!--
+Filename: docs/install/windows.md
+Project:  ECLI
+License:  MIT
+Author:   Siergej Sobolewski
+Copyright: (c) 2026 Siergej Sobolewski
+-->
+
+# Windows Installation
+
+ECLI publishes two unsigned Windows x86_64 artifacts:
+
+- Installer, recommended: `ecli_<version>_win_x86_64_setup.exe`
+- Portable executable: `ecli_<version>_win_x86_64.exe`
+
+Download the EXE and matching `.sha256` sidecar from the GitHub Release for the
+version you intend to install.
+
+## Verify Checksums
+
+PowerShell checksum verification should be performed before first execution:
+
+```powershell
+$version = "0.1.0"
+$file = "ecli_${version}_win_x86_64_setup.exe"
+$expected = (Get-Content "$file.sha256" -Raw).Trim().Split()[0]
+$actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
+if ($actual -ne $expected) {
+    throw "SHA256 mismatch for $file"
+}
+```
+
+For the portable executable, change `$file` to:
+
+```powershell
+$file = "ecli_${version}_win_x86_64.exe"
+```
+
+The sidecar format is compatible with coreutils:
+
+```text
+<64 lowercase hex characters>  <artifact basename>
+```
+
+## Installer Path
+
+The installer is the recommended Windows path for normal workstations:
+
+```powershell
+.\ecli_0.1.0_win_x86_64_setup.exe
+```
+
+The NSIS installer writes ECLI under `C:\Program Files\Cartesian School\ECLI`,
+creates an uninstaller, and registers ECLI in Programs & Features under:
+
+```text
+HKLM\Software\Microsoft\Windows\CurrentVersion\Uninstall\ECLI
+```
+
+The registered uninstall metadata includes `DisplayName`, `DisplayVersion`,
+`Publisher`, `InstallLocation`, and `UninstallString`.
+
+## Portable Path
+
+Use the portable executable when you do not want a machine-level installation:
+
+```powershell
+.\ecli_0.1.0_win_x86_64.exe
+```
+
+The portable artifact is a PyInstaller `--onefile` executable. It does not
+register uninstall metadata and does not modify machine state beyond normal
+runtime file access performed by ECLI.
+
+## SmartScreen
+
+ECLI v0.1.0 Windows artifacts are unsigned. Windows SmartScreen may block first
+launch or installation with a warning. To proceed after verifying the checksum:
+
+1. Select **More info**.
+2. Confirm the publisher is shown as unknown or unsigned.
+3. Select **Run anyway**.
+
+Code signing is planned for v0.2. Until signed artifacts are available, checksum
+verification against the release sidecar is the integrity check.

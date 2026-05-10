@@ -1,122 +1,163 @@
-<# 
-===============================================================================
-ECLI — Windows packaging (PyInstaller → NSIS)
-Strict outputs:
-  releases\<version>\ecli_<version>_win_x86_64.exe
-  releases\<version>\ecli_<version>_win_x86_64.exe.sha256
+<#
+.SYNOPSIS
+Builds ECLI Windows x86_64 release artifacts.
 
-Requirements:
-- Windows 10/11 x64, Python 3.11 (x64), NSIS (makensis in PATH)
-- powershell.exe or pwsh
-===============================================================================
+.DESCRIPTION
+The canonical Windows packager emits two unsigned artifacts:
+
+  releases\<version>\ecli_<version>_win_x86_64.exe
+  releases\<version>\ecli_<version>_win_x86_64_setup.exe
+
+Both artifacts receive coreutils-format SHA256 sidecars with ASCII-compatible
+bytes and an explicit LF terminator. The portable executable is built first and
+then bundled into the NSIS installer.
 #>
 
 $ErrorActionPreference = "Stop"
 
-function Write-Info($msg){ Write-Host "==> $msg" -ForegroundColor Cyan }
-function Write-Ok($msg){ Write-Host "OK  $msg" -ForegroundColor Green }
-function Write-Err($msg){ Write-Host "ERR $msg" -ForegroundColor Red }
+function Write-Info($Message) { Write-Host "==> $Message" -ForegroundColor Cyan }
+function Write-Ok($Message) { Write-Host "OK  $Message" -ForegroundColor Green }
+function Write-Err($Message) { Write-Host "ERR $Message" -ForegroundColor Red }
 
-# Move to repo root
-Set-Location -Path (Split-Path -Parent $MyInvocation.MyCommand.Path) | Out-Null
-Set-Location -Path ..  # scripts -> repo root
-
-# Version from pyproject.toml
-Write-Info "Reading version from pyproject.toml..."
-$version = (Get-Content pyproject.toml) -match '^\s*version\s*=\s*"(.*)"' | ForEach-Object {
-    ($_ -replace '^\s*version\s*=\s*"(.*)".*','$1')
-} | Select-Object -First 1
-if ([string]::IsNullOrWhiteSpace($version)) { Write-Err "Cannot read version"; exit 1 }
-Write-Ok "Version: $version"
-
-$releasesDir = "releases\$version"
-$winArch = "x86_64"
-$exeNameBase = "ecli_${version}_win_${winArch}.exe"
-$exePath = Join-Path $releasesDir $exeNameBase
-$shaPath = "$exePath.sha256"
-
-# Python deps
-Write-Info "Ensuring Python deps (pyinstaller + runtime stack)..."
-python -m pip install --upgrade pip wheel setuptools | Out-Null
-python -m pip install `
-  pyinstaller `
-  aiohttp aiosignal yarl multidict frozenlist `
-  python-dotenv toml chardet pyperclip wcwidth pygments tato PyYAML | Out-Null
-
-# PyInstaller
-Write-Info "Cleaning build/ dist/..."
-Remove-Item -Recurse -Force build, dist -ErrorAction SilentlyContinue
-
-Write-Info "Building onefile exe with PyInstaller..."
-if (Test-Path "packaging/pyinstaller/ecli.spec") {
-  pyinstaller packaging/pyinstaller/ecli.spec --clean --noconfirm
-} else {
-  pyinstaller main.py `
-    --name ecli `
-    --onefile --clean --noconfirm --strip `
-    --paths "src" `
-    --add-data "config.toml;." `
-    --hidden-import ecli `
-    --hidden-import dotenv       --collect-all dotenv `
-    --hidden-import toml `
-    --hidden-import PyYAML       --collect-all PyYAML `
-    --hidden-import aiohttp      --collect-all aiohttp `
-    --hidden-import aiosignal    --collect-all aiosignal `
-    --hidden-import yarl         --collect-all yarl `
-    --hidden-import multidict    --collect-all multidict `
-    --hidden-import frozenlist   --collect-all frozenlist `
-    --hidden-import chardet      --collect-all chardet `
-    --hidden-import pyperclip    --collect-all pyperclip `
-    --hidden-import wcwidth      --collect-all wcwidth `
-    --hidden-import pygments     --collect-all pygments `
-    --runtime-hook packaging/pyinstaller/rthooks/force_imports.py
+function Write-AsciiLfFile($Path, $Content) {
+  $directory = Split-Path -Parent $Path
+  if (-not [string]::IsNullOrWhiteSpace($directory)) {
+    New-Item -ItemType Directory -Force -Path $directory | Out-Null
+  }
+  $encoding = [System.Text.ASCIIEncoding]::new()
+  [System.IO.File]::WriteAllText($Path, $Content, $encoding)
 }
 
-$exeBuilt = $null
-if (Test-Path "dist\ecli\ecli.exe") { $exeBuilt = "dist\ecli\ecli.exe" }
-elseif (Test-Path "dist\ecli.exe") { $exeBuilt = "dist\ecli.exe" }
-if (-not $exeBuilt) { Write-Err "PyInstaller output not found in dist\"; exit 1 }
-Write-Ok "Executable: $exeBuilt"
+function Write-Sha256Sidecar($ArtifactPath) {
+  $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $ArtifactPath).Hash.ToLowerInvariant()
+  $basename = Split-Path $ArtifactPath -Leaf
+  Write-AsciiLfFile -Path "$ArtifactPath.sha256" -Content ("{0}  {1}`n" -f $hash, $basename)
+}
 
-# NSIS (makensis) — build installer from your NSIS script
-Write-Info "Building NSIS installer..."
-if (-not (Get-Command makensis -ErrorAction SilentlyContinue)) {
-  Write-Err "NSIS (makensis) not found in PATH. Install via choco: choco install nsis"
+function Resolve-MakeNsis {
+  $command = Get-Command makensis -ErrorAction SilentlyContinue
+  if ($command) {
+    return $command.Source
+  }
+
+  $candidates = @()
+  if ($env:ProgramFiles) {
+    $candidates += (Join-Path $env:ProgramFiles "NSIS\makensis.exe")
+  }
+  $programFilesX86 = [Environment]::GetEnvironmentVariable("ProgramFiles(x86)")
+  if ($programFilesX86) {
+    $candidates += (Join-Path $programFilesX86 "NSIS\makensis.exe")
+  }
+
+  foreach ($candidate in $candidates) {
+    if (Test-Path -LiteralPath $candidate) {
+      return $candidate
+    }
+  }
+
+  return $null
+}
+
+$projectRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
+Set-Location $projectRoot
+
+Write-Info "Reading version from pyproject.toml..."
+$version = (Get-Content pyproject.toml) -match '^\s*version\s*=\s*"(.*)"' | ForEach-Object {
+  ($_ -replace '^\s*version\s*=\s*"(.*)".*', '$1')
+} | Select-Object -First 1
+if ([string]::IsNullOrWhiteSpace($version)) {
+  Write-Err "Cannot read version"
+  exit 1
+}
+Write-Ok "Version: $version"
+
+$winArch = "x86_64"
+$releaseDir = Join-Path "releases" $version
+$portableName = "ecli_${version}_win_${winArch}.exe"
+$installerName = "ecli_${version}_win_${winArch}_setup.exe"
+$portablePath = Join-Path $releaseDir $portableName
+$installerPath = Join-Path $releaseDir $installerName
+$portableFullPath = Join-Path $projectRoot.Path $portablePath
+$installerFullPath = Join-Path $projectRoot.Path $installerPath
+$buildRoot = Join-Path $projectRoot "build\windows"
+$distDir = Join-Path $buildRoot "dist"
+$workDir = Join-Path $buildRoot "work"
+$specPath = Join-Path $projectRoot "packaging\pyinstaller\ecli.spec"
+
+if (-not (Test-Path -LiteralPath $specPath)) {
+  Write-Err "Missing canonical PyInstaller spec: $specPath"
   exit 1
 }
 
-# Prepare NSIS input dir
-$nsisStage = "build\nsis"
-Remove-Item -Recurse -Force $nsisStage -ErrorAction SilentlyContinue
-New-Item -ItemType Directory -Force -Path $nsisStage | Out-Null
-Copy-Item $exeBuilt "$nsisStage\ecli.exe"
+Write-Info "Ensuring Python dependencies..."
+python -m pip install --upgrade pip wheel setuptools | Out-Null
+python -m pip install -e ".[dev]" | Out-Null
 
-# Invoke makensis with defines for version/output
-$nsisScript = "packaging/windows/nsis/ecli.nsi"
-$defines = "/DVERSION=$version /DOUTFILE=""$exePath"""
+Write-Info "Cleaning Windows build directories..."
+Remove-Item -Recurse -Force $buildRoot -ErrorAction SilentlyContinue
+New-Item -ItemType Directory -Force -Path $distDir | Out-Null
+New-Item -ItemType Directory -Force -Path $workDir | Out-Null
+New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 
-# Ensure output dir
-New-Item -ItemType Directory -Force -Path $releasesDir | Out-Null
-"WIN_ARCH := $winArch`n" | Out-File -Encoding ascii -NoNewline -FilePath (Join-Path $releasesDir ".win.env")
+Write-Info "Building portable executable with PyInstaller spec..."
+$env:ECLI_REPO_ROOT = $projectRoot.Path
+python -m PyInstaller `
+  $specPath `
+  --clean `
+  --noconfirm `
+  --distpath $distDir `
+  --workpath $workDir
 
-# Run NSIS
-& makensis $defines $nsisScript | Write-Host
+$builtExe = Join-Path $distDir "ecli.exe"
+if (-not (Test-Path -LiteralPath $builtExe)) {
+  Write-Err "PyInstaller output not found: $builtExe"
+  exit 1
+}
+Copy-Item -LiteralPath $builtExe -Destination $portablePath -Force
+Write-Ok "Portable executable: $portablePath"
 
-if (-not (Test-Path $exePath)) {
-  # If your .nsi writes elsewhere, fallback: copy staged exe as installer
-  Copy-Item "$nsisStage\ecli.exe" $exePath
+Write-Info "Writing portable SHA256..."
+Write-Sha256Sidecar -ArtifactPath $portablePath
+
+$makensis = Resolve-MakeNsis
+if (-not $makensis) {
+  Write-Err "NSIS (makensis) not found. Install NSIS or add makensis.exe to PATH."
+  exit 1
 }
 
-# SHA256
-Write-Info "Writing SHA256..."
-$hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $exePath).Hash
-"{0}  {1}`n" -f $hash.ToLower(), (Split-Path $exePath -Leaf) `
-    | Out-File -Encoding ascii -NoNewline -FilePath $shaPath
+Write-Info "Building NSIS installer..."
+$nsisScript = Join-Path $projectRoot "packaging\windows\nsis\ecli.nsi"
+$nsisDefines = @(
+  "/DVERSION=$version",
+  "/DOUTFILE=$installerFullPath",
+  "/DINPUT_EXE=$portableFullPath"
+)
+& $makensis $nsisDefines $nsisScript
 
-# Assert strict outputs
-if (-not (Test-Path $exePath)) { Write-Err "Missing $exePath"; exit 2 }
-if (-not (Test-Path $shaPath)) { Write-Err "Missing $shaPath"; exit 3 }
+if (-not (Test-Path -LiteralPath $installerPath)) {
+  Write-Err "Installer not produced at $installerPath"
+  exit 2
+}
+Write-Ok "Installer: $installerPath"
 
-Write-Ok "Installer: $exePath"
-Write-Ok "Checksum:  $shaPath"
+Write-Info "Writing installer SHA256..."
+Write-Sha256Sidecar -ArtifactPath $installerPath
+
+$envPath = Join-Path $releaseDir ".win.env"
+Write-AsciiLfFile -Path $envPath -Content (
+  "WIN_ARCH=x86_64`n" +
+  "WIN_PORTABLE_FILENAME=$portableName`n" +
+  "WIN_INSTALLER_FILENAME=$installerName`n"
+)
+
+foreach ($path in @($portablePath, "$portablePath.sha256", $installerPath, "$installerPath.sha256", $envPath)) {
+  if (-not (Test-Path -LiteralPath $path)) {
+    Write-Err "Missing expected output: $path"
+    exit 3
+  }
+}
+
+Write-Ok "Portable checksum: $portablePath.sha256"
+Write-Ok "Installer checksum: $installerPath.sha256"
+Write-Ok "Environment file: $envPath"
 Write-Info "Done."

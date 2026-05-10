@@ -16,13 +16,13 @@ Copyright: (c) 2026 Siergej Sobolewski
 | Linux (RHEL/Fedora family) | `.rpm` | Supported with contract validation | `sudo dnf install ./ecli_<ver>_linux_x86_64.rpm` | `ecli --help` | distro dependency resolution applies |
 | FreeBSD | `.pkg` | Supported in FreeBSD environment | `sudo pkg install ./ecli_<ver>_freebsd_x86_64.pkg` | launch command | native environment required |
 | macOS | `.dmg` | Provisionally supported (validate per release) | mount DMG and install app/binary flow | startup check | packaging flow depends on local tooling |
-| Windows | `.exe` | Provisionally supported (validate per release) | run installer EXE | launch + version/help check | NSIS-based path |
+| Windows | `.exe` | Provisionally supported (validate per release) | run installer EXE or portable EXE | launch + version/help check | see `docs/install/windows.md`; NSIS installer is recommended |
 | Any | Python package | Fallback path | `pip install ecli-editor` | `python -m ecli` or CLI startup | distribution name is `ecli-editor`; import and CLI names remain `ecli` |
 
 ## Checksum Verification Example
 
 - Linux: `sha256sum -c ecli_<ver>_linux_x86_64.deb.sha256`
-- Windows (PowerShell): `Get-FileHash -Algorithm SHA256 ecli_<ver>_win_x86_64.exe`
+- Windows (PowerShell): `Get-FileHash -Algorithm SHA256 ecli_<ver>_win_x86_64_setup.exe`
 
 ## Startup Verification Example
 
