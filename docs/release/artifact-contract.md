@@ -35,6 +35,7 @@ Allowed `<arch>` tokens:
 
 - `x86_64`
 - `arm64`
+- `universal2` (macOS DMG only)
 
 Current artifact forms:
 
@@ -45,7 +46,7 @@ Current artifact forms:
 - Snap: `ecli_<version>_linux_<arch>.snap`
 - FreeBSD: `ecli_<version>_freebsd_<arch>.pkg`
 - Windows: `ecli_<version>_win_<arch>.exe`
-- macOS: `ecli_<version>_macos_<arch>.dmg`
+- macOS: `ecli_<version>_macos_universal2.dmg`
 
 The DEB internal `Architecture` field remains package-manager native
 (`amd64` on x86_64). Only the final release filename uses the canonical
@@ -72,9 +73,11 @@ The artifact basename must not include a directory component.
 Canonical script entrypoints are those referenced by `Makefile` and active workflows under `.github/workflows/`.
 
 Current-state note:
-- repository/workflows/scripts reference `ecli.spec`, and the file is present.
-- deterministic release parity depends on keeping `ecli.spec`, Makefile targets,
-  workflows, and packaging scripts aligned on the canonical output names.
+- `packaging/pyinstaller/ecli.spec` is the single source of truth for
+  PyInstaller builds across all platforms.
+- deterministic release parity depends on keeping the canonical PyInstaller
+  spec, Makefile targets, workflows, and packaging scripts aligned on the
+  canonical output names.
 
 ## Naming Migration Notes
 

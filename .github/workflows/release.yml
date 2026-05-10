@@ -138,7 +138,9 @@ jobs:
 
   build-macos:
     name: Build macOS DMG
-    runs-on: macos-13
+    # macos-14 is selected for the Apple Silicon host needed to build the
+    # arm64 leg natively; Rosetta provides the x86_64 leg for Universal2.
+    runs-on: macos-14
     permissions:
       contents: read
     steps:
@@ -148,6 +150,10 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Install Rosetta for x86_64 build leg
+        if: runner.arch == 'ARM64'
+        run: softwareupdate --install-rosetta --agree-to-license
+
       - name: Build DMG
         run: make package-macos
 
@@ -155,6 +161,30 @@ jobs:
         run: |
           make package-macos-assert
           make show-macos-artifacts
+
+      - name: Smoke test Universal2 binary inside DMG
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          dmg="releases/${version}/ecli_${version}_macos_universal2.dmg"
+          mountpoint="$RUNNER_TEMP/ecli-dmg"
+          mkdir -p "$mountpoint"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "$dmg"
+          trap 'hdiutil detach "$mountpoint"' EXIT
+          if [ -x "$mountpoint/ecli" ]; then
+            binary="$mountpoint/ecli"
+          elif [ -x "$mountpoint/ECLI.app/Contents/MacOS/ecli" ]; then
+            binary="$mountpoint/ECLI.app/Contents/MacOS/ecli"
+          else
+            echo "No ECLI binary found inside mounted DMG."
+            find "$mountpoint" -maxdepth 4 -print
+            exit 1
+          fi
+          info="$(lipo -info "$binary")"
+          echo "$info"
+          echo "$info" | grep -q x86_64
+          echo "$info" | grep -q arm64
+          codesign --verify --verbose "$binary"
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4

@@ -1,175 +1,214 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# ECLI — macOS packaging (PyInstaller .app → .dmg) for x86_64 / arm64
+# ECLI - macOS Universal2 packaging (PyInstaller x86_64 + arm64 -> DMG)
+#
 # Strict outputs:
-#   releases/<version>/ecli_<version>_macos_<arch>.dmg
-#   releases/<version>/ecli_<version>_macos_<arch>.dmg.sha256
+#   releases/<version>/ecli_<version>_macos_universal2.dmg
+#   releases/<version>/ecli_<version>_macos_universal2.dmg.sha256
 #
-# Requirements (local):
-#   - macOS 12+ with Python 3.11 and Xcode CLT
-#   - hdiutil (stock), codesign (stock), optional: create-dmg
-#   - If running locally: ensure `python3.11` is available (via pyenv or brew)
+# Requirements:
+#   - macOS 14 Apple Silicon runner or host with Rosetta available
+#   - Python 3.11+
+#   - PyInstaller
+#   - Xcode command line tools: arch, lipo, codesign, hdiutil
 #
-# In CI (GitHub Actions macos-13/macos-14), install deps in workflow:
-#   - python@3.11 (or actions/setup-python)
-#   - pip: aiohttp stack, PyInstaller, etc. (see below)
-#
-# NOTE: This script does NOT sign/notarize. Add codesign/notarize steps if needed.
+# Phase 1 policy:
+#   - ad-hoc codesign only
+#   - no Apple Developer ID
+#   - no notarization
+#   - no stapling
 # ==============================================================================
 
 set -euo pipefail
 
 log() { printf "\033[1;36m==>\033[0m %s\n" "$*"; }
-ok()  { printf "\033[32mOK\033[0m  %s\n" "$*"; }
-err(){ printf "\033[31mERR\033[0m %s\n" "$*" >&2; }
+ok() { printf "\033[32mOK\033[0m  %s\n" "$*"; }
+err() { printf "\033[31mERR\033[0m %s\n" "$*" >&2; }
+
+require_tool() {
+  command -v "$1" >/dev/null 2>&1 || {
+    err "Missing required tool: $1"
+    exit 5
+  }
+}
 
 PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
-ARCH_RAW="$(uname -m)"
-case "$ARCH_RAW" in
-  x86_64)  MAC_ARCH="x86_64" ;;
-  arm64)   MAC_ARCH="arm64"  ;;
-  *)       MAC_ARCH="$ARCH_RAW" ;;
-esac
+if [ "$(uname -s)" != "Darwin" ]; then
+  err "macOS packaging must run on Darwin."
+  exit 1
+fi
 
-# --- Read version from pyproject.toml -----------------------------------------
+PYTHON_BIN="${PYTHON:-python3}"
+SPEC_FILE="${PROJECT_ROOT}/packaging/pyinstaller/ecli.spec"
+APP_NAME="ECLI"
+MACOS_ARCH="universal2"
+
+require_tool arch
+require_tool lipo
+require_tool codesign
+require_tool hdiutil
+require_tool shasum
+command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
+  err "Missing Python interpreter: $PYTHON_BIN"
+  exit 5
+}
+
 log "Reading version from pyproject.toml..."
-VERSION="$(python3.11 - <<'PY'
+VERSION="$("$PYTHON_BIN" - <<'PY'
 import tomllib
-with open("pyproject.toml","rb") as f:
+with open("pyproject.toml", "rb") as f:
     print(tomllib.load(f)["project"]["version"])
 PY
 )"
-[ -n "${VERSION:-}" ] || { err "Cannot read [project].version"; exit 1; }
+[ -n "${VERSION:-}" ] || {
+  err "Cannot read [project].version"
+  exit 1
+}
 ok "Version: ${VERSION}"
 
 RELEASES_DIR="releases/${VERSION}"
-APP_NAME="ECLI"
-PKG_NAME_BASE="ecli_${VERSION}_macos_${MAC_ARCH}"
+PKG_NAME_BASE="ecli_${VERSION}_macos_${MACOS_ARCH}"
 DMG_PATH="${RELEASES_DIR}/${PKG_NAME_BASE}.dmg"
 SHA_PATH="${DMG_PATH}.sha256"
+UNIVERSAL_DIR="build/macos_universal2"
+UNIVERSAL_BIN="${UNIVERSAL_DIR}/ecli"
 
-# --- Python deps (optional locally; CI installs these before packaging) --------
-log "Ensuring Python deps present (PyInstaller + runtime stack)..."
-python3.11 -m pip install --upgrade pip wheel setuptools >/dev/null 2>&1 || true
-python3.11 -m pip install \
-  pyinstaller \
-  aiohttp aiosignal yarl multidict frozenlist \
-  python-dotenv toml chardet pyperclip wcwidth pygments tato PyYAML
+log "Checking Python architecture support..."
+arch -x86_64 "$PYTHON_BIN" -c 'import platform; print("python-x86_64", platform.machine())'
+arch -arm64 "$PYTHON_BIN" -c 'import platform; print("python-arm64", platform.machine())'
 
-# --- PyInstaller build ---------------------------------------------------------
-log "Cleaning previous artifacts..."
-rm -rf build/ dist/
+build_arch() {
+  local arch_name="$1"
+  local arch_flag="$2"
+  local venv_dir="build/macos_venv_${arch_name}"
+  local build_dir="build/macos_${arch_name}"
+  local dist_dir="dist/macos_${arch_name}"
+  local output="${dist_dir}/ecli"
 
-log "Building PyInstaller app..."
-if [ -f "ecli.spec" ]; then
-  pyinstaller ecli.spec --clean --noconfirm
-else
-  pyinstaller main.py \
-    --name ecli \
-    --onefile --clean --noconfirm \
-    --paths "src" \
-    --add-data "config.toml:." \
-    --hidden-import=ecli \
-    --hidden-import=dotenv       --collect-all=dotenv \
-    --hidden-import=toml \
-    --hidden-import=PyYAML       --collect-all=PyYAML \
-    --hidden-import=aiohttp      --collect-all=aiohttp \
-    --hidden-import=aiosignal    --collect-all=aiosignal \
-    --hidden-import=yarl         --collect-all=yarl \
-    --hidden-import=multidict    --collect-all=multidict \
-    --hidden-import=frozenlist   --collect-all=frozenlist \
-    --hidden-import=chardet      --collect-all=chardet \
-    --hidden-import=pyperclip    --collect-all=pyperclip \
-    --hidden-import=wcwidth      --collect-all=wcwidth \
-    --hidden-import=pygments     --collect-all=pygments \
-    --runtime-hook packaging/pyinstaller/rthooks/force_imports.py
-fi
+  log "Preparing ${arch_name} Python environment..."
+  rm -rf "$venv_dir"
+  "$PYTHON_BIN" -m venv "$venv_dir"
+  arch "$arch_flag" "$venv_dir/bin/python" -m pip install --upgrade pip wheel setuptools
+  arch "$arch_flag" "$venv_dir/bin/python" -m pip install --upgrade -e ".[dev]"
 
-# dist/ecli/ecli (onefile)
-EXECUTABLE=""
-if [ -x "dist/ecli/ecli" ]; then
-  EXECUTABLE="dist/ecli/ecli"
-elif [ -x "dist/ecli" ]; then
-  EXECUTABLE="dist/ecli"
-fi
-[ -n "$EXECUTABLE" ] || { err "PyInstaller output not found in dist/"; exit 1; }
-ok "Executable: $EXECUTABLE"
+  log "Building ${arch_name} PyInstaller binary..."
+  rm -rf "$build_dir" "$dist_dir"
+  ECLI_REPO_ROOT="$PROJECT_ROOT" \
+  ECLI_PYINSTALLER_ONEDIR=0 \
+  ECLI_BUILD_MACOS_APP=0 \
+    arch "$arch_flag" "$venv_dir/bin/python" -m PyInstaller \
+      "$SPEC_FILE" \
+      --clean \
+      --noconfirm \
+      --workpath "$build_dir" \
+      --distpath "$dist_dir"
 
-# --- Create .app bundle (minimal) ---------------------------------------------
-# Layout:
-#   build/macos_app/ECLI.app/Contents/{MacOS/ (binary), Info.plist, Resources/...}
-APP_DIR="build/macos_app/${APP_NAME}.app"
-CONTENTS="${APP_DIR}/Contents"
-MACOS_DIR="${CONTENTS}/MacOS"
-RES_DIR="${CONTENTS}/Resources"
+  [ -x "$output" ] || {
+    err "PyInstaller output missing: $output"
+    exit 1
+  }
+  lipo -info "$output"
+  ok "Built ${arch_name}: $output"
+}
 
-log "Assembling minimal .app bundle..."
-rm -rf "$APP_DIR"
-mkdir -p "$MACOS_DIR" "$RES_DIR"
+log "Cleaning previous macOS build artifacts..."
+rm -rf \
+  build/macos_venv_x86_64 \
+  build/macos_venv_arm64 \
+  build/macos_x86_64 \
+  build/macos_arm64 \
+  "$UNIVERSAL_DIR" \
+  dist/macos_x86_64 \
+  dist/macos_arm64
 
-# Binary
-install -m 755 "$EXECUTABLE" "${MACOS_DIR}/ECLI"
+build_arch "x86_64" "-x86_64"
+build_arch "arm64" "-arm64"
 
-# Icon (optional)
-[ -f "img/logo_m.icns" ] && install -m 644 "img/logo_m.icns" "${RES_DIR}/AppIcon.icns"
+log "Merging binaries into Universal2 executable..."
+mkdir -p "$UNIVERSAL_DIR"
+lipo -create "dist/macos_x86_64/ecli" "dist/macos_arm64/ecli" -output "$UNIVERSAL_BIN"
+chmod 755 "$UNIVERSAL_BIN"
+LIPO_INFO="$(lipo -info "$UNIVERSAL_BIN")"
+printf '%s\n' "$LIPO_INFO"
+case "$LIPO_INFO" in
+  *x86_64*arm64*|*arm64*x86_64*) ;;
+  *)
+    err "Universal2 binary does not contain both x86_64 and arm64."
+    exit 1
+    ;;
+esac
+ok "Universal2 binary: $UNIVERSAL_BIN"
 
-# Info.plist
-cat > "${CONTENTS}/Info.plist" <<EOF
+log "Applying ad-hoc codesign..."
+# No --options runtime: Phase 1 explicitly defers hardened runtime and notarization.
+codesign --sign - --force "$UNIVERSAL_BIN"
+codesign --verify --verbose "$UNIVERSAL_BIN"
+ok "Ad-hoc signature verified."
+
+log "Creating DMG staging tree..."
+mkdir -p "$RELEASES_DIR"
+printf 'MACOS_ARCH=universal2\n' > "$RELEASES_DIR/.macos.env"
+
+DMG_STAGING="build/macos_dmg"
+rm -rf "$DMG_STAGING"
+mkdir -p "$DMG_STAGING"
+
+if [ "${ECLI_BUILD_MACOS_APP:-0}" = "1" ]; then
+  APP_DIR="${DMG_STAGING}/${APP_NAME}.app"
+  CONTENTS="${APP_DIR}/Contents"
+  MACOS_DIR="${CONTENTS}/MacOS"
+  RES_DIR="${CONTENTS}/Resources"
+  mkdir -p "$MACOS_DIR" "$RES_DIR"
+  install -m 755 "$UNIVERSAL_BIN" "${MACOS_DIR}/ecli"
+  [ -f "img/logo_m.icns" ] && install -m 644 "img/logo_m.icns" "${RES_DIR}/AppIcon.icns"
+  cat > "${CONTENTS}/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>CFBundleName</key>                <string>${APP_NAME}</string>
-  <key>CFBundleDisplayName</key>         <string>${APP_NAME}</string>
-  <key>CFBundleIdentifier</key>          <string>io.ecli.app</string>
-  <key>CFBundleVersion</key>             <string>${VERSION}</string>
-  <key>CFBundleShortVersionString</key>  <string>${VERSION}</string>
-  <key>CFBundleExecutable</key>          <string>ECLI</string>
-  <key>CFBundlePackageType</key>         <string>APPL</string>
-  <key>LSMinimumSystemVersion</key>      <string>12.0</string>
-  <key>NSHighResolutionCapable</key>     <true/>
-  <key>CFBundleIconFile</key>            <string>AppIcon</string>
+  <key>CFBundleName</key><string>${APP_NAME}</string>
+  <key>CFBundleDisplayName</key><string>${APP_NAME}</string>
+  <key>CFBundleIdentifier</key><string>io.ecli.editor</string>
+  <key>CFBundleVersion</key><string>${VERSION}</string>
+  <key>CFBundleShortVersionString</key><string>${VERSION}</string>
+  <key>CFBundleExecutable</key><string>ecli</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>LSMinimumSystemVersion</key><string>12.0</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
 </dict>
 </plist>
 EOF
+  codesign --sign - --force --deep "$APP_DIR"
+  codesign --verify --verbose "$APP_DIR"
+  ln -s /Applications "$DMG_STAGING/Applications"
+else
+  install -m 755 "$UNIVERSAL_BIN" "$DMG_STAGING/ecli"
+fi
 
-# --- Create DMG with drag-to-Applications layout ------------------------------
-log "Creating DMG image..."
-mkdir -p "$RELEASES_DIR"
-printf 'MACOS_ARCH := %s\n' "$MAC_ARCH" > "$RELEASES_DIR/.macos.env"
-
-# Staging for DMG
-DMG_STAGING="build/macos_dmg"
-rm -rf "$DMG_STAGING"
-mkdir -p "$DMG_STAGING"
-cp -R "$APP_DIR" "$DMG_STAGING/"
-
-# Create Applications symlink
-ln -s /Applications "$DMG_STAGING/Applications"
-
+log "Creating compressed DMG..."
+rm -f "$DMG_PATH" "$SHA_PATH"
 VOL_NAME="ECLI-${VERSION}"
 DMG_TMP="${DMG_PATH%.dmg}-tmp.dmg"
-
-# Create read-write DMG, set up layout, then convert to compressed
+rm -f "$DMG_TMP"
 hdiutil create -volname "$VOL_NAME" -srcfolder "$DMG_STAGING" -ov -fs HFS+ -format UDRW "$DMG_TMP"
-# Finder window customization via AppleScript is intentionally omitted here.
 hdiutil convert "$DMG_TMP" -format UDZO -imagekey zlib-level=9 -o "$DMG_PATH"
 rm -f "$DMG_TMP"
 
-# Checksum
-if command -v shasum >/dev/null 2>&1; then
-  (cd "$RELEASES_DIR" && shasum -a 256 "$(basename "$DMG_PATH")" > "$(basename "$DMG_PATH").sha256")
-else
-  hash="$(/usr/bin/openssl dgst -sha256 "$DMG_PATH" | awk '{print $2}')"
-  printf '%s  %s\n' "$hash" "$(basename "$DMG_PATH")" > "$SHA_PATH"
-fi
+log "Writing SHA256 sidecar..."
+(cd "$RELEASES_DIR" && shasum -a 256 "$(basename "$DMG_PATH")" > "$(basename "$DMG_PATH").sha256")
+
+[ -f "$DMG_PATH" ] || {
+  err "Missing $DMG_PATH"
+  exit 2
+}
+[ -f "$SHA_PATH" ] || {
+  err "Missing $SHA_PATH"
+  exit 3
+}
 
 ok "DMG: $DMG_PATH"
 ok "SHA: $SHA_PATH"
-
-# --- Assert strict names -------------------------------------------------------
-[ -f "$DMG_PATH" ] || { err "Missing $DMG_PATH"; exit 2; }
-[ -f "$SHA_PATH" ] || { err "Missing $SHA_PATH"; exit 3; }
 log "Done."

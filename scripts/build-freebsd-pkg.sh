@@ -6,7 +6,7 @@
 # using `pkg create`. It:
 #   1) Ensures required system packages (python311, pyinstaller, git, ncurses, etc.)
 #   2) Installs Python runtime deps via pip (aiohttp stack, etc.)
-#   3) Builds executable (uses ecli.spec if present; otherwise safe fallback)
+#   3) Builds executable (uses packaging/pyinstaller/ecli.spec if present; otherwise safe fallback)
 #   4) Stages FHS payload under /usr/local/*
 #   5) Generates +MANIFEST (YAML & UCL) with proper runtime deps
 #   6) Creates .pkg and a .sha256 checksum in releases/<version>/
@@ -244,12 +244,12 @@ build_binary() {
 
     local pyinstaller_success=false
 
-    if [ -f "$PROJECT_ROOT/ecli.spec" ]; then
-        print_step "Using ecli.spec for build configuration..."
-        if pyinstaller "$PROJECT_ROOT/ecli.spec" --clean --noconfirm; then
+    if [ -f "$PROJECT_ROOT/packaging/pyinstaller/ecli.spec" ]; then
+        print_step "Using packaging/pyinstaller/ecli.spec for build configuration..."
+        if pyinstaller "$PROJECT_ROOT/packaging/pyinstaller/ecli.spec" --clean --noconfirm; then
             pyinstaller_success=true
         else
-            print_warning "ecli.spec build failed, trying direct method..."
+            print_warning "packaging/pyinstaller/ecli.spec build failed, trying direct method..."
         fi
     fi
 

@@ -1,0 +1,132 @@
+# -*- mode: python ; coding: utf-8 -*-
+"""PyInstaller specification for ECLI release artifacts."""
+
+import os
+import sys
+from pathlib import Path
+
+from PyInstaller.utils.hooks import collect_submodules
+
+
+project_root = Path(os.environ.get("ECLI_REPO_ROOT", os.getcwd())).resolve()
+entry_point = project_root / "main.py"
+src_dir = project_root / "src"
+config_file = project_root / "config.toml"
+
+if not entry_point.is_file():
+    raise SystemExit(f"Missing PyInstaller entry point: {entry_point}")
+if not config_file.is_file():
+    raise SystemExit(f"Missing PyInstaller data file: {config_file}")
+
+one_dir = os.environ.get("ECLI_PYINSTALLER_ONEDIR") == "1"
+build_macos_app = (
+    sys.platform == "darwin" and os.environ.get("ECLI_BUILD_MACOS_APP") == "1"
+)
+
+datas = [(str(config_file), ".")]
+binaries = []
+
+hiddenimports = [
+    "ecli",
+    "dotenv",
+    "toml",
+    "yaml",
+    "aiohttp",
+    "aiosignal",
+    "yarl",
+    "multidict",
+    "frozenlist",
+    "pyperclip",
+    "pygments",
+    "chardet",
+    "wcwidth",
+]
+
+for package in (
+    "pygments.lexers",
+    "pygments.formatters",
+    "chardet",
+    "wcwidth",
+):
+    hiddenimports.extend(collect_submodules(package))
+
+hiddenimports = sorted(set(hiddenimports))
+
+a = Analysis(
+    [str(entry_point)],
+    pathex=[str(src_dir), str(project_root)],
+    binaries=binaries,
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[str(project_root / "packaging/pyinstaller/rthooks/force_imports.py")],
+    excludes=["tkinter", "test", "unittest"],
+    noarchive=False,
+    optimize=0,
+)
+
+pyz = PYZ(a.pure)
+
+if one_dir or build_macos_app:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        [],
+        exclude_binaries=True,
+        name="ecli",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=True,
+        upx=True,
+        console=True,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
+    coll = COLLECT(
+        exe,
+        a.binaries,
+        a.datas,
+        strip=True,
+        upx=True,
+        upx_exclude=[],
+        name="ecli",
+    )
+    if build_macos_app:
+        app = BUNDLE(
+            coll,
+            name="dist/ECLI.app",
+            bundle_identifier="io.ecli.editor",
+            info_plist={
+                "CFBundleName": "ECLI",
+                "CFBundleDisplayName": "ECLI",
+                "CFBundleExecutable": "ecli",
+                "CFBundlePackageType": "APPL",
+                "LSMinimumSystemVersion": "12.0",
+                "NSHighResolutionCapable": True,
+            },
+        )
+else:
+    exe = EXE(
+        pyz,
+        a.scripts,
+        a.binaries,
+        a.datas,
+        [],
+        name="ecli",
+        debug=False,
+        bootloader_ignore_signals=False,
+        strip=True,
+        upx=True,
+        upx_exclude=[],
+        runtime_tmpdir=None,
+        console=True,
+        disable_windowed_traceback=False,
+        argv_emulation=False,
+        target_arch=None,
+        codesign_identity=None,
+        entitlements_file=None,
+    )
