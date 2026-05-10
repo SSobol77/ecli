@@ -1,4 +1,16 @@
-# ecli/core/AsyncEngine.py
+# SPDX-License-Identifier: Apache-2.0
+#
+# Project: Ecli
+# File: src/ecli/core/AsyncEngine.py
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+#
+# Copyright (c) 2026 Siergej Sobolewski
+#
+# Licensed under the Apache License, Version 2.0.
+# See the LICENSE file in the project root for full license text.
+
 """AsyncEngine Module
 ==================
 This module provides the `AsyncEngine` class, which enables the execution of asynchronous tasks in a dedicated background thread using Python's `asyncio` event loop. It is designed to offload long-running or I/O-bound operations—such as communication with Language Server Protocol (LSP) clients or AI chat services—from the main user interface (UI) thread, ensuring that the UI remains responsive.

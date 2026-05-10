@@ -1,4 +1,17 @@
 #!/bin/sh
+# SPDX-License-Identifier: Apache-2.0
+#
+# Project: Ecli
+# File: scripts/build_freebsd_port.sh
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+#
+# Copyright (c) 2026 Siergej Sobolewski
+#
+# Licensed under the Apache License, Version 2.0.
+# See the LICENSE file in the project root for full license text.
+
 # ==============================================================================
 # ECLI — Build via FreeBSD Ports (local port skeleton)
 # ==============================================================================
@@ -30,7 +43,7 @@
 #   0 success, non-zero on failure.
 #
 # LAST UPDATED
-#   2025-10-02
+#   2026-05-10
 # ==============================================================================
 
 set -eu

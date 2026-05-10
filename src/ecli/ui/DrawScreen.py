@@ -1,4 +1,16 @@
-# ecli/ui/DrawScreen.py
+# SPDX-License-Identifier: Apache-2.0
+#
+# Project: Ecli
+# File: src/ecli/ui/DrawScreen.py
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+#
+# Copyright (c) 2026 Siergej Sobolewski
+#
+# Licensed under the Apache License, Version 2.0.
+# See the LICENSE file in the project root for full license text.
+
 """DrawScreen.py
 ========================
 DrawScreen — the main class responsible for rendering the ECLI editor interface using the curses library.

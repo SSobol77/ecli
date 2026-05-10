@@ -1,11 +1,17 @@
 <!--
-Filename: docs/planning/post-merge-defects.md
-Project:  ECLI
-License:  MIT
-Author:   Siergej Sobolewski
-Copyright: (c) 2026 Siergej Sobolewski
--->
+SPDX-License-Identifier: Apache-2.0
 
+Project: Ecli
+File: docs/planning/post-merge-defects.md
+Website: https://www.ecli.io
+Repository: https://github.com/SSobol77/ecli
+PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+
+Copyright (c) 2026 Siergej Sobolewski
+
+Licensed under the Apache License, Version 2.0.
+See the LICENSE file in the project root for full license text.
+-->
 # Gate 2 Post-Merge Defects
 
 Timestamp: 2026-05-09T22:55:40+02:00
