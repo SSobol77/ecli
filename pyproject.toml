@@ -74,6 +74,7 @@ dev = [
     "coverage>=7.4.0",
     "build>=1.2",
     "twine>=5.0",
+    "cyclonedx-py>=4.0",
 ]
 
 [project.scripts]

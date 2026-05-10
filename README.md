@@ -87,6 +87,9 @@ make run
 pip install ecli-editor
 ```
 
+The Python distribution name is `ecli-editor`; the import package remains
+`ecli`, and the installed CLI command remains `ecli`.
+
 ---
 
 ## 📦 Installation Guide
@@ -143,6 +146,16 @@ Download from [GitHub Releases](https://github.com/SSobol77/ecli/releases):
 
 ```bash
 pip install ecli-editor
+```
+
+Import and launch names are unchanged:
+
+```python
+import ecli
+```
+
+```bash
+ecli
 ```
 
 Requires Python 3.11+ and system dependencies listed above.
