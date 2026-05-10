@@ -147,7 +147,9 @@ jobs:
             # dependency) has no FreeBSD prebuilt wheel and must be
             # compiled from source. Other build essentials cover any
             # additional native deps that may need on-VM compilation.
-            env ASSUME_ALWAYS_YES=yes pkg install -y rust pkgconf
+            env ASSUME_ALWAYS_YES=yes pkg install -y rust cargo pkgconf
+            rustc --version
+            cargo --version
           run: |
             set -eux
             sh ./scripts/build-and-package-freebsd.sh

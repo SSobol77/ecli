@@ -58,10 +58,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 
 
-# Install uv
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && ln -s /root/.local/bin/uv /usr/local/bin/uv
-ENV PATH="/root/.local/bin:${PATH}"
+# Install uv without executing a downloaded installer script.
+RUN python3 -m pip install --no-cache-dir uv
 
 WORKDIR /app
 
