@@ -217,7 +217,7 @@ jobs:
           if-no-files-found: error
 
   build-windows:
-    name: Build Windows installer
+    name: Build Windows artifacts
     runs-on: windows-latest
     permissions:
       contents: read
@@ -229,32 +229,52 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
           architecture: "x64"
 
-      - name: Install NSIS
+      - name: Verify NSIS
         shell: pwsh
         run: |
-          choco install nsis -y
-          "C:\Program Files (x86)\NSIS" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          $nsisPath = "C:\Program Files (x86)\NSIS"
+          if (Test-Path $nsisPath) {
+            Add-Content -Path $env:GITHUB_PATH -Value $nsisPath -Encoding utf8
+          }
+          $makensis = Get-Command makensis -ErrorAction SilentlyContinue
+          if (-not $makensis) {
+            $candidate = Join-Path $nsisPath "makensis.exe"
+            if (Test-Path $candidate) {
+              $makensis = Get-Item -LiteralPath $candidate
+            }
+          }
+          if (-not $makensis) { throw "makensis not found" }
+          $makensisPath = if ($makensis.Source) { $makensis.Source } else { $makensis.FullName }
+          Write-Host "Using $makensisPath"
 
-      - name: Build installer
+      - name: Build Windows artifacts
         shell: pwsh
         run: ./scripts/build-and-package-windows.ps1
 
-      - name: Verify installer
+      - name: Verify Windows artifacts
         shell: pwsh
         run: |
-          $artifacts = Get-ChildItem -Path releases -Recurse -Filter "ecli_*_win_x86_64.exe"
-          if ($artifacts.Count -ne 1) { throw "Expected exactly one Windows installer, found $($artifacts.Count)" }
-          $exe = $artifacts[0].FullName
-          $sha = "$exe.sha256"
-          if (-not (Test-Path $sha)) { throw "Missing $sha" }
-          $expected = (Get-Content $sha -Raw).Trim().Split()[0].ToUpperInvariant()
-          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToUpperInvariant()
-          if ($actual -ne $expected) { throw "SHA256 mismatch for $exe" }
+          $versionLine = Get-Content pyproject.toml | Where-Object { $_ -match '^\s*version\s*=\s*"(.*)"' } | Select-Object -First 1
+          if ($versionLine -notmatch '^\s*version\s*=\s*"(.*)"') { throw "Cannot read version from pyproject.toml" }
+          $version = $Matches[1]
+          $artifacts = @(
+            "releases\$version\ecli_${version}_win_x86_64.exe",
+            "releases\$version\ecli_${version}_win_x86_64_setup.exe"
+          )
+          foreach ($exe in $artifacts) {
+            $sha = "$exe.sha256"
+            if (-not (Test-Path $exe)) { throw "Missing $exe" }
+            if (-not (Test-Path $sha)) { throw "Missing $sha" }
+            if ((Get-Item -LiteralPath $exe).Length -le 0) { throw "Empty EXE: $exe" }
+            $expected = (Get-Content $sha -Raw).Trim().Split()[0].ToUpperInvariant()
+            $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $exe).Hash.ToUpperInvariant()
+            if ($actual -ne $expected) { throw "SHA256 mismatch for $exe" }
+          }
 
-      - name: Upload Windows installer
+      - name: Upload Windows artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: windows-installer
+          name: windows-dual-artifacts
           path: |
             releases/**/*.exe
             releases/**/*.exe.sha256

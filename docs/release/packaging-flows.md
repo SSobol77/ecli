@@ -31,5 +31,5 @@ Governance rule:
 
 ## Windows
 
-- Installer flow: `scripts/build-and-package-windows.ps1`
+- Portable EXE and installer flow: `scripts/build-and-package-windows.ps1`
 - NSIS script: `packaging/windows/nsis/ecli.nsi`

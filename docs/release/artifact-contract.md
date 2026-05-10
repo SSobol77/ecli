@@ -24,6 +24,13 @@ Final release artifact names must use this schema:
 
 Short form: `ecli_<v>_<os>_<arch>.<ext>`
 
+Windows installer artifacts use this installer-specific extension of the same
+schema:
+
+`ecli_<version>_win_<arch>_setup.exe`
+
+Short form: `ecli_<v>_win_<arch>_setup.exe`
+
 Allowed `<os>` tokens:
 
 - `linux`
@@ -45,7 +52,8 @@ Current artifact forms:
 - Linux tarball: `ecli_<version>_linux_<arch>.tar.gz`
 - Snap: `ecli_<version>_linux_<arch>.snap`
 - FreeBSD: `ecli_<version>_freebsd_<arch>.pkg`
-- Windows: `ecli_<version>_win_<arch>.exe`
+- Windows portable EXE: `ecli_<version>_win_<arch>.exe`
+- Windows NSIS installer EXE: `ecli_<version>_win_<arch>_setup.exe`
 - macOS: `ecli_<version>_macos_universal2.dmg`
 
 The DEB internal `Architecture` field remains package-manager native

@@ -89,7 +89,7 @@ help:
 	@echo ""
 	@echo "DESKTOP PACKAGES:"
 	@echo "  make package-macos          - Build macOS .dmg (native)"
-	@echo "  make package-windows        - Build Windows .exe (native, PowerShell)"
+	@echo "  make package-windows        - Build Windows EXE artifacts (native, PowerShell)"
 	@echo ""
 	@echo "PYTHON PACKAGES:"
 	@echo "  make package-pypi           - Build wheel + sdist (for PyPI)"
@@ -755,9 +755,9 @@ release-macos: package-macos-assert
 # Packaging (Windows)
 # ---------------------------
 # Use:
-# Build (local, PowerShell 7+ on Windows 10/11 x64):
+# Build (local, PowerShell on Windows 10/11 x64):
 #   `make package-windows`
-#   (PyInstaller → NSIS; produces a signed or unsigned installer depending on your setup)
+#   (PyInstaller portable EXE → unsigned NSIS installer)
 #
 # Verify produced artifacts (strict naming & location):
 #   `make show-windows-artifacts`
@@ -769,6 +769,8 @@ release-macos: package-macos-assert
 #  - Output files (strict):
 #       releases/<version>/ecli_<version>_win_x86_64.exe
 #       releases/<version>/ecli_<version>_win_x86_64.exe.sha256
+#       releases/<version>/ecli_<version>_win_x86_64_setup.exe
+#       releases/<version>/ecli_<version>_win_x86_64_setup.exe.sha256
 #  - For CI builds, see `.github/workflows/windows-installer.yml`.
 #  - If code signing is required, integrate `signtool` before checksum generation.
 # ---------------------------
@@ -776,8 +778,14 @@ release-macos: package-macos-assert
 
 WIN_PKG_VERSION ?= $(PACKAGE_VERSION)
 WIN_PKG_DIR     ?= releases/$(WIN_PKG_VERSION)
-WIN_PKG_FILE    ?= $(WIN_PKG_DIR)/ecli_$(WIN_PKG_VERSION)_win_$(WIN_ARCH).exe
-WIN_SHA_FILE    ?= $(WIN_PKG_FILE).sha256
+WIN_PORTABLE_FILENAME ?= ecli_$(WIN_PKG_VERSION)_win_$(WIN_ARCH).exe
+WIN_INSTALLER_FILENAME ?= ecli_$(WIN_PKG_VERSION)_win_$(WIN_ARCH)_setup.exe
+WIN_PORTABLE_FILE ?= $(WIN_PKG_DIR)/$(WIN_PORTABLE_FILENAME)
+WIN_INSTALLER_FILE ?= $(WIN_PKG_DIR)/$(WIN_INSTALLER_FILENAME)
+WIN_PORTABLE_SHA_FILE ?= $(WIN_PORTABLE_FILE).sha256
+WIN_INSTALLER_SHA_FILE ?= $(WIN_INSTALLER_FILE).sha256
+WIN_PKG_FILE    ?= $(WIN_PORTABLE_FILE)
+WIN_SHA_FILE    ?= $(WIN_PORTABLE_SHA_FILE)
 
 # Local Windows build (run in PowerShell on Windows host)
 .PHONY: package-windows
@@ -788,9 +796,12 @@ package-windows: clean
 .PHONY: package-windows-assert
 package-windows-assert:
 	@test -n "$(WIN_PKG_VERSION)" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
-	$(call verify_sha256,$(WIN_PKG_FILE))
-	@echo "--> OK: $(WIN_PKG_FILE)"
-	@echo "--> OK: $(WIN_SHA_FILE)"
+	$(call verify_sha256,$(WIN_PORTABLE_FILE))
+	$(call verify_sha256,$(WIN_INSTALLER_FILE))
+	@echo "--> OK: $(WIN_PORTABLE_FILE)"
+	@echo "--> OK: $(WIN_PORTABLE_SHA_FILE)"
+	@echo "--> OK: $(WIN_INSTALLER_FILE)"
+	@echo "--> OK: $(WIN_INSTALLER_SHA_FILE)"
 
 .PHONY: show-windows-artifacts
 show-windows-artifacts:
@@ -805,16 +816,18 @@ release-windows: package-windows-assert
 	@tmpfile="$$(mktemp)"; \
 	trap 'rm -f "$$tmpfile"' EXIT; \
 	printf '%s\n' \
-		"Windows x86_64 installer for ECLI v$(WIN_PKG_VERSION)." \
+		"Windows x86_64 portable executable and unsigned NSIS installer for ECLI v$(WIN_PKG_VERSION)." \
 		"" \
 		"Artifacts:" \
-		"- $$(basename "$(WIN_PKG_FILE)")" \
-		"- $$(basename "$(WIN_SHA_FILE)")" > "$$tmpfile"; \
+		"- $$(basename "$(WIN_PORTABLE_FILE)")" \
+		"- $$(basename "$(WIN_PORTABLE_SHA_FILE)")" \
+		"- $$(basename "$(WIN_INSTALLER_FILE)")" \
+		"- $$(basename "$(WIN_INSTALLER_SHA_FILE)")" > "$$tmpfile"; \
 	gh release view "v$(WIN_PKG_VERSION)" >/dev/null 2>&1 || \
 	gh release create "v$(WIN_PKG_VERSION)" \
 		--title "ECLI v$(WIN_PKG_VERSION)" \
 		--notes-file "$$tmpfile"
-	@gh release upload "v$(WIN_PKG_VERSION)" "$(WIN_PKG_FILE)" "$(WIN_SHA_FILE)" --clobber
+	@gh release upload "v$(WIN_PKG_VERSION)" "$(WIN_PORTABLE_FILE)" "$(WIN_PORTABLE_SHA_FILE)" "$(WIN_INSTALLER_FILE)" "$(WIN_INSTALLER_SHA_FILE)" --clobber
 	@echo "--> Release v$(WIN_PKG_VERSION) updated with Windows artifacts."
 
 
