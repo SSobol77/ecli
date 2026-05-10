@@ -11,7 +11,7 @@
 # Licensed under the Apache License, Version 2.0.
 # See the LICENSE file in the project root for full license text.
 
-keybindings = { }
+keybindings = {}
 
 
 [logging]
@@ -28,7 +28,7 @@ default_provider = "openai"
 [ai.models]
 openai = "gpt-5-codex"
 gemini = "gemini-2.5-pro"
-mistral = "magistral-medium-1.2""
+mistral = "magistral-medium-1.2"
 claude = "claude-4-opus"
 grok = "grok-4-fast"
 huggingface = "meta-llama/Meta-Llama-3.1-405B-Instruct"
@@ -106,7 +106,7 @@ cursor = "#AEAFAD"
 [linter]
 enabled = true
 auto_install = true
-exclude = [ ".git", "__pycache__", ".venv" ]
+exclude = [".git", "__pycache__", ".venv"]
 
 
 [file_icons]
@@ -175,104 +175,104 @@ docstring_delim = '"""'
 
 [comments.ruby]
 line_prefix = "# "
-block_delims = [ "=begin", "=end" ]
+block_delims = ["=begin", "=end"]
 
 
 [comments.perl]
 line_prefix = "# "
-block_delims = [ "=pod", "=cut" ]
+block_delims = ["=pod", "=cut"]
 
 
 [comments.lua]
 line_prefix = "-- "
-block_delims = [ "--[[", "]]" ]
+block_delims = ["--[[", "]]"]
 
 
 [comments.javascript]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.typescript]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.php]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.html]
-block_delims = [ "<!--", "-->" ]
+block_delims = ["<!--", "-->"]
 
 
 [comments.xml]
-block_delims = [ "<!--", "-->" ]
+block_delims = ["<!--", "-->"]
 
 
 [comments.css]
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.scss]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.c]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.cpp]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.csharp]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.java]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.go]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.rust]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.swift]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.kotlin]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.scala]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.dart]
 line_prefix = "// "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.haskell]
 line_prefix = "-- "
-block_delims = [ "{-", "-}" ]
+block_delims = ["{-", "-}"]
 
 
 [comments.elixir]
@@ -290,11 +290,11 @@ line_prefix = ";; "
 
 [comments.fsharp]
 line_prefix = "// "
-block_delims = [ "(*", "*)" ]
+block_delims = ["(*", "*)"]
 
 
 [comments.ocaml]
-block_delims = [ "(*", "*)" ]
+block_delims = ["(*", "*)"]
 
 
 [comments.shell]
@@ -303,7 +303,7 @@ line_prefix = "# "
 
 [comments.powershell]
 line_prefix = "# "
-block_delims = [ "<#", "#>" ]
+block_delims = ["<#", "#>"]
 
 
 [comments.dockerfile]
@@ -324,7 +324,7 @@ line_prefix = "; "
 
 [comments.sql]
 line_prefix = "-- "
-block_delims = [ "/*", "*/" ]
+block_delims = ["/*", "*/"]
 
 
 [comments.yaml]
@@ -349,12 +349,12 @@ line_prefix = "# "
 
 [comments.matlab]
 line_prefix = "% "
-block_delims = [ "%{", "%}" ]
+block_delims = ["%{", "%}"]
 
 
 [comments.nim]
 line_prefix = "# "
-block_delims = [ "#[", "]#" ]
+block_delims = ["#[", "]#"]
 
 
 [comments.crystal]
@@ -1181,133 +1181,123 @@ color = "literal"
 
 [supported_formats]
 docs = [
-"readme",
-"docs",
-"todo",
-"changelog",
-"license",
-"contributing",
-"code_of_conduct"
+    "readme",
+    "docs",
+    "todo",
+    "changelog",
+    "license",
+    "contributing",
+    "code_of_conduct",
 ]
-python = [ "py", "pyw", "pyc", "pyd" ]
-toml = [ "toml", "tml", "nix" ]
-javascript = [ "js", "mjs", "cjs", "jsx" ]
-code = [ "jl", "dart" ]
-css = [ "css" ]
-nix = [ "nix" ]
-html = [ "html", "htm", "xhtml" ]
-json = [ "json", "jsonc", "geojson", "webmanifest" ]
-yaml = [ "yaml", "yml" ]
-xml = [
-"xml",
-"xsd",
-"xsl",
-"xslt",
-"plist",
-"rss",
-"atom",
-"csproj",
-"svg"
-]
-markdown = [ "md", "markdown", "mdown", "mkd" ]
-text = [ "txt", "log", "rst", "srt", "sub", "me" ]
+python = ["py", "pyw", "pyc", "pyd"]
+toml = ["toml", "tml", "nix"]
+javascript = ["js", "mjs", "cjs", "jsx"]
+code = ["jl", "dart"]
+css = ["css"]
+nix = ["nix"]
+html = ["html", "htm", "xhtml"]
+json = ["json", "jsonc", "geojson", "webmanifest"]
+yaml = ["yaml", "yml"]
+xml = ["xml", "xsd", "xsl", "xslt", "plist", "rss", "atom", "csproj", "svg"]
+markdown = ["md", "markdown", "mdown", "mkd"]
+text = ["txt", "log", "rst", "srt", "sub", "me"]
 shell = [
-"sh",
-"bash",
-"zsh",
-"fish",
-"ksh",
-"csh",
-"tcsh",
-"dash",
-"ash",
-"cmd",
-"command",
-"tool",
-"bat"
+    "sh",
+    "bash",
+    "zsh",
+    "fish",
+    "ksh",
+    "csh",
+    "tcsh",
+    "dash",
+    "ash",
+    "cmd",
+    "command",
+    "tool",
+    "bat",
 ]
-dart = [ "dart" ]
-go = [ "go" ]
-c = [ "c", "h" ]
-cpp = [ "cpp", "cxx", "cc", "hpp", "hxx", "hh", "inl", "tpp" ]
-java = [ "java", "jar", "class" ]
-julia = [ "jl" ]
-rust = [ "rs", "rlib" ]
-csharp = [ "cs" ]
-dockerfile = [ "Dockerfile", "dockerfile" ]
-terraform = [ "tf", "tfvars" ]
-jenkins = [ "Jenkinsfile", "jenkinsfile", "groovy" ]
-puppet = [ "pp" ]
-saltstack = [ "sls" ]
+dart = ["dart"]
+go = ["go"]
+c = ["c", "h"]
+cpp = ["cpp", "cxx", "cc", "hpp", "hxx", "hh", "inl", "tpp"]
+java = ["java", "jar", "class"]
+julia = ["jl"]
+rust = ["rs", "rlib"]
+csharp = ["cs"]
+dockerfile = ["Dockerfile", "dockerfile"]
+terraform = ["tf", "tfvars"]
+jenkins = ["Jenkinsfile", "jenkinsfile", "groovy"]
+puppet = ["pp"]
+saltstack = ["sls"]
 git = [
-"gitignore",
-"gitattributes",
-"gitmodules",
-"gitkeep",
-"gitconfig",
-"config"
+    "gitignore",
+    "gitattributes",
+    "gitmodules",
+    "gitkeep",
+    "gitconfig",
+    "config",
 ]
-notebook = [ "ipynb" ]
-typescript = [ "ts", "tsx", "mts", "cts" ]
-php = [ "php", "php3", "php4", "php5", "phtml" ]
-ruby = [ "rb", "erb", "rake", "rbw", "gemspec" ]
-scala = [ "scala", "sc" ]
-r = [ "r", "R", "rds", "rda" ]
-swift = [ "swift" ]
-diff = [ "diff", "patch" ]
-makefile = [ "Makefile", "makefile", "mk", "mak" ]
-ini = [ "ini", "cfg", "conf", "properties", "editorconfig" ]
-csv = [ "csv", "tsv" ]
-sql = [ "sql" ]
-graphql = [ "graphql", "gql" ]
-kotlin = [ "kt", "kts" ]
-lua = [ "lua" ]
-perl = [ "pl", "pm", "t", "pod" ]
-powershell = [ "ps1", "psm1", "psd1" ]
-fortran = [ "f", "F", "f90", "F90", "for" ]
+notebook = ["ipynb"]
+typescript = ["ts", "tsx", "mts", "cts"]
+php = ["php", "php3", "php4", "php5", "phtml"]
+ruby = ["rb", "erb", "rake", "rbw", "gemspec"]
+scala = ["scala", "sc"]
+r = ["r", "R", "rds", "rda"]
+swift = ["swift"]
+diff = ["diff", "patch"]
+makefile = ["Makefile", "makefile", "mk", "mak"]
+ini = ["ini", "cfg", "conf", "properties", "editorconfig"]
+csv = ["csv", "tsv"]
+sql = ["sql"]
+graphql = ["graphql", "gql"]
+kotlin = ["kt", "kts"]
+lua = ["lua"]
+perl = ["pl", "pm", "t", "pod"]
+powershell = ["ps1", "psm1", "psd1"]
+fortran = ["f", "F", "f90", "F90", "for"]
 image = [
-"jpg",
-"jpeg",
-"png",
-"gif",
-"bmp",
-"ico",
-"webp",
-"tiff",
-"tif",
-"heic",
-"heif"
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "bmp",
+    "ico",
+    "webp",
+    "tiff",
+    "tif",
+    "heic",
+    "heif",
 ]
-audio = [ "mp3", "wav", "ogg", "flac", "aac", "m4a", "wma" ]
-video = [ "mp4", "mkv", "avi", "mov", "webm", "flv", "wmv" ]
+audio = ["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"]
+video = ["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"]
 archive = [
-"zip",
-"tar",
-"gz",
-"tgz",
-"bz2",
-"rar",
-"7z",
-"xz",
-"iso",
-"deb",
-"rpm",
-"pkg"
+    "zip",
+    "tar",
+    "gz",
+    "tgz",
+    "bz2",
+    "rar",
+    "7z",
+    "xz",
+    "iso",
+    "deb",
+    "rpm",
+    "pkg",
 ]
-font = [ "ttf", "otf", "woff", "woff2", "eot" ]
-binary = [ "exe", "dll", "so", "o", "bin", "app", "com", "msi", "dmg" ]
+font = ["ttf", "otf", "woff", "woff2", "eot"]
+binary = ["exe", "dll", "so", "o", "bin", "app", "com", "msi", "dmg"]
 document = [
-"doc",
-"docx",
-"odt",
-"rtf",
-"pdf",
-"ppt",
-"pptx",
-"odp",
-"xls",
-"xlsx",
-"ods",
-"epub",
-"mobi"
+    "doc",
+    "docx",
+    "odt",
+    "rtf",
+    "pdf",
+    "ppt",
+    "pptx",
+    "odp",
+    "xls",
+    "xlsx",
+    "ods",
+    "epub",
+    "mobi",
 ]
