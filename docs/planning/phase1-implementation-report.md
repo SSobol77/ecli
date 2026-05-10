@@ -175,7 +175,7 @@ python3 - <<'PY'
 import tomllib
 from pathlib import Path
 
-for path in [Path("pyproject.toml")]:
+for path in [Path("pyproject.toml"), Path("config.toml")]:
     with path.open("rb") as f:
         tomllib.load(f)
     print(f"OK: {path}")
@@ -260,9 +260,6 @@ Actions when the failure mode is safe to retry.
 - Windows artifacts are unsigned, so SmartScreen friction is expected.
 - FreeBSD remains operational but lacks the deferred manifest polish and
   canonical naming audit.
-- `config.toml` currently fails strict TOML parsing due to a pre-existing
-  malformed model value. This is outside Phase 1 release packaging scope but
-  should be corrected before relying on config validation as a release gate.
 - `scripts/build_freebsd_port.sh` has a pre-existing Bash parse failure around a
   Python heredoc fallback. It is not the canonical FreeBSD package flow used by
   Phase 1 release CI, but should be repaired in the FreeBSD polish workstream.
