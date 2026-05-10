@@ -17,7 +17,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ecli-editor"
-version = "0.1.0"
+version = "0.1.1"
 description = "ECLI — fast terminal code editor"
 readme = "README.md"
 requires-python = ">=3.11"

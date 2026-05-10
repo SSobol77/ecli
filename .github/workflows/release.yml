@@ -92,6 +92,16 @@ jobs:
       - name: Build Debian package in Docker
         run: make package-deb-docker
 
+      - name: Reset ownership after Docker DEB build
+        run: |
+          set -euo pipefail
+          # Docker containers in package-deb-docker run as root and leave
+          # root-owned files in build/ and dist/. The next make target invokes
+          # 'make clean' on the host under the runner user, which fails on
+          # root-owned paths. Reset ownership defensively before continuing.
+          if [ -d build ]; then sudo chown -R "$(id -u):$(id -g)" build/; fi
+          if [ -d dist ]; then sudo chown -R "$(id -u):$(id -g)" dist/; fi
+
       - name: Build RPM package in Docker
         run: make package-rpm-docker
 
@@ -147,7 +157,7 @@ jobs:
             # dependency) has no FreeBSD prebuilt wheel and must be
             # compiled from source. Other build essentials cover any
             # additional native deps that may need on-VM compilation.
-            env ASSUME_ALWAYS_YES=yes pkg install -y rust cargo pkgconf
+            env ASSUME_ALWAYS_YES=yes pkg install -y rust pkgconf
             rustc --version
             cargo --version
           run: |

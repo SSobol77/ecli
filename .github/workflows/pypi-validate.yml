@@ -72,7 +72,17 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          wheel_sha="dist/ecli_editor-0.1.0-py3-none-any.whl.sha256"
+          wheel_sha="$(python3 - <<'PY'
+          import tomllib
+
+          with open("pyproject.toml", "rb") as f:
+              project = tomllib.load(f)["project"]
+
+          wheel_name = project["name"].replace("-", "_")
+          version = project["version"]
+          print(f"dist/{wheel_name}-{version}-py3-none-any.whl.sha256")
+          PY
+          )"
           cp "$wheel_sha" "$wheel_sha.bak"
           awk '{print "ffff" substr($1, 5) "  " $2}' "$wheel_sha.bak" > "$wheel_sha"
           set +e
