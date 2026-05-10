@@ -1,6 +1,19 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Project: Ecli
+# File: requirements-dev.txt
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+#
+# Copyright (c) 2026 Siergej Sobolewski
+#
+# Licensed under the Apache License, Version 2.0.
+# See the LICENSE file in the project root for full license text.
+
 # pip install -r requirements-dev.txt
 
-# Основные зависимости проекта (из требований runtime)
+# Core project dependencies from runtime requirements
 aiohappyeyeballs==2.6.1
 aiohttp>=3.12.14
 aiosignal>=1.4.0
@@ -26,7 +39,7 @@ typing-extensions>=4.14.1
 wcwidth>=0.2.13
 yarl>=1.20.1
 -e .
-# Зависимости для тестирования
+# Test dependencies
 coverage>=7.10.0
 iniconfig>=2.1.0
 pluggy>=1.6.0

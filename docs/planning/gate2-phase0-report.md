@@ -1,11 +1,17 @@
 <!--
-Filename: docs/planning/gate2-phase0-report.md
-Project:  ECLI
-License:  MIT
-Author:   Siergej Sobolewski
-Copyright: (c) 2026 Siergej Sobolewski
--->
+SPDX-License-Identifier: Apache-2.0
 
+Project: Ecli
+File: docs/planning/gate2-phase0-report.md
+Website: https://www.ecli.io
+Repository: https://github.com/SSobol77/ecli
+PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+
+Copyright (c) 2026 Siergej Sobolewski
+
+Licensed under the Apache License, Version 2.0.
+See the LICENSE file in the project root for full license text.
+-->
 # Gate 2 Phase 0 Report
 
 Date: 2026-05-09
@@ -593,7 +599,7 @@ project.
 ## Known Debt
 
 - License drift remains out of scope: `pyproject.toml` uses Apache-2.0 metadata
-  while `LICENSE` and source headers are MIT. Issue #33 was not open/visible at
+  while legacy license metadata disagreed with the Apache-2.0 project license. Issue #33 was not open/visible at
   report time.
 - PyPI namespace `ecli-editor` reserved on 2026-05-09 with placeholder version
   0.0.1. Verified at https://pypi.org/project/ecli-editor/0.0.1/. Maintainer

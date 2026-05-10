@@ -1,11 +1,17 @@
 <!--
-Filename: README.md
-Project:  ECLI
-License:  MIT
-Author:   Siergej Sobolewski
-Copyright: (c) 2026 Siergej Sobolewski
--->
+SPDX-License-Identifier: Apache-2.0
 
+Project: Ecli
+File: README.md
+Website: https://www.ecli.io
+Repository: https://github.com/SSobol77/ecli
+PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+
+Copyright (c) 2026 Siergej Sobolewski
+
+Licensed under the Apache License, Version 2.0.
+See the LICENSE file in the project root for full license text.
+-->
 <p align="center">
   <img src="https://github.com/SSobol77/ecli/blob/main/img/logo_m.png" alt="ecli Logo" width="200"/>
 </p>
@@ -375,7 +381,7 @@ See [Supported Platforms](docs/product/supported-platforms.md) for detailed comp
 
 ## 📝 License
 
-ECLI is licensed under the [MIT License](LICENSE). See the LICENSE file for details.
+ECLI is licensed under the [Apache License 2.0](LICENSE). See the LICENSE file for details.
 
 ---
 

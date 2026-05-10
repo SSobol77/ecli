@@ -1,4 +1,17 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: Apache-2.0
+#
+# Project: Ecli
+# File: scripts/build-and-package-rpm.sh
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+#
+# Copyright (c) 2026 Siergej Sobolewski
+#
+# Licensed under the Apache License, Version 2.0.
+# See the LICENSE file in the project root for full license text.
+
 # ==============================================================================
 # ECLI — Build and Package into an .rpm (runs inside AlmaLinux/RHEL container or locally)
 #
@@ -32,7 +45,7 @@ export PROJECT_ROOT
 PACKAGE_NAME="${PACKAGE_NAME:-ecli}"
 MAINTAINER="${MAINTAINER:-Siergej Sobolewski <s.sobolewski@hotmail.com>}"
 HOMEPAGE="${HOMEPAGE:-https://ecli.io}"
-LICENSE="${LICENSE:-MIT}"
+LICENSE="${LICENSE:-Apache-2.0}"
 CATEGORY="${CATEGORY:-editors}"  # shows as "Group" in some RPM tools
 
 # CPU arch label used in the normalized filename.

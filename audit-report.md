@@ -1,3 +1,17 @@
+<!--
+SPDX-License-Identifier: Apache-2.0
+
+Project: Ecli
+File: audit-report.md
+Website: https://www.ecli.io
+Repository: https://github.com/SSobol77/ecli
+PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+
+Copyright (c) 2026 Siergej Sobolewski
+
+Licensed under the Apache License, Version 2.0.
+See the LICENSE file in the project root for full license text.
+-->
 # ECLI Gate 2 Phase 0 Audit Report
 
 Author: Siergej Sobolewski
@@ -160,7 +174,7 @@ is not wired into `Makefile` targets and has contract mismatches documented belo
 
 2. **License metadata conflicts**
    - Evidence: `pyproject.toml:61` declares `Apache-2.0`; the repository
-     `LICENSE` file is MIT; existing Markdown headers also identify MIT.
+     legacy license metadata disagreed with the Apache-2.0 project license.
    - Impact: Package metadata and repository licensing are inconsistent. This
      is release-significant but outside the requested PR scope unless the
      maintainer explicitly expands scope.
