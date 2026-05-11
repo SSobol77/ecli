@@ -124,9 +124,9 @@ set -eu
 
 # -------- Pretty printing ------------------------------------------------------
 print_header() { printf "\033[1;36m==> %s\033[0m\n" "$*"; }
-print_step()   { printf "\033[32m  -> %s\033[0m\n" "$*"; }
-print_warn()   { printf "\033[33mWARN:\033[0m %s\n" "$*"; }
-print_error()  { printf "\033[31mERROR:\033[0m %s\n" "$*"; }
+print_step()   { printf "\033[32m  -> %s\033[0m\n" "$*" >&2; }
+print_warn()   { printf "\033[33mWARN:\033[0m %s\n" "$*" >&2; }
+print_error()  { printf "\033[31mERROR:\033[0m %s\n" "$*" >&2; }
 
 # -------- Paths & meta --------------------------------------------------------
 PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
