@@ -23,9 +23,28 @@ See the LICENSE file in the project root for full license text.
 </p>
 
 <p align="center">
-  <a href="https://github.com/SSobol77/ecli/releases"><img alt="Latest Release" src="https://img.shields.io/github/v/release/SSobol77/ecli?include_prereleases&style=flat-square"></a>
-  <a href="https://github.com/SSobol77/ecli/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/SSobol77/ecli?style=flat-square"></a>
-  <a href="https://github.com/SSobol77/ecli"><img alt="Stars" src="https://img.shields.io/github/stars/SSobol77/ecli?style=flat-square"></a>
+  <a href="https://pypi.org/project/ecli-editor/">
+    <img alt="PyPI Version" src="https://img.shields.io/pypi/v/ecli-editor?style=flat-square&logo=pypi&logoColor=white">
+  </a>
+  <a href="https://pypi.org/project/ecli-editor/">
+    <img alt="Python Versions" src="https://img.shields.io/pypi/pyversions/ecli-editor?style=flat-square&logo=python&logoColor=white">
+  </a>
+  <a href="https://github.com/SSobol77/ecli/releases">
+    <img alt="Release" src="https://img.shields.io/github/v/release/SSobol77/ecli?include_prereleases&style=flat-square&label=release">
+  </a>
+  <a href="https://github.com/SSobol77/ecli/blob/main/LICENSE">
+    <img alt="License" src="https://img.shields.io/github/license/SSobol77/ecli?style=flat-square">
+  </a>
+  <a href="https://www.ecli.io">
+    <img alt="Website" src="https://img.shields.io/badge/website-ecli.io-blue?style=flat-square">
+  </a>
+</p>
+
+<p align="center">
+  <img alt="Linux" src="https://img.shields.io/badge/Linux-supported-success?style=flat-square&logo=linux&logoColor=white">
+  <img alt="macOS" src="https://img.shields.io/badge/macOS-supported-success?style=flat-square&logo=apple&logoColor=white">
+  <img alt="FreeBSD" src="https://img.shields.io/badge/FreeBSD-supported-success?style=flat-square&logo=freebsd&logoColor=white">
+  <img alt="Windows" src="https://img.shields.io/badge/Windows-supported-success?style=flat-square&logo=windows&logoColor=white">
 </p>
 
 ---
@@ -57,18 +76,18 @@ Download and install a pre-compiled package for your platform:
 
 ```bash
 # Debian/Ubuntu
-sudo apt install ./ecli_0.1.0_linux_x86_64.deb
+sudo apt install ./ecli_0.1.3_linux_x86_64.deb
 
 # Fedora/RHEL/Rocky
-sudo dnf install ./ecli_0.1.0_linux_x86_64.rpm
+sudo dnf install ./ecli_0.1.3_linux_x86_64.rpm
 
 # Windows (PowerShell)
-.\ecli_0.1.0_win_x86_64_setup.exe
-# Portable alternative: .\ecli_0.1.0_win_x86_64.exe
+.\ecli_0.1.3_win_x86_64_setup.exe
+# Portable alternative: .\ecli_0.1.3_win_x86_64.exe
 # See docs/install/windows.md for checksum verification and SmartScreen notes.
 
 # macOS
-open ecli_0.1.0_macos_universal2.dmg
+open ecli_0.1.3_macos_universal2.dmg
 # First launch is blocked by Gatekeeper; see docs/install/macos.md
 # for the one-time "Open Anyway" or xattr workaround.
 ```
@@ -102,7 +121,7 @@ The Python distribution name is `ecli-editor`; the import package remains
 
 ### Complete Installation Instructions
 
-For detailed platform-specific installation instructions, system dependencies, and troubleshooting, see the [Installation Guide](docs/contributor/install.md).
+For detailed platform-specific installation instructions, system dependencies, and troubleshooting, see the [Installation Guide](https://github.com/SSobol77/ecli/blob/main/docs/contributor/install.md).
 
 #### 1. System Dependencies
 
@@ -145,8 +164,8 @@ Download from [GitHub Releases](https://github.com/SSobol77/ecli/releases):
 
 - **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL), `.AppImage` (any Linux), `.tar.gz`
 - **FreeBSD**: `.pkg`
-- **macOS**: `.dmg` ([install notes](docs/install/macos.md))
-- **Windows**: `.exe` installer or portable executable ([install notes](docs/install/windows.md))
+- **macOS**: `.dmg` ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/macos.md))
+- **Windows**: `.exe` installer or portable executable ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/windows.md))
 
 **Option B: PyPI (Python Package Index)**
 
@@ -198,8 +217,8 @@ make help              # See all available build targets
 
 ECLI features a comprehensive multi-platform build system. For detailed information:
 
-- **Build from Source**: Read [docs/contributor/build-from-source.md](docs/contributor/build-from-source.md)
-- **Packaging Flows**: See [docs/release/packaging-flows.md](docs/release/packaging-flows.md)
+- **Build from Source**: Read [docs/contributor/build-from-source.md](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md)
+- **Packaging Flows**: See [docs/release/packaging-flows.md](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md)
 
 #### Common Build Commands
 
@@ -244,7 +263,7 @@ ecli [options] [file]
 | `Ctrl+F` | Search in file |
 | `F1` | Help |
 
-For comprehensive keybindings and usage guide, see [Getting Started](docs/contributor/development-setup.md).
+For comprehensive keybindings and usage guide, see [Getting Started](https://github.com/SSobol77/ecli/blob/main/docs/contributor/development-setup.md).
 
 ---
 
@@ -253,27 +272,27 @@ For comprehensive keybindings and usage guide, see [Getting Started](docs/contri
 Complete documentation is organized by audience:
 
 ### For Users
-- [Installation Guide](docs/contributor/install.md) - Detailed setup instructions
-- [Build from Source](docs/contributor/build-from-source.md) - Build system quick start
-- [Getting Started](docs/contributor/development-setup.md) - First steps with ECLI
+- [Installation Guide](https://github.com/SSobol77/ecli/blob/main/docs/contributor/install.md) - Detailed setup instructions
+- [Build from Source](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md) - Build system quick start
+- [Getting Started](https://github.com/SSobol77/ecli/blob/main/docs/contributor/development-setup.md) - First steps with ECLI
 
 ### For Developers
-- [Development Setup](docs/contributor/development-setup.md) - Development environment
-- [Architecture Overview](docs/architecture/current-architecture.md) - System design
-- [Packaging Flows](docs/release/packaging-flows.md) - Release packaging overview
-- [Build from Source](docs/contributor/build-from-source.md) - Local build commands
-- [Contributor Guide](docs/contributor/README.md) - Contributing to ECLI
+- [Development Setup](https://github.com/SSobol77/ecli/blob/main/docs/contributor/development-setup.md) - Development environment
+- [Architecture Overview](https://github.com/SSobol77/ecli/blob/main/docs/architecture/current-architecture.md) - System design
+- [Packaging Flows](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md) - Release packaging overview
+- [Build from Source](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md) - Local build commands
+- [Contributor Guide](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md) - Contributing to ECLI
 
 ### For System Administrators
-- [Supported Platforms](docs/product/supported-platforms.md) - Platform matrix
-- [Configuration Guide](docs/config/README.md) - Configuration options
-- [Deployment Guide](docs/release/packaging-flows.md) - Production deployment
+- [Supported Platforms](https://github.com/SSobol77/ecli/blob/main/docs/product/supported-platforms.md) - Platform matrix
+- [Configuration Guide](https://github.com/SSobol77/ecli/blob/main/docs/config/README.md) - Configuration options
+- [Deployment Guide](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md) - Production deployment
 
 ### Reference
-- [API Documentation](docs/extensions/plugin-api.md) - Plugin development
-- [Architecture Details](docs/architecture/README.md) - System internals
-- [Release Process](docs/release/release-process.md) - Release management
-- [Quality Standards](docs/quality/README.md) - Testing and quality gates
+- [API Documentation](https://github.com/SSobol77/ecli/blob/main/docs/extensions/plugin-api.md) - Plugin development
+- [Architecture Details](https://github.com/SSobol77/ecli/blob/main/docs/architecture/README.md) - System internals
+- [Release Process](https://github.com/SSobol77/ecli/blob/main/docs/release/release-process.md) - Release management
+- [Quality Standards](https://github.com/SSobol77/ecli/blob/main/docs/quality/README.md) - Testing and quality gates
 
 ---
 
@@ -288,7 +307,7 @@ ECLI is built on a modern, extensible architecture:
 - **Git Integration**: Direct git repository management
 - **Plugin System**: Extensible architecture for custom features
 
-For detailed architecture information, see [Architecture Overview](docs/architecture/current-architecture.md).
+For detailed architecture information, see [Architecture Overview](https://github.com/SSobol77/ecli/blob/main/docs/architecture/current-architecture.md).
 
 ---
 
@@ -305,7 +324,7 @@ We welcome contributions! Here's how to get started:
 7. **Push** to your fork
 8. **Open** a Pull Request
 
-For detailed contribution guidelines, see [CONTRIBUTING](docs/contributor/README.md).
+For detailed contribution guidelines, see [CONTRIBUTING](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md).
 
 ---
 
@@ -375,13 +394,13 @@ Found a bug? Please help us by opening an issue on GitHub:
 - macOS 12 and newer
 - Windows 10/11
 
-See [Supported Platforms](docs/product/supported-platforms.md) for detailed compatibility matrix.
+See [Supported Platforms](https://github.com/SSobol77/ecli/blob/main/docs/product/supported-platforms.md) for detailed compatibility matrix.
 
 ---
 
 ## 📝 License
 
-ECLI is licensed under the [Apache License 2.0](LICENSE). See the LICENSE file for details.
+ECLI is licensed under the [Apache License 2.0](https://github.com/SSobol77/ecli/blob/main/LICENSE). See the LICENSE file for details.
 
 ---
 
@@ -398,16 +417,16 @@ ECLI is licensed under the [Apache License 2.0](LICENSE). See the LICENSE file f
 
 ## 💬 Support
 
-- **Documentation**: Read [Build from Source](docs/contributor/build-from-source.md) and [Packaging Flows](docs/release/packaging-flows.md)
+- **Documentation**: Read [Build from Source](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md) and [Packaging Flows](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md)
 - **Community**: GitHub Discussions
 - **Bugs**: GitHub Issues
-- **Development**: See [Contributing](docs/contributor/README.md)
+- **Development**: See [Contributing](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md)
 
 ---
 
 ## 🎯 Roadmap
 
-For planned features and current development status, see [Roadmap](docs/planning/roadmap.md).
+For planned features and current development status, see [Roadmap](https://github.com/SSobol77/ecli/blob/main/docs/planning/roadmap.md).
 
 ---
 
