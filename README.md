@@ -13,7 +13,7 @@ Licensed under the Apache License, Version 2.0.
 See the LICENSE file in the project root for full license text.
 -->
 <p align="center">
-  <img src="https://github.com/SSobol77/ecli/blob/main/img/logo_m.png" alt="ecli Logo" width="200"/>
+  <img src="https://raw.githubusercontent.com/SSobol77/ecli/main/img/logo_m.png" alt="ecli Logo" width="200"/>
 </p>
 
 <h1 align="center"><b>ECLI</b></h1>
