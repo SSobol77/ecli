@@ -354,10 +354,8 @@ maintainer: ${MAINTAINER}
 www: ${HOMEPAGE}
 abi: ${ABI}
 prefix: /usr/local
-categories:
-  - ${CATEGORY}
-licenses:
-  - ${LICENSE}
+categories: [${CATEGORY}]
+licenses: [${LICENSE}]
 licenselogic: single
 EOF
 
