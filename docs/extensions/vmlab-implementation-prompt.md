@@ -44,7 +44,7 @@ Critical scope limitation:
 This is not a full VMLab implementation.
 
 This is a minimal, safe, testable skeleton that validates architecture contracts.
-````
+```
 
 The goal is to prove that:
 

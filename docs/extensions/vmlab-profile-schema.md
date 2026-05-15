@@ -514,7 +514,7 @@ Rules:
 
 Development note:
 
-During skeleton development, profile-defined log paths must not be used as write targets. They may be parsed and validated, but all actual development logs must be redirected to repository-level `logs/`.
+During skeleton development, profile-defined QMP socket paths may be parsed and validated, but they must not be used as write targets. All runtime/dev QMP socket output or temporary artifacts should be redirected to the repository-level `logs/` directory instead.
 
 ---
 
