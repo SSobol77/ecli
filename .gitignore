@@ -26,6 +26,13 @@ target
 # Contains mutation testing data
 **/mutants.out*/
 
+# Development logs and generated test evidence
+# Repository-level development log invariant.
+# Generated development logs, dry-run reports, smoke outputs,
+# test evidence, and agent debug artifacts must live only under logs/.
+logs/*
+!logs/.gitkeep
+!logs/README.md
 
 # ==========================
 # OS / Editor junk
