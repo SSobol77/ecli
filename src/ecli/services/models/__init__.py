@@ -28,6 +28,17 @@ from ecli.services.models.config import (
     SafetyPolicyConfig,
     UIConfig,
 )
+from ecli.services.models.plan import (
+    CommandPlan,
+    CommandStep,
+    PlanCategory,
+    PlanRisk,
+    PlanSource,
+    PlanStatus,
+    PolicyDecision,
+    needs_confirmation,
+    new_plan_id,
+)
 from ecli.services.models.project import (
     ProjectDiagnostic,
     ProjectDiagnosticLevel,
@@ -45,11 +56,18 @@ __all__ = [
     "ConfigDiagnosticLevel",
     "ConfigLoadResult",
     "ConfigSource",
+    "CommandPlan",
+    "CommandStep",
     "ECLIConfig",
     "EditorConfig",
     "GitConfig",
     "KeybindingConfig",
     "LSPConfig",
+    "PlanCategory",
+    "PlanRisk",
+    "PlanSource",
+    "PlanStatus",
+    "PolicyDecision",
     "SafetyPolicyConfig",
     "UIConfig",
     "ProjectDiagnostic",
@@ -58,4 +76,6 @@ __all__ = [
     "ProjectMarker",
     "ProjectMetadata",
     "ProjectPathResolutionResult",
+    "needs_confirmation",
+    "new_plan_id",
 ]

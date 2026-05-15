@@ -13,8 +13,14 @@
 
 """Core service foundations for ECLI."""
 
+from ecli.services.command_plan_service import CommandPlanService
 from ecli.services.config_service import ConfigService
 from ecli.services.project_service import ProjectService, UnsafeProjectPathError
 
 
-__all__ = ["ConfigService", "ProjectService", "UnsafeProjectPathError"]
+__all__ = [
+    "CommandPlanService",
+    "ConfigService",
+    "ProjectService",
+    "UnsafeProjectPathError",
+]
