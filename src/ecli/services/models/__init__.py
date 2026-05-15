@@ -28,6 +28,14 @@ from ecli.services.models.config import (
     SafetyPolicyConfig,
     UIConfig,
 )
+from ecli.services.models.project import (
+    ProjectDiagnostic,
+    ProjectDiagnosticLevel,
+    ProjectDiscoveryResult,
+    ProjectMarker,
+    ProjectMetadata,
+    ProjectPathResolutionResult,
+)
 
 
 __all__ = [
@@ -44,4 +52,10 @@ __all__ = [
     "LSPConfig",
     "SafetyPolicyConfig",
     "UIConfig",
+    "ProjectDiagnostic",
+    "ProjectDiagnosticLevel",
+    "ProjectDiscoveryResult",
+    "ProjectMarker",
+    "ProjectMetadata",
+    "ProjectPathResolutionResult",
 ]
