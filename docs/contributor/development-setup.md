@@ -61,6 +61,33 @@ See the LICENSE file in the project root for full license text.
 - Lint/format commands are available for local validation path.
 - Selected packaging command for your platform starts and emits expected preflight output.
 
+## Development Logs and Generated Evidence
+
+All generated development logs, dry-run reports, smoke outputs, test evidence,
+and agent-generated debug artifacts must be written only under the repository-level
+`logs/` directory.
+
+Generated artifacts must not be written to:
+
+- project root
+- `.ecli/`
+- `.ecli/vmlab/`
+- `src/`
+- `tests/`
+- `tmp/`
+- `.tmp/`
+- `.cache/`
+- `$HOME`
+- `/tmp`
+
+Before opening a PR that may generate local artifacts, run:
+
+```bash
+./scripts/check-log-invariant.sh
+```
+
+The script must pass before merge.
+
 ## Validation Required
 
 - Exact per-platform dependency package names may vary by distro/release and should be confirmed against active packaging scripts.
