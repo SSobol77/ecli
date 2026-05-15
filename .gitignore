@@ -205,6 +205,9 @@ docker/*.log
 # ==========================
 .vscode/
 .idea/
+ecli_github_backlog_bundle_v4_19_clean/
+ecli_github_backlog_bundle_v4_19_clean/*.*
+ecli_github_backlog_bundle_v4_19_clean/*.md
 *.iml
 *.sublime-workspace
 *.sublime-project
