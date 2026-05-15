@@ -55,7 +55,7 @@ Critical rule:
 The QMP client never mutates VM state directly from UI code.
 Read-only queries may be executed directly.
 Mutating QMP commands require CommandPlanService mediation and explicit authorization.
-````
+```
 
 ---
 

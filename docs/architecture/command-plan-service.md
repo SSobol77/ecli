@@ -1119,7 +1119,7 @@ These rules are non-negotiable:
 - JSON export;
 - shell export;
 - Markdown export;
-- - basic non-executing CLI commands: `plan list`, `plan show`, `plan validate`, `plan explain`, `plan export`, `plan cancel`;
+- basic non-executing CLI commands: `plan list`, `plan show`, `plan validate`, `plan explain`, `plan export`, `plan cancel`;
 - audit integration;
 - privileged execution handoff;
 - TUI confirmation dialog.

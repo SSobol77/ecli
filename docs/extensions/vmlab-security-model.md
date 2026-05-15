@@ -699,8 +699,7 @@ graph TD
 | --------------------------- | --------------------------------------------------- | ------------- | --------------------- | -------------- |
 | Validate profile            | `VMLabService`                                      | No            | No                    | optional/debug |
 | Generate QEMU argv          | `VMLabService`                                      | No            | No                    | optional/debug |
-| Start VM                    | `CommandPlanService` → `VMSupervisor`               | Yes           | Policy-based          |                |
-| Yes                         |                                                     |               |                       |                |
+| Start VM                    | `CommandPlanService` → `VMSupervisor`               | Yes           | Policy-based          | Yes            |
 | Stop VM gracefully          | `CommandPlanService` → `VMSupervisor` / `QMPClient` | Yes           | Policy-based          | Yes            |
 | Force stop VM               | `CommandPlanService`                                | Yes           | Yes                   | Yes            |
 | Attach serial               | `ConsoleAndLogsService`                             | No            | No                    | Yes            |
