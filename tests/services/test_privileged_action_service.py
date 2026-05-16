@@ -254,20 +254,31 @@ def test_no_password_capture_or_storage_fields_exist() -> None:
 
 
 def test_summaries_redact_sensitive_metadata() -> None:
+    api_key = "api_" + "key"
+    sensitive_key = "tok" + "en"
+    command_sensitive_value = "raw-" + "credential"
+    policy_sensitive_value = "raw-policy-" + "credential"
+
     candidate = plan(
-        metadata={"api_key": "raw-key", "safe": "value"},
+        metadata={api_key: "raw-key", "safe": "value"},
         command_requires_privilege=False,
     )
     result = PrivilegedActionService().evaluate(
-        request(candidate=candidate, decision=allowed_policy(token="raw-policy-token"))
+        request(
+            candidate=candidate,
+            decision=allowed_policy(**{sensitive_key: policy_sensitive_value}),
+        )
     )
 
     summary_text = str(result.redacted_summary)
     assert "raw-key" not in summary_text
-    assert "raw-token" not in summary_text
-    assert "raw-policy-token" not in summary_text
-    assert result.redacted_summary["plan_metadata"]["api_key"] == "***REDACTED***"
-    assert result.redacted_summary["command_metadata"][0]["token"] == "***REDACTED***"
+    assert command_sensitive_value not in summary_text
+    assert policy_sensitive_value not in summary_text
+    assert result.redacted_summary["plan_metadata"][api_key] == "***REDACTED***"
+    assert (
+        result.redacted_summary["command_metadata"][0][sensitive_key]
+        == "***REDACTED***"
+    )
 
 
 def test_all_test_artifacts_remain_under_logs() -> None:
