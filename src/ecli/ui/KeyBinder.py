@@ -297,6 +297,7 @@ class KeyBinder:
             "quit": ["ctrl+q", 17],
             "goto_line": ["ctrl+g", 7],
             "toggle_widget_panel": ["f7", 271],
+            "toggle_system_doctor_panel": ["f8", 272],
             "git_menu": ["f9", 273],
             "help": ["f1", 265],
             "find": ["ctrl+f", 6],
@@ -715,6 +716,7 @@ class KeyBinder:
             "cancel_operation": self.editor.handle_escape,
             "toggle_file_browser": self.editor.toggle_file_browser,
             "toggle_focus": self.editor.toggle_focus,
+            "toggle_system_doctor_panel": self.editor.toggle_system_doctor_panel,
             # --- Git ---
             "git_menu": self.editor.show_git_panel,
             # --- AI ---

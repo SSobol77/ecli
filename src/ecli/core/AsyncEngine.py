@@ -43,7 +43,12 @@ import queue
 import threading
 from typing import Any, Optional, cast
 
-from ecli.integrations.AI import BaseAiClient, get_ai_client
+from ecli.integrations.AI import (
+    AiConfigurationError,
+    BaseAiClient,
+    ai_configuration_panel_message,
+    get_ai_client,
+)
 
 
 # Let's define an alias for the queue elements to avoid repetition.
@@ -222,6 +227,22 @@ class AsyncEngine:
 
             else:
                 logging.warning(f"AsyncEngine received unknown task type: {task_type}")
+
+        except AiConfigurationError as e:
+            logging.info("AI provider configuration incomplete: %s", e)
+            self.to_ui_queue.put(
+                {
+                    "type": "ai_configuration_error",
+                    "task_type": task_type,
+                    "provider": e.provider,
+                    "env_var": e.env_var,
+                    "title": "AI provider is not configured",
+                    "text": ai_configuration_panel_message(
+                        e.provider,
+                        env_var=e.env_var,
+                    ),
+                }
+            )
 
         except Exception as e:
             error_message = f"Error executing async task '{task_type}': {e}"

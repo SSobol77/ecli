@@ -23,7 +23,15 @@ from typing import Any, Iterator
 import pytest
 
 from ecli.ui.PanelManager import PanelManager
-from ecli.ui.panels import AiResponsePanel, BasePanel, FileBrowserPanel, GitPanel
+from ecli.ui.panels import (
+    AiResponsePanel,
+    BasePanel,
+    CommandPlanPanel,
+    FileBrowserPanel,
+    GitPanel,
+    ServicesPanel,
+    SystemDoctorPanel,
+)
 
 
 class FakeWindow:
@@ -117,6 +125,9 @@ def test_panel_manager_default_registry_preserves_existing_panel_names() -> None
 
     assert manager.registered_panels["ai_response"] is AiResponsePanel
     assert manager.registered_panels["file_browser"] is FileBrowserPanel
+    assert manager.registered_panels["system_doctor"] is SystemDoctorPanel
+    assert manager.registered_panels["command_plan"] is CommandPlanPanel
+    assert manager.registered_panels["services_status"] is ServicesPanel
     assert "git" not in manager.registered_panels
 
 

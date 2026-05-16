@@ -35,6 +35,46 @@ import aiohttp
 from ecli.utils.logging_config import logger
 
 
+class AiConfigurationError(ValueError):
+    """Expected AI provider configuration error suitable for user-facing UI."""
+
+    def __init__(
+        self,
+        provider: str,
+        message: str,
+        *,
+        env_var: str | None = None,
+    ) -> None:
+        """Initialize a structured AI configuration error."""
+        super().__init__(message)
+        self.provider = provider
+        self.env_var = env_var
+
+
+def ai_configuration_panel_message(
+    provider: str,
+    *,
+    env_var: str | None = None,
+) -> str:
+    """Return user-facing AI configuration guidance without traceback details."""
+    lines = [
+        "AI provider is not configured",
+        "",
+        f"Selected provider: {provider}",
+    ]
+    if env_var:
+        lines.append(f"Missing environment variable: {env_var}")
+    lines.extend(
+        [
+            "",
+            "AI features require a user-provided API key.",
+            "Add API keys to ~/.config/ecli/.env.",
+            "Provider selection is configured in config.toml.",
+        ]
+    )
+    return "\n".join(lines)
+
+
 # Get logger to ensure messages match the general logging system
 # ==================== BaseAiClient Class ====================
 class BaseAiClient:
@@ -851,11 +891,7 @@ def get_ai_client(provider: str, config: dict[str, Any]) -> BaseAiClient:
     """
     provider = provider.lower()
 
-    api_key_env_var = f"{provider.upper()}_API_KEY"
-    if provider == "huggingface":
-        api_key_env_var = "HUGGINGFACE_API_KEY"
-    elif provider == "grok":
-        api_key_env_var = "XAI_API_KEY"
+    api_key_env_var = _api_key_env_var(provider)
 
     api_key = os.environ.get(api_key_env_var) or config.get("ai", {}).get(
         "keys", {}
@@ -864,11 +900,19 @@ def get_ai_client(provider: str, config: dict[str, Any]) -> BaseAiClient:
     model = config.get("ai", {}).get("models", {}).get(provider)
 
     if not api_key:
-        raise ValueError(
-            f"API key for {provider} not found in config or environment variable {api_key_env_var}"
+        raise AiConfigurationError(
+            provider,
+            (
+                f"API key for {provider} not found in config or environment "
+                f"variable {api_key_env_var}"
+            ),
+            env_var=api_key_env_var,
         )
     if not model:
-        raise ValueError(f"Model for {provider} not found in config")
+        raise AiConfigurationError(
+            provider,
+            f"Model for {provider} not found in config",
+        )
 
     if provider == "openai":
         return OpenAiClient(model=model, api_key=api_key)
@@ -883,3 +927,11 @@ def get_ai_client(provider: str, config: dict[str, Any]) -> BaseAiClient:
     if provider == "grok":
         return GrokClient(model=model, api_key=api_key)
     raise ValueError(f"Unknown AI provider: {provider}")
+
+
+def _api_key_env_var(provider: str) -> str:
+    if provider == "huggingface":
+        return "HUGGINGFACE_API_KEY"
+    if provider == "grok":
+        return "XAI_API_KEY"
+    return f"{provider.upper()}_API_KEY"
