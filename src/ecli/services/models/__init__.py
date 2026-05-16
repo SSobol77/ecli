@@ -29,6 +29,11 @@ from ecli.services.models.config import (
     SafetyPolicyConfig,
     UIConfig,
 )
+from ecli.services.models.doctor import (
+    DoctorContext,
+    DoctorFinding,
+    DoctorSeverity,
+)
 from ecli.services.models.plan import (
     CommandPlan,
     CommandStep,
@@ -67,6 +72,9 @@ __all__ = [
     "ConfigSource",
     "CommandPlan",
     "CommandStep",
+    "DoctorContext",
+    "DoctorFinding",
+    "DoctorSeverity",
     "ECLIConfig",
     "EditorConfig",
     "ExecutionRequest",
