@@ -15,11 +15,22 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import shlex
+from datetime import UTC, datetime
 from typing import Any
 
-from ecli.services.models.plan import CommandPlan, CommandStep
+from ecli.services.models.doctor import DoctorFinding, DoctorSeverity
+from ecli.services.models.plan import (
+    CommandPlan,
+    CommandStep,
+    PlanCategory,
+    PlanRisk,
+    PlanSource,
+    PlanStatus,
+    new_plan_id,
+)
 from ecli.services.validators.plan_validator import SENSITIVE_METADATA_KEYS
 
 
@@ -28,6 +39,38 @@ REDACTION_TEXT = "<redacted>"
 
 class CommandPlanService:
     """Command plan service utilities for Phase 1A."""
+
+    def create_plan_from_doctor_finding(
+        self,
+        finding: DoctorFinding,
+        *,
+        actor: str = "system-doctor",
+    ) -> CommandPlan | None:
+        """Create a draft-only remediation preview plan from a doctor finding."""
+        if not finding.remediation_available:
+            return None
+
+        command = _doctor_finding_step(finding)
+        requires_privilege = _doctor_finding_requires_privilege(finding)
+        return CommandPlan(
+            plan_id=finding.remediation_plan_id or _doctor_plan_id(finding),
+            title=f"Doctor remediation preview: {finding.title}",
+            description=(
+                "Preview-only remediation plan generated from SystemDoctor finding "
+                f"{finding.finding_id}: {finding.description}"
+            ),
+            category=_plan_category_for_finding(finding),
+            risk=_plan_risk_for_finding(finding),
+            status=PlanStatus.DRAFT,
+            commands=[command],
+            confirmation_required=_doctor_finding_requires_confirmation(finding),
+            requires_privilege=requires_privilege,
+            created_at=_doctor_plan_time(),
+            created_by=actor,
+            source=PlanSource.DOCTOR,
+            affected_resources=list(finding.affected_resources),
+            metadata=_doctor_trace_metadata(finding),
+        )
 
     def export_json(self, plan: CommandPlan) -> str:
         """Export a command plan as deterministic redacted JSON."""
@@ -147,3 +190,96 @@ def _safe_comment(value: str) -> str:
 
 def _markdown_text(value: str) -> str:
     return value.replace("`", "\\`")
+
+
+def _doctor_finding_step(finding: DoctorFinding) -> CommandStep:
+    if finding.finding_id == "DOCTOR-CONFIG-001":
+        target = finding.affected_resources[0] if finding.affected_resources else "logs"
+        return CommandStep(
+            step_id=_doctor_step_id(finding),
+            title="Create repository logs directory",
+            argv=["mkdir", "-p", target],
+            display=f"mkdir -p {target}",
+            requires_privilege=False,
+            destructive=False,
+            metadata=_doctor_trace_metadata(finding),
+        )
+
+    category = _safe_token(finding.category)
+    return CommandStep(
+        step_id=_doctor_step_id(finding),
+        title=f"Preview remediation for {finding.finding_id}",
+        argv=["ecli-doctor-remediation-preview", category, finding.finding_id],
+        display=f"Preview remediation for {finding.finding_id}",
+        requires_privilege=_doctor_finding_requires_privilege(finding),
+        destructive=False,
+        metadata=_doctor_trace_metadata(finding),
+    )
+
+
+def _doctor_trace_metadata(finding: DoctorFinding) -> dict[str, Any]:
+    return {
+        "doctor_finding_id": finding.finding_id,
+        "doctor_finding_category": finding.category,
+        "doctor_finding_severity": finding.severity.value,
+        "doctor_remediation_source": "system_doctor",
+        "finding_id": finding.finding_id,
+        "readonly": True,
+    }
+
+
+def _plan_risk_for_finding(finding: DoctorFinding) -> PlanRisk:
+    if finding.severity is DoctorSeverity.CRITICAL:
+        return PlanRisk.CRITICAL
+    if finding.severity is DoctorSeverity.ERROR:
+        return (
+            PlanRisk.HIGH
+            if _doctor_finding_requires_privilege(finding)
+            else PlanRisk.MEDIUM
+        )
+    if _doctor_finding_requires_privilege(finding):
+        return PlanRisk.MEDIUM
+    return PlanRisk.LOW
+
+
+def _plan_category_for_finding(finding: DoctorFinding) -> PlanCategory:
+    return {
+        "config": PlanCategory.DOCTOR,
+        "permissions": PlanCategory.SYSTEM,
+        "tooling": PlanCategory.SYSTEM,
+        "virtualization": PlanCategory.VM,
+        "path-policy": PlanCategory.FILE,
+    }.get(finding.category, PlanCategory.DOCTOR)
+
+
+def _doctor_finding_requires_confirmation(finding: DoctorFinding) -> bool:
+    return finding.severity is DoctorSeverity.CRITICAL or finding.category in {
+        "config",
+        "permissions",
+        "tooling",
+        "virtualization",
+        "path-policy",
+    }
+
+
+def _doctor_finding_requires_privilege(finding: DoctorFinding) -> bool:
+    return finding.category in {"permissions", "virtualization"}
+
+
+def _doctor_plan_id(finding: DoctorFinding) -> str:
+    suffix = hashlib.sha256(finding.finding_id.encode("utf-8")).hexdigest()[:8]
+    return new_plan_id(now=_doctor_plan_time(), random_suffix=suffix)
+
+
+def _doctor_step_id(finding: DoctorFinding) -> str:
+    return f"doctor-remediation-{_safe_token(finding.finding_id)}"
+
+
+def _doctor_plan_time() -> datetime:
+    return datetime(2026, 1, 1, 0, 0, 0, tzinfo=UTC)
+
+
+def _safe_token(value: str) -> str:
+    return "".join(
+        character.lower() if character.isalnum() else "-" for character in value
+    ).strip("-")

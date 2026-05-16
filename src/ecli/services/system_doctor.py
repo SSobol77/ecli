@@ -21,14 +21,10 @@ import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 
+from ecli.services.command_plan_service import CommandPlanService
 from ecli.services.models.doctor import DoctorContext, DoctorFinding, DoctorSeverity
 from ecli.services.models.plan import (
     CommandPlan,
-    CommandStep,
-    PlanCategory,
-    PlanRisk,
-    PlanSource,
-    PlanStatus,
     new_plan_id,
 )
 
@@ -206,47 +202,9 @@ class SystemDoctor:
 
     def propose_remediation(self, finding: DoctorFinding) -> CommandPlan | None:
         """Return a proposed CommandPlan for supported findings without execution."""
-        if not finding.remediation_available:
-            return None
-        if finding.finding_id != "DOCTOR-CONFIG-001":
-            return None
-
-        plan_id = finding.remediation_plan_id or _remediation_plan_id(
-            finding.finding_id
-        )
-        logs_path = (
-            finding.affected_resources[0]
-            if finding.affected_resources
-            else str(self._logs_root)
-        )
-        return CommandPlan(
-            plan_id=plan_id,
-            title="Create repository logs directory",
-            description="Proposed remediation only; SystemDoctor does not execute it.",
-            category=PlanCategory.DOCTOR,
-            risk=PlanRisk.LOW,
-            status=PlanStatus.DRAFT,
-            commands=[
-                CommandStep(
-                    step_id="doctor-create-logs-dir",
-                    title="Create logs directory",
-                    argv=["mkdir", "-p", logs_path],
-                    display=f"mkdir -p {logs_path}",
-                    destructive=False,
-                    metadata={"finding_id": finding.finding_id},
-                )
-            ],
-            confirmation_required=True,
-            requires_privilege=False,
-            created_at=_fixed_doctor_plan_time(),
-            created_by="system_doctor",
-            source=PlanSource.DOCTOR,
-            affected_resources=[logs_path],
-            metadata={
-                "finding_id": finding.finding_id,
-                "service": "SystemDoctor",
-                "readonly": True,
-            },
+        return CommandPlanService().create_plan_from_doctor_finding(
+            finding,
+            actor="system_doctor",
         )
 
 
