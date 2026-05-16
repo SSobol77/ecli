@@ -23,9 +23,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "Apache-2.0"
 license-files = ["LICENSE*"]
-authors = [
-    { name = "Siergej Sobolewski", email = "s.sobolewski@hotmail.com" },
-]
+authors = [{ name = "Siergej Sobolewski", email = "s.sobolewski@hotmail.com" }]
 keywords = [
     "editor",
     "terminal",
