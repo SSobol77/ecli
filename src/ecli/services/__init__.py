@@ -19,6 +19,7 @@ from ecli.services.config_service import ConfigService
 from ecli.services.policy import BuiltInPolicyEngine, PolicyContext, PolicyEngine
 from ecli.services.privileged_action_service import PrivilegedActionService
 from ecli.services.project_service import ProjectService, UnsafeProjectPathError
+from ecli.services.system_doctor import SystemDoctor
 
 
 __all__ = [
@@ -30,5 +31,6 @@ __all__ = [
     "PolicyEngine",
     "PrivilegedActionService",
     "ProjectService",
+    "SystemDoctor",
     "UnsafeProjectPathError",
 ]
