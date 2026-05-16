@@ -948,7 +948,7 @@ publish-all:
 
 .PHONY: validate-version-consistency
 validate-version-consistency:
-	@$(PYTHON) -c 'import pathlib, sys, tomllib; pyproject=tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]; expected=pyproject["version"]; src=pathlib.Path("src/ecli/__init__.py").read_text(); sys.path.insert(0, "src"); import ecli; actual=ecli.__version__; ok=(actual == expected or actual == "0.0.0+local") and "version(\"ecli-editor\")" in src; print(f"pyproject={expected} ecli.__version__={actual}"); sys.exit(0 if ok else 1)'
+	@$(PYTHON) -c 'import pathlib, sys, tomllib; root=pathlib.Path.cwd().resolve(); sys.path.insert(0, str(root / "src")); import ecli; pyproject=tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]; expected=pyproject["version"]; actual=ecli.__version__; imported=pathlib.Path(ecli.__file__).resolve(); source_root=root / "src" / "ecli"; print(f"pyproject={expected} ecli.__version__={actual}"); ok=(actual == expected and imported.is_relative_to(source_root)); sys.exit(0 if ok else 1)'
 
 .PHONY: validate-pypi-contract
 validate-pypi-contract:
