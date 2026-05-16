@@ -59,6 +59,20 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+# --- Step 2.5: Explicit read-only service CLI dispatch ---
+# Preserve the default editor path for `python -m ecli [file]`. Only explicit
+# Phase 1 service flags are handled here before curses/editor initialization.
+try:
+    from ecli.cli import is_service_cli, run_service_cli
+
+    if is_service_cli(sys.argv[1:]):
+        sys.exit(run_service_cli(sys.argv[1:]))
+except SystemExit:
+    raise
+except Exception as e:
+    print(f"ECLI service CLI error: {e}", file=sys.stderr)
+    sys.exit(1)
+
 # --- Step 3: Immediate Logging and Configuration Setup ---
 try:
     from ecli.utils.logging_config import setup_logging
