@@ -40,6 +40,11 @@ from ecli.services.models.plan import (
     needs_confirmation,
     new_plan_id,
 )
+from ecli.services.models.privileged import (
+    ExecutionRequest,
+    ExecutionResult,
+    PrivilegeBackend,
+)
 from ecli.services.models.project import (
     ProjectDiagnostic,
     ProjectDiagnosticLevel,
@@ -64,6 +69,8 @@ __all__ = [
     "CommandStep",
     "ECLIConfig",
     "EditorConfig",
+    "ExecutionRequest",
+    "ExecutionResult",
     "GitConfig",
     "KeybindingConfig",
     "LSPConfig",
@@ -72,6 +79,7 @@ __all__ = [
     "PlanSource",
     "PlanStatus",
     "PolicyDecision",
+    "PrivilegeBackend",
     "SafetyPolicyConfig",
     "UIConfig",
     "ProjectDiagnostic",
