@@ -13,6 +13,7 @@
 
 """Typed service model definitions."""
 
+from ecli.services.models.audit import AuditActor, AuditEventType, AuditRecord
 from ecli.services.models.config import (
     AIConfig,
     AIProviderConfig,
@@ -50,6 +51,9 @@ from ecli.services.models.project import (
 
 
 __all__ = [
+    "AuditActor",
+    "AuditEventType",
+    "AuditRecord",
     "AIConfig",
     "AIProviderConfig",
     "ConfigDiagnostic",

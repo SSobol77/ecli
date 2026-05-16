@@ -13,6 +13,7 @@
 
 """Core service foundations for ECLI."""
 
+from ecli.services.audit_log_service import AuditLogService
 from ecli.services.command_plan_service import CommandPlanService
 from ecli.services.config_service import ConfigService
 from ecli.services.policy import BuiltInPolicyEngine, PolicyContext, PolicyEngine
@@ -20,6 +21,7 @@ from ecli.services.project_service import ProjectService, UnsafeProjectPathError
 
 
 __all__ = [
+    "AuditLogService",
     "BuiltInPolicyEngine",
     "CommandPlanService",
     "ConfigService",
