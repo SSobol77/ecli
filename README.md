@@ -18,8 +18,8 @@ See the LICENSE file in the project root for full license text.
 
 <h1 align="center"><b>ECLI</b></h1>
 <p align="center">
-  <b>The Next-Generation Terminal IDE</b><br/>
-  <i>Modern, AI-powered, extensible code editor for the terminal</i>
+  <b>Terminal-First Engineering Operations Workbench</b><br/>
+  <i>Panel-driven editor, diagnostics surface, and service foundation for controlled operational workflows</i>
 </p>
 
 <p align="center">
@@ -51,20 +51,31 @@ See the LICENSE file in the project root for full license text.
 
 ## 🚀 About ECLI
 
-**ECLI** (Editor CLI) is a next-generation terminal IDE that brings the power of modern development tools into your terminal environment. It's built for developers who value speed, flexibility, and the ability to work without leaving the terminal.
+**ECLI** (Editor CLI) is a terminal-first engineering operations workbench. It
+combines a curses-based editor with right-side workflow panels and a typed
+service foundation for configuration, project discovery, command-plan previews,
+policy checks, audit logging, privileged-action refusal paths, and read-only
+system diagnostics.
+
+The v0.2.0 Services Foundation release keeps the editor as the default product
+surface while making the new services visible through TUI panels and a minimal
+read-only CLI. It does not execute remediation, apply command plans, launch
+VMLab runtimes, or perform real privileged operations.
 
 ### ✨ Key Features
 
 
-* 🧠 **AI-Powered Assistant** - Integrated AI panel for code generation, documentation, and refactoring
-* 📂 **Modern File Manager** - Seamlessly navigate and manage projects with intuitive UI
-* 🌱 **Git Integration** - Stage, commit, push/pull directly in terminal
-* 🌈 **Syntax Highlighting** - Powered by Tree-sitter, supports 70+ programming languages
-* 📝 **LSP Integration** - Full Language Server Protocol support with autocomplete, diagnostics, go-to-definition
-* 🐍 **Built-in Linters** - Ruff (Python) by default + support for external linters across 70+ languages
-* ⚡ **Extensible Architecture** - Plugin and theme system for unlimited customization
-* 🎨 **Professional Themes** - Dark and light themes included
-* 🔄 **Cross-Platform** - Native support for Linux, macOS, FreeBSD, and Windows
+* 🧠 **AI Code Assistant** - F7 panel for code-generation and refactoring help when a user-provided API key is configured
+* 🩺 **System Doctor** - F8 read-only diagnostics panel with structured findings and preview-only remediation plans
+* 🧭 **Services Panel** - right-side visibility into the Phase 1 service composition root
+* 📋 **Command Plan Preview** - draft plans from eligible diagnostics, exportable as JSON or Markdown without execution
+* 📂 **File Manager** - F10 project navigation and file preview workflow
+* 🌱 **Git Panel** - F9 repository panel for existing Git workflows
+* 🔎 **Diagnostics/Lint** - F4 diagnostics and lint panel
+* ❓ **Help** - F1 help panel with current keybindings
+* 🌈 **Syntax Highlighting** - terminal highlighting for common source formats
+* 📝 **LSP Integration** - Language Server Protocol support where configured
+* 🔄 **Cross-Platform Packaging** - PyPI, Linux, FreeBSD, macOS, and Windows release artifacts
 
 ---
 
@@ -76,18 +87,18 @@ Download and install a pre-compiled package for your platform:
 
 ```bash
 # Debian/Ubuntu
-sudo apt install ./ecli_0.1.3_linux_x86_64.deb
+sudo apt install ./ecli_0.2.0_linux_x86_64.deb
 
 # Fedora/RHEL/Rocky
-sudo dnf install ./ecli_0.1.3_linux_x86_64.rpm
+sudo dnf install ./ecli_0.2.0_linux_x86_64.rpm
 
 # Windows (PowerShell)
-.\ecli_0.1.3_win_x86_64_setup.exe
-# Portable alternative: .\ecli_0.1.3_win_x86_64.exe
+.\ecli_0.2.0_win_x86_64_setup.exe
+# Portable alternative: .\ecli_0.2.0_win_x86_64.exe
 # See docs/install/windows.md for checksum verification and SmartScreen notes.
 
 # macOS
-open ecli_0.1.3_macos_universal2.dmg
+open ecli_0.2.0_macos_universal2.dmg
 # First launch is blocked by Gatekeeper; see docs/install/macos.md
 # for the one-time "Open Anyway" or xattr workaround.
 ```
@@ -162,10 +173,11 @@ brew install ncurses libyaml
 
 Download from [GitHub Releases](https://github.com/SSobol77/ecli/releases):
 
-- **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL), `.AppImage` (any Linux), `.tar.gz`
+- **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL), `.tar.gz`
 - **FreeBSD**: `.pkg`
 - **macOS**: `.dmg` ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/macos.md))
 - **Windows**: `.exe` installer or portable executable ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/windows.md))
+- **Release metadata**: CycloneDX SBOM and SHA256 sidecars for release artifacts
 
 **Option B: PyPI (Python Package Index)**
 
@@ -230,7 +242,7 @@ make help
 make sysinfo
 
 # Build for your platform
-make package-linux      # All Linux packages (deb, rpm, AppImage)
+make package-linux      # Linux package targets supported by the local toolchain
 make package-pypi       # Python wheel + source distribution
 make package-macos      # macOS DMG
 make package-windows    # Windows portable EXE + installer
@@ -250,18 +262,99 @@ make publish-all
 ecli [options] [file]
 ```
 
-### Basic Commands
+### Keyboard Shortcuts
+
+Master ECLI with these essential keyboard shortcuts. Press `F1` anytime inside
+the editor to open the help screen.
+
+#### Basic Editing
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+N` | New file |
+| `Backspace` | Delete character left / delete selection |
+| `Tab` | Smart indent / indent block |
+| `Shift+Tab` | Smart unindent |
+| `Ctrl+\` | Toggle comment (line/block) |
+| `Ctrl+C` | Copy |
+| `Ctrl+X` | Cut |
+| `Ctrl+V` | Paste |
+| `Ctrl+A` | Select all |
+| `Ctrl+Z` | Undo |
+| `Ctrl+Y` | Redo |
+
+#### Navigation & Search
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl+G` | Go to line |
+| `Ctrl+F` | Find |
+| `F3` | Find next |
+| `F6` | Search & Replace with regex support |
+| `Arrow keys` / `Home` / `End` | Cursor movement |
+| `Page Up` / `Page Down` | Scroll by page |
+| `Shift` + `Arrow keys` | Extend selection |
+
+#### File Operations
+
+| Shortcut | Action |
+|----------|--------|
+| `F2` | New file |
 | `Ctrl+O` | Open file |
-| `Ctrl+S` | Save file |
-| `Ctrl+Q` | Quit |
-| `Ctrl+A` | AI assistant panel |
-| `Ctrl+G` | Git panel |
-| `Ctrl+F` | Search in file |
-| `F1` | Help |
+| `Ctrl+S` | Save |
+| `F5` | Save as... |
+| `Ctrl+Q` | Quit editor |
+
+#### Tools & Panels
+
+| Shortcut | Action |
+|----------|--------|
+| `F10` | File Explorer |
+| `F4` | Diagnostics / Linter panel |
+| `F9` | Git menu |
+| `F7` | AI Assistant panel |
+| `F8` | System Doctor |
+| `F1` | Show Keyboard Shortcuts |
+| `Esc` | Close current panel |
+| `Insert` | Toggle Insert / Overwrite mode |
+| `F12` | Switch focus between editor windows and panels |
+
+The right side of the editor hosts workflow panels. The v0.2.0 service panels
+are read-only or preview-only: System Doctor does not mutate host state, Command
+Plan previews do not execute, and the Services panel reports composition status.
+
+### Minimal Service CLI
+
+The default CLI path still launches the editor:
+
+```bash
+python3 -m ecli
+python3 -m ecli pyproject.toml
+```
+
+The explicit service flags provide read-only inspection without bypassing the
+TUI model:
+
+```bash
+python3 -m ecli --services
+python3 -m ecli --doctor
+python3 -m ecli --plan-preview
+```
+
+Use `--json` for deterministic JSON output where supported. These commands are
+inspection and preview surfaces only; they do not execute plans, run privileged
+commands, install packages, start VMLab, or apply remediation.
+
+### AI Configuration
+
+AI features require user-provided provider credentials. API keys belong in:
+
+```text
+~/.config/ecli/.env
+```
+
+Provider selection belongs in `config.toml`, not in `.env`. If a selected
+provider key is missing, the AI panel reports a normal configuration message
+instead of a Python traceback.
 
 For comprehensive keybindings and usage guide, see [Getting Started](https://github.com/SSobol77/ecli/blob/main/docs/contributor/development-setup.md).
 
@@ -298,14 +391,27 @@ Complete documentation is organized by audience:
 
 ## 🏗️ Architecture
 
-ECLI is built on a modern, extensible architecture:
+ECLI v0.2.0 keeps the existing editor/TUI behavior and introduces the Services
+Foundation as typed, testable service-layer infrastructure:
 
-- **Core Editor**: Python with async/await for responsive UI
-- **Terminal UI**: curses-based for full terminal control
-- **AI Integration**: Pluggable AI provider system (OpenAI, Anthropic, HuggingFace, Ollama)
-- **LSP Client**: Language Server Protocol for IDE-like features
-- **Git Integration**: Direct git repository management
-- **Plugin System**: Extensible architecture for custom features
+- **Core Editor**: curses-based terminal editor with async task integration
+- **Right-Side Panels**: Help, Diagnostics/Lint, AI Code Assistant, System Doctor, Git, File Manager, Services, and Command Plan previews
+- **ConfigService**: typed layered configuration loading
+- **ProjectService**: deterministic project discovery and path normalization
+- **CommandPlanService**: draft command-plan models and preview/export behavior
+- **BuiltInPolicyEngine**: deterministic built-in policy evaluation rules
+- **AuditLogService**: append-only JSONL audit records with mandatory redaction
+- **PrivilegedActionService**: refusal-only/dry-run-only skeleton for future elevated operations
+- **SystemDoctor**: read-only diagnostic skeleton with draft remediation-plan generation
+- **ServiceRegistry**: explicit composition root without global service-locator state
+
+Safety boundaries for v0.2.0:
+
+- SystemDoctor is read-only.
+- CommandPlan output is draft/preview-only.
+- PrivilegedActionService refuses real execution in this release.
+- Service panels are visible in the UI but do not execute remediation.
+- VMLab runtime behavior is not included in v0.2.0.
 
 For detailed architecture information, see [Architecture Overview](https://github.com/SSobol77/ecli/blob/main/docs/architecture/current-architecture.md).
 
