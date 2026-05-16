@@ -27,7 +27,7 @@ version you intend to install.
 PowerShell checksum verification should be performed before first execution:
 
 ```powershell
-$version = "0.1.0"
+$version = "0.2.0"
 $file = "ecli_${version}_win_x86_64_setup.exe"
 $expected = (Get-Content "$file.sha256" -Raw).Trim().Split()[0]
 $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()
@@ -53,7 +53,7 @@ The sidecar format is compatible with coreutils:
 The installer is the recommended Windows path for normal workstations:
 
 ```powershell
-.\ecli_0.1.0_win_x86_64_setup.exe
+.\ecli_0.2.0_win_x86_64_setup.exe
 ```
 
 The NSIS installer writes ECLI under `C:\Program Files\Cartesian School\ECLI`,
@@ -71,7 +71,7 @@ The registered uninstall metadata includes `DisplayName`, `DisplayVersion`,
 Use the portable executable when you do not want a machine-level installation:
 
 ```powershell
-.\ecli_0.1.0_win_x86_64.exe
+.\ecli_0.2.0_win_x86_64.exe
 ```
 
 The portable artifact is a PyInstaller `--onefile` executable. It does not
@@ -80,12 +80,13 @@ runtime file access performed by ECLI.
 
 ## SmartScreen
 
-ECLI v0.1.0 Windows artifacts are unsigned. Windows SmartScreen may block first
+Current ECLI Windows artifacts are unsigned. Windows SmartScreen may block first
 launch or installation with a warning. To proceed after verifying the checksum:
 
 1. Select **More info**.
 2. Confirm the publisher is shown as unknown or unsigned.
 3. Select **Run anyway**.
 
-Code signing is planned for v0.2. Until signed artifacts are available, checksum
-verification against the release sidecar is the integrity check.
+Code signing is planned for a later release. Until signed artifacts are
+available, checksum verification against the release sidecar is the integrity
+check.

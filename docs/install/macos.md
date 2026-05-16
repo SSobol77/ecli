@@ -14,7 +14,7 @@ See the LICENSE file in the project root for full license text.
 -->
 # Installing on macOS
 
-ECLI v0.1.0 ships a Universal2 DMG for macOS 12 and newer:
+ECLI ships a Universal2 DMG for macOS 12 and newer:
 
 ```text
 ecli_<version>_macos_universal2.dmg
@@ -46,7 +46,7 @@ DMG is used on Intel Macs and Apple Silicon Macs.
 
 ## First Launch and Gatekeeper
 
-ECLI v0.1.0 is ad-hoc signed but not notarized. On first launch, macOS
+Current ECLI macOS artifacts are ad-hoc signed but not notarized. On first launch, macOS
 Gatekeeper may block it with a message similar to:
 
 ```text
@@ -77,8 +77,9 @@ xattr -d com.apple.quarantine ~/bin/ecli
 
 ## Why Is the Binary Unsigned?
 
-ECLI v0.1.0 is an early release intended for early adopters and project
-visibility. Apple Developer Program enrollment is not yet available for this
-project, so v0.1.0 uses ad-hoc signing without notarization.
+ECLI is an early release intended for early adopters and project visibility.
+Apple Developer Program enrollment is not yet available for this project, so
+current artifacts use ad-hoc signing without notarization.
 
-Developer ID signing, notarization, and stapling are planned for v0.2.
+Developer ID signing, notarization, and stapling are planned for a later
+release.

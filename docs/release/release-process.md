@@ -93,8 +93,8 @@ The PyPI namespace guard remains mandatory before publish. It verifies that
 `pyproject.toml` declares `ecli-editor` and that the project exists on PyPI
 before the upload step can run.
 
-Trusted Publishers (OIDC) are deferred to v0.2. That migration will remove the
-static token requirement.
+Trusted Publishers (OIDC) are deferred to a later release. That migration will
+remove the static token requirement.
 
 ## SBOM
 
