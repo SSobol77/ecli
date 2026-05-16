@@ -25,7 +25,14 @@ import curses
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
-from .panels import AiResponsePanel, BasePanel, FileBrowserPanel
+from .panels import (
+    AiResponsePanel,
+    BasePanel,
+    CommandPlanPanel,
+    FileBrowserPanel,
+    ServicesPanel,
+    SystemDoctorPanel,
+)
 
 
 if TYPE_CHECKING:
@@ -76,7 +83,10 @@ class PanelManager:
         # All registered panels must adhere to the non-blocking BasePanel interface.
         self.registered_panels: dict[str, type[BasePanel]] = {
             "ai_response": AiResponsePanel,
+            "command_plan": CommandPlanPanel,
             "file_browser": FileBrowserPanel,
+            "services_status": ServicesPanel,
+            "system_doctor": SystemDoctorPanel,
         }
         logging.info(
             "PanelManager initialised with: %s", list(self.registered_panels.keys())

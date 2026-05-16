@@ -84,6 +84,7 @@ from ecli.core.CodeCommenter import CodeCommenter
 from ecli.core.History import History
 from ecli.integrations.GitBridge import GitBridge
 from ecli.integrations.LinterBridge import LinterBridge
+from ecli.services.registry import ServiceRegistry
 from ecli.ui.TerminalAppMode import TerminalAppMode
 from ecli.ui.DrawScreen import DrawScreen
 from ecli.ui.KeyBinder import KeyBinder
@@ -432,6 +433,7 @@ class Ecli:
         self._git_cmd_q: queue.Queue[str] = queue.Queue()
         self._async_results_q: queue.Queue[dict[str, Any]] = queue.Queue()
         self.internal_clipboard: str = ""
+        self.service_registry: Optional[ServiceRegistry] = None
 
     # --- Component Initialization ---
     def _initialize_components(self) -> None:
@@ -773,6 +775,51 @@ class Ecli:
         # No need to return anything here, as the panel manager handles the redraw.
         # This action always changes the UI state (shows a panel or a message),
         # so a redraw is always required.
+        return True
+
+    def _get_service_registry(self) -> ServiceRegistry:
+        """Return the editor-owned service registry, creating it lazily."""
+        if self.service_registry is not None:
+            return self.service_registry
+
+        project_root = (
+            Path(self.filename).parent
+            if self.filename and os.path.exists(self.filename)
+            else Path.cwd()
+        )
+        self.service_registry = ServiceRegistry.create(project_root=project_root)
+        return self.service_registry
+
+    def toggle_system_doctor_panel(self) -> bool:
+        """Open the read-only System Doctor service panel."""
+        if not self.panel_manager:
+            self._set_status_message("System Doctor panel not available.")
+            return True
+        try:
+            registry = self._get_service_registry()
+            self.panel_manager.show_panel("system_doctor", registry=registry)
+        except Exception as exc:
+            self._set_status_message(f"System Doctor unavailable: {exc}")
+        return True
+
+    def show_command_plan_panel(self, plans: list[Any]) -> bool:
+        """Open a preview-only command plan panel."""
+        if not self.panel_manager:
+            self._set_status_message("Command Plan panel not available.")
+            return True
+        self.panel_manager.show_panel("command_plan", plans=plans)
+        return True
+
+    def show_services_panel(self) -> bool:
+        """Open the read-only services status panel."""
+        if not self.panel_manager:
+            self._set_status_message("Services panel not available.")
+            return True
+        try:
+            registry = self._get_service_registry()
+            self.panel_manager.show_panel("services_status", registry=registry)
+        except Exception as exc:
+            self._set_status_message(f"Services panel unavailable: {exc}")
         return True
 
     # --- Comment/Uncomment Block ---
@@ -7115,6 +7162,7 @@ class Ecli:
             "lint": "F4",
             "git_menu": "F9",
             "help": "F1",
+            "toggle_system_doctor_panel": "F8",
             "cancel_operation": "Esc",
             "tab": "Tab",
             "shift_tab": "Shift+Tab",
@@ -7131,6 +7179,7 @@ class Ecli:
             f"    {_kb('git_menu', defaults['git_menu']):<22}: Git menu",
             f"    {_kb('help', defaults['help']):<22}: This help screen",
             f"    {_kb('ai_assist', defaults['ai_assist']):<22}: AI Code Assistant",
+            f"    {_kb('toggle_system_doctor_panel', defaults['toggle_system_doctor_panel']):<22}: System Doctor",
             f"    {_kb('cancel_operation', defaults['cancel_operation']):<22}: Cancel / Close Panel",
             "    Insert Key            : Toggle Insert/Replace mode",
             "",
@@ -7615,6 +7664,21 @@ class Ecli:
                     if async_result.get("type") == "ai_reply":
                         reply_text = async_result.get("text", "AI response was empty.")
                         self.show_ai_panel("AI Assistant Reply", reply_text)
+
+                    elif async_result.get("type") == "ai_configuration_error":
+                        panel_title = async_result.get(
+                            "title",
+                            "AI provider is not configured",
+                        )
+                        panel_content = async_result.get(
+                            "text",
+                            "AI provider is not configured.",
+                        )
+                        provider = async_result.get("provider", "selected provider")
+                        self._set_status_message(
+                            f"AI provider is not configured: {provider}"
+                        )
+                        self.show_ai_panel(str(panel_title), str(panel_content))
 
                     elif async_result.get("type") == "task_error":
                         error_msg = async_result.get("error", "Unknown async error.")

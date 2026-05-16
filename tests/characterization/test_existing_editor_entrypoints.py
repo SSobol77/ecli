@@ -49,6 +49,9 @@ def test_existing_editor_methods_for_help_and_panels_are_present() -> None:
         "toggle_widget_panel",
         "select_ai_provider_and_ask",
         "toggle_file_browser",
+        "toggle_system_doctor_panel",
+        "show_command_plan_panel",
+        "show_services_panel",
         "show_ai_panel",
         "toggle_focus",
     )

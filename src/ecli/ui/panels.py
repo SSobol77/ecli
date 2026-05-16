@@ -56,6 +56,8 @@ import pyperclip
 from wcwidth import wcswidth
 
 from ecli.integrations.GitBridge import GitBridge
+from ecli.services.models.doctor import DoctorContext, DoctorFinding
+from ecli.services.models.plan import CommandPlan
 from ecli.utils.logging_config import logger
 from ecli.utils.utils import safe_run
 
@@ -1383,6 +1385,405 @@ class FileBrowserPanel(BasePanel):
             self._refresh_entries()
         except Exception as e:
             self.editor._set_status_message(f"Delete failed: {e}")
+
+
+# ==================== Phase 1 Service Panels ====================
+class _ReadOnlyRightPanel(BasePanel):
+    """Shared right-side panel chrome for read-only service views."""
+
+    title = " Service Panel "
+    close_key = getattr(curses, "KEY_F8", 272)
+
+    def __init__(
+        self, stdscr: CursesWindow, main_editor_instance: Ecli, **kwargs: Any
+    ) -> None:
+        super().__init__(stdscr, main_editor_instance, **kwargs)
+        self.width = int(self.term_width * 0.45)
+        self.height = self.term_height - 1
+        self.start_x = self.term_width - self.width
+        self.win = curses.newwin(self.height, self.width, 0, self.start_x)
+        self.win.keypad(True)
+        self.scroll = 0
+        self.registry = kwargs.get("registry")
+        self.attr_border = self.editor.colors.get("status", curses.A_BOLD)
+        self.attr_title = self.editor.colors.get("function", curses.A_BOLD)
+        self.attr_text = self.editor.colors.get("default", curses.A_NORMAL)
+        self.attr_dim = self.editor.colors.get("comment", curses.A_DIM)
+        self.attr_selected = curses.A_REVERSE | curses.A_BOLD
+        self.attr_warning = self.editor.colors.get("warning", curses.A_BOLD)
+        self.attr_error = self.editor.colors.get("error", curses.A_BOLD)
+
+    def resize(self) -> None:
+        """Handle terminal resize by recreating the backing panel window."""
+        super().resize()
+        self.width = int(self.term_width * 0.45)
+        self.height = self.term_height - 1
+        self.start_x = self.term_width - self.width
+        self.win = curses.newwin(self.height, self.width, 0, self.start_x)
+        self.win.keypad(True)
+
+    def open(self) -> None:
+        """Open the read-only panel and hide the editor cursor."""
+        super().open()
+        curses.curs_set(0)
+
+    def close(self) -> None:
+        """Close the panel and return focus to the editor."""
+        super().close()
+        curses.curs_set(1)
+        self.editor.focus = "editor"
+        if hasattr(self.editor, "_force_full_redraw"):
+            self.editor._force_full_redraw = True
+
+    def _draw_frame(self, footer: str) -> None:
+        is_focused = self.editor.focus == "panel"
+        border_attr = self.attr_border | (curses.A_BOLD if is_focused else 0)
+        try:
+            self.win.border()
+            self.win.addnstr(0, 2, self.title, max(1, self.width - 4), self.attr_title)
+            self.win.addnstr(
+                self.height - 1,
+                2,
+                footer,
+                max(1, self.width - 4),
+                self.attr_dim | border_attr,
+            )
+        except curses.error:
+            pass
+
+    def _draw_lines(self, lines: list[str], *, start_row: int = 1) -> None:
+        viewport_height = max(0, self.height - start_row - 2)
+        max_scroll = max(0, len(lines) - viewport_height)
+        self.scroll = min(max(0, self.scroll), max_scroll)
+        visible = lines[self.scroll : self.scroll + viewport_height]
+        for row_offset, line in enumerate(visible):
+            row = start_row + row_offset
+            attr = self._line_attr(line)
+            try:
+                self.win.addnstr(row, 1, line, max(1, self.width - 2), attr)
+            except curses.error:
+                pass
+
+    def _line_attr(self, line: str) -> int:
+        if " CRITICAL " in line or " ERROR " in line or " unavailable" in line:
+            return self.attr_error
+        if " WARNING " in line or "missing" in line:
+            return self.attr_warning
+        if line.startswith("  "):
+            return self.attr_dim
+        return self.attr_text
+
+    def _handle_common_key(self, key: Any) -> bool:
+        if key in (self.close_key, 27, ord("q")):
+            if hasattr(self.editor, "panel_manager") and self.editor.panel_manager:
+                self.editor.panel_manager.close_active_panel()
+            else:
+                self.close()
+            return True
+        if key == getattr(curses, "KEY_F12", 276):
+            if hasattr(self.editor, "toggle_focus"):
+                self.editor.toggle_focus()
+            return True
+        if key in (curses.KEY_UP, ord("k")):
+            self.scroll = max(0, self.scroll - 1)
+            return True
+        if key in (curses.KEY_DOWN, ord("j")):
+            self.scroll += 1
+            return True
+        if key == curses.KEY_PPAGE:
+            self.scroll = max(0, self.scroll - max(1, self.height - 4))
+            return True
+        if key == curses.KEY_NPAGE:
+            self.scroll += max(1, self.height - 4)
+            return True
+        return False
+
+    def _refresh_window(self) -> None:
+        try:
+            if hasattr(self.win, "noutrefresh"):
+                self.win.noutrefresh()
+            else:
+                self.win.refresh()
+        except curses.error:
+            pass
+
+    def _service_registry(self) -> Any:
+        if self.registry is not None:
+            return self.registry
+        registry = getattr(self.editor, "service_registry", None)
+        if registry is not None:
+            return registry
+        if hasattr(self.editor, "_get_service_registry"):
+            return self.editor._get_service_registry()
+        raise RuntimeError("Service registry is not available")
+
+
+class SystemDoctorPanel(_ReadOnlyRightPanel):
+    """Read-only right-side panel for structured SystemDoctor findings."""
+
+    title = " System Doctor "
+
+    def __init__(
+        self, stdscr: CursesWindow, main_editor_instance: Ecli, **kwargs: Any
+    ) -> None:
+        super().__init__(stdscr, main_editor_instance, **kwargs)
+        self.findings: list[DoctorFinding] = list(kwargs.get("findings") or [])
+        self.selected_idx = 0
+        self.loaded = bool(self.findings)
+        self.error_message: str | None = None
+
+    def open(self) -> None:
+        """Open and refresh read-only doctor findings."""
+        super().open()
+        if not self.loaded:
+            self.refresh_findings()
+        self.editor._set_status_message(
+            "System Doctor: r refresh, Enter/p preview plan, s services, F8/Esc close"
+        )
+
+    def refresh_findings(self) -> None:
+        """Run read-only SystemDoctor checks and store deterministic findings."""
+        try:
+            registry = self._service_registry()
+            context = self._doctor_context(registry)
+            self.findings = list(registry.system_doctor.detect_problems(context))
+            self.loaded = True
+            self.error_message = None
+            self.selected_idx = min(self.selected_idx, max(0, len(self.findings) - 1))
+        except Exception as exc:
+            self.findings = []
+            self.loaded = True
+            self.error_message = f"SystemDoctor unavailable: {exc}"
+
+    def _doctor_context(self, registry: Any) -> DoctorContext:
+        project_root = None
+        project_service = getattr(registry, "project_service", None)
+        if project_service is not None and hasattr(project_service, "root"):
+            project_root = project_service.root
+        elif getattr(self.editor, "filename", None):
+            project_root = Path(self.editor.filename).parent
+        return DoctorContext(project_root=project_root, dry_run=True)
+
+    def handle_key(self, key: Any) -> bool:
+        """Handle navigation plus read-only doctor panel actions."""
+        if self._handle_common_key(key):
+            return True
+        if key == ord("r"):
+            self.refresh_findings()
+            return True
+        if key == ord("s"):
+            self._open_services_panel()
+            return True
+        if key in (ord("p"), curses.KEY_ENTER, 10, 13, "\n"):
+            self._open_selected_plan()
+            return True
+        return False
+
+    def _open_services_panel(self) -> None:
+        if not hasattr(self.editor, "panel_manager") or not self.editor.panel_manager:
+            return
+        self.editor.panel_manager.show_panel(
+            "services_status",
+            registry=self._service_registry(),
+        )
+
+    def _open_selected_plan(self) -> None:
+        if not self.findings:
+            self.editor._set_status_message("System Doctor: no findings to preview.")
+            return
+        finding = self.findings[self.selected_idx]
+        if not finding.remediation_available:
+            self.editor._set_status_message(
+                f"System Doctor: no remediation preview for {finding.finding_id}."
+            )
+            return
+        registry = self._service_registry()
+        plan = registry.command_plan_service.create_plan_from_doctor_finding(
+            finding,
+            actor="system-doctor",
+        )
+        if plan is None:
+            self.editor._set_status_message(
+                f"System Doctor: no command plan for {finding.finding_id}."
+            )
+            return
+        self.editor.panel_manager.show_panel(
+            "command_plan",
+            plans=[plan],
+            registry=registry,
+        )
+
+    def draw(self) -> None:
+        """Render structured doctor findings."""
+        if not self.visible or self.win is None:
+            return
+        if self.height < 5 or self.width < 25:
+            return
+        self.win.erase()
+        self._draw_frame(" r:Refresh Enter/p:Plan s:Services F8/Esc/q:Close ")
+
+        lines = self._finding_lines()
+        viewport_height = max(0, self.height - 3)
+        top = max(0, self.selected_idx - viewport_height + 1)
+        for row_offset, line in enumerate(lines[top : top + viewport_height]):
+            row = row_offset + 1
+            attr = self._line_attr(line)
+            if top + row_offset == self.selected_idx and self.findings:
+                attr |= self.attr_selected
+            try:
+                self.win.addnstr(row, 1, line, max(1, self.width - 2), attr)
+            except curses.error:
+                pass
+        self._refresh_window()
+
+    def _finding_lines(self) -> list[str]:
+        if self.error_message is not None:
+            return [self.error_message]
+        if not self.findings:
+            return ["INFO config DOCTOR-OK SystemDoctor found no problems."]
+        return [
+            (
+                f"{finding.severity.value:<8} {finding.category:<15} "
+                f"{finding.finding_id} {finding.title} "
+                f"[remediation={'yes' if finding.remediation_available else 'no'}]"
+            )
+            for finding in self.findings
+        ]
+
+
+class CommandPlanPanel(_ReadOnlyRightPanel):
+    """Preview-only right-side panel for draft CommandPlan objects."""
+
+    title = " Command Plans "
+
+    def __init__(
+        self, stdscr: CursesWindow, main_editor_instance: Ecli, **kwargs: Any
+    ) -> None:
+        super().__init__(stdscr, main_editor_instance, **kwargs)
+        plans = list(kwargs.get("plans") or [])
+        plan = kwargs.get("plan")
+        if plan is not None:
+            plans.append(plan)
+        self.plans: list[CommandPlan] = plans
+        self.lines = self._build_lines()
+
+    def open(self) -> None:
+        """Open the preview-only command plan panel."""
+        super().open()
+        self.editor._set_status_message("Command Plans: preview only, F8/Esc/q close")
+
+    def handle_key(self, key: Any) -> bool:
+        """Handle scroll and close keys."""
+        return self._handle_common_key(key)
+
+    def draw(self) -> None:
+        """Render command plan previews."""
+        if not self.visible or self.win is None:
+            return
+        if self.height < 5 or self.width < 25:
+            return
+        self.win.erase()
+        self._draw_frame(" Preview only | arrows scroll | F8/Esc/q:Close ")
+        self._draw_lines(self.lines)
+        self._refresh_window()
+
+    def _build_lines(self) -> list[str]:
+        if not self.plans:
+            return ["No command plan previews are available."]
+
+        lines: list[str] = []
+        for plan in self.plans:
+            lines.extend(
+                [
+                    f"Plan ID: {plan.plan_id}",
+                    f"Title: {plan.title}",
+                    (
+                        f"Risk: {plan.risk.value}  Category: {plan.category.value}  "
+                        f"Source: {plan.source.value}"
+                    ),
+                    (
+                        f"Status: {plan.status.value}  "
+                        f"Confirmation: {plan.confirmation_required}"
+                    ),
+                    "Commands:",
+                ]
+            )
+            for step in plan.commands:
+                warnings = []
+                if step.requires_privilege:
+                    warnings.append("requires privilege")
+                if step.destructive:
+                    warnings.append("destructive")
+                warning_text = f" [{' / '.join(warnings)}]" if warnings else ""
+                lines.append(f"  - {step.display}{warning_text}")
+                lines.append(f"    argv: {shlex.join(step.argv)}")
+            try:
+                export_markdown = (
+                    self._service_registry()
+                    .command_plan_service.export_markdown(plan)
+                )
+                lines.extend(["", "Markdown preview:", *export_markdown.splitlines()])
+            except Exception:
+                lines.append("Markdown preview unavailable.")
+            lines.append("")
+        return lines
+
+
+class ServicesPanel(_ReadOnlyRightPanel):
+    """Read-only right-side service diagnostics/status panel."""
+
+    title = " Services "
+
+    SERVICE_NAMES = (
+        ("ConfigService", "config_service"),
+        ("ProjectService", "project_service"),
+        ("CommandPlanService", "command_plan_service"),
+        ("BuiltInPolicyEngine", "policy_engine"),
+        ("AuditLogService", "audit_log_service"),
+        ("PrivilegedActionService", "privileged_action_service"),
+        ("SystemDoctor", "system_doctor"),
+    )
+
+    def open(self) -> None:
+        """Open the service status panel."""
+        super().open()
+        self.editor._set_status_message("Services: read-only status, F8/Esc/q close")
+
+    def handle_key(self, key: Any) -> bool:
+        """Handle scroll and close keys."""
+        return self._handle_common_key(key)
+
+    def draw(self) -> None:
+        """Render service availability diagnostics."""
+        if not self.visible or self.win is None:
+            return
+        if self.height < 5 or self.width < 25:
+            return
+        self.win.erase()
+        self._draw_frame(" Read-only service status | F8/Esc/q:Close ")
+        self._draw_lines(self._service_lines())
+        self._refresh_window()
+
+    def _service_lines(self) -> list[str]:
+        try:
+            registry = self._service_registry()
+        except Exception as exc:
+            return [f"ServiceRegistry unavailable: {exc}"]
+
+        lines = ["Phase 1 service graph:"]
+        for label, attribute in self.SERVICE_NAMES:
+            service = getattr(registry, attribute, None)
+            if service is None:
+                lines.append(f"{label:<28} unavailable")
+            else:
+                lines.append(f"{label:<28} available ({service.__class__.__name__})")
+
+        config_result = getattr(registry, "config_result", None)
+        if config_result is not None:
+            diagnostics = getattr(config_result, "diagnostics", ())
+            lines.append("")
+            lines.append(f"Config diagnostics: {len(diagnostics)}")
+        return lines
 
 
 # ==================== GitPanel Class ====================

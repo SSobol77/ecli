@@ -178,6 +178,9 @@ class FakeEditor:
     def toggle_widget_panel(self) -> bool:
         return self._record("toggle_widget_panel")
 
+    def toggle_system_doctor_panel(self) -> bool:
+        return self._record("toggle_system_doctor_panel")
+
     def run_lint_async(self) -> bool:
         return self._record("run_lint_async")
 
@@ -209,7 +212,7 @@ def test_default_keybinding_definitions_preserve_known_help_and_panel_bindings()
     assert curses.KEY_F10 in binder.keybindings["toggle_file_browser"]
     assert curses.KEY_F9 in binder.keybindings["git_menu"]
     assert curses.KEY_F4 in binder.keybindings["lint"]
-    assert curses.KEY_F8 not in binder.action_map
+    assert curses.KEY_F8 in binder.keybindings["toggle_system_doctor_panel"]
 
 
 def test_action_map_keeps_existing_help_ai_file_manager_and_git_entrypoints() -> None:
@@ -219,6 +222,7 @@ def test_action_map_keeps_existing_help_ai_file_manager_and_git_entrypoints() ->
     assert method_name_for_key(binder, curses.KEY_F7) == "toggle_widget_panel"
     assert method_name_for_key(binder, curses.KEY_F10) == "toggle_file_browser"
     assert method_name_for_key(binder, curses.KEY_F9) == "show_git_panel"
+    assert method_name_for_key(binder, curses.KEY_F8) == "toggle_system_doctor_panel"
 
 
 def test_current_f4_behavior_remains_diagnostics_not_git_panel() -> None:
@@ -242,3 +246,5 @@ def test_help_text_keeps_existing_panel_and_tool_labels_discoverable() -> None:
     assert "File Manager" in rendered
     assert "F9" in rendered
     assert "Git menu" in rendered
+    assert "F8" in rendered
+    assert "System Doctor" in rendered
