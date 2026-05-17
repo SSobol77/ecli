@@ -90,6 +90,7 @@ dev = [
 
 [project.scripts]
 ecli = "ecli.__main__:main"
+ecli-install-desktop-entry = "ecli.utils.desktop_entry:main"
 
 [project.urls]
 Homepage = "https://ecli.io"
@@ -101,9 +102,13 @@ Changelog = "https://github.com/SSobol77/ecli/blob/main/CHANGELOG.md"
 [tool.hatch.build.targets.wheel]
 packages = ["src/ecli"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/ecli/assets/ecli.png" = "ecli/assets/ecli.png"
+
 [tool.hatch.build.targets.sdist]
 include = [
     "/src",
+    "/src/ecli/assets/ecli.png",
     "/tests",
     "/README.md",
     "/LICENSE",

@@ -165,20 +165,20 @@ if [[ -f "packaging/linux/fpm-common/${PACKAGE_NAME}.desktop" ]]; then
 else
   cat > "${APPS_DIR}/${PACKAGE_NAME}.desktop" <<EOF
 [Desktop Entry]
+Type=Application
 Name=ECLI
-Comment=Fast terminal code editor
+Comment=Terminal-first engineering operations workbench
 Exec=${PACKAGE_NAME}
 Icon=${PACKAGE_NAME}
 Terminal=true
-Type=Application
-Categories=Development;TextEditor;
+Categories=Development;IDE;Utility;
 StartupNotify=false
 EOF
 fi
 
 # Icon (optional)
-if [[ -f "img/logo_m.png" ]]; then
-  install -m 0644 "img/logo_m.png" "${ICON_DIR}/${PACKAGE_NAME}.png"
+if [[ -f "src/ecli/assets/ecli.png" ]]; then
+  install -m 0644 "src/ecli/assets/ecli.png" "${ICON_DIR}/${PACKAGE_NAME}.png"
 fi
 
 # Docs (gzip README/LICENSE if present)

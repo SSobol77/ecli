@@ -124,20 +124,20 @@ if [[ -f "packaging/linux/fpm-common/${PACKAGE_NAME}.desktop" ]]; then
 else
   cat > "${STAGING_DIR}/usr/share/applications/${PACKAGE_NAME}.desktop" <<EOF
 [Desktop Entry]
+Type=Application
 Name=ECLI
-Comment=Fast terminal code editor
+Comment=Terminal-first engineering operations workbench
 Exec=${PACKAGE_NAME}
 Icon=${PACKAGE_NAME}
 Terminal=true
-Type=Application
-Categories=Development;TextEditor;
+Categories=Development;IDE;Utility;
 StartupNotify=false
 EOF
 fi
 
 # Icon
-if [[ -f "img/logo_m.png" ]]; then
-  install -m 644 "img/logo_m.png" \
+if [[ -f "src/ecli/assets/ecli.png" ]]; then
+  install -m 644 "src/ecli/assets/ecli.png" \
     "${STAGING_DIR}/usr/share/icons/hicolor/256x256/apps/${PACKAGE_NAME}.png"
 fi
 

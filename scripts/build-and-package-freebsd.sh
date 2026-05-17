@@ -284,18 +284,18 @@ stage_files() {
     cat > "$STAGING_ROOT/usr/local/share/applications/$PACKAGE_NAME.desktop" <<EOF
 [Desktop Entry]
 Name=ECLI
-Comment=Fast terminal code editor
+Comment=Terminal-first engineering operations workbench
 Exec=${PACKAGE_NAME}
 Icon=${PACKAGE_NAME}
 Terminal=true
 Type=Application
-Categories=Development;TextEditor;
+Categories=Development;IDE;Utility;
 StartupNotify=false
 EOF
   fi
 
   # Icon
-  [ -f "img/logo_m.png" ] && install -m 644 "img/logo_m.png" \
+  [ -f "src/ecli/assets/ecli.png" ] && install -m 644 "src/ecli/assets/ecli.png" \
     "$STAGING_ROOT/usr/local/share/icons/hicolor/256x256/apps/$PACKAGE_NAME.png"
 
   # Docs

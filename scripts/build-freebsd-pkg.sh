@@ -362,22 +362,22 @@ stage_package_files() {
         cat > "$STAGING_ROOT/usr/local/share/applications/$PACKAGE_NAME.desktop" <<EOF
 [Desktop Entry]
 Name=ECLI
-Comment=Fast terminal code editor
+Comment=Terminal-first engineering operations workbench
 Exec=$PACKAGE_NAME
 Icon=$PACKAGE_NAME
 Terminal=true
 Type=Application
-Categories=Development;TextEditor;
+Categories=Development;IDE;Utility;
 StartupNotify=false
 EOF
     fi
 
     # Icon
-    if [ -f "$PROJECT_ROOT/img/logo_m.png" ]; then
-        install -m 644 "$PROJECT_ROOT/img/logo_m.png" \
+    if [ -f "$PROJECT_ROOT/src/ecli/assets/ecli.png" ]; then
+        install -m 644 "$PROJECT_ROOT/src/ecli/assets/ecli.png" \
             "$STAGING_ROOT/usr/local/share/icons/hicolor/256x256/apps/$PACKAGE_NAME.png"
     else
-        print_warning "Application icon not found: $PROJECT_ROOT/img/logo_m.png"
+        print_warning "Application icon not found: $PROJECT_ROOT/src/ecli/assets/ecli.png"
     fi
 
     # Documentation
