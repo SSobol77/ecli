@@ -61,7 +61,7 @@ install -Dm644 \
   "$PROJECT_ROOT/packaging/linux/fpm-common/ecli.desktop" \
   "$APPDIR/usr/share/applications/ecli.desktop"
 install -Dm644 \
-  "$PROJECT_ROOT/img/logo_m.png" \
+  "$PROJECT_ROOT/src/ecli/assets/ecli.png" \
   "$APPDIR/usr/share/icons/hicolor/256x256/apps/ecli.png"
 
 # 3) Update the version in appimage-builder.yml (on the fly)

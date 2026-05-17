@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 #
 # Project: Ecli
-# File: packaging/linux/fpm-common/ecli.desktop
+# File: src/ecli/assets/__init__.py
 # Website: https://www.ecli.io
 # Repository: https://github.com/SSobol77/ecli
 # PyPI: https://pypi.org/project/ecli-editor/0.0.1/
@@ -11,12 +11,4 @@
 # Licensed under the Apache License, Version 2.0.
 # See the LICENSE file in the project root for full license text.
 
-[Desktop Entry]
-Type=Application
-Name=ECLI
-Comment=Terminal-first engineering operations workbench
-Exec=ecli
-Icon=ecli
-Terminal=true
-Categories=Development;IDE;Utility;
-StartupNotify=false
+"""Packaged ECLI runtime assets."""

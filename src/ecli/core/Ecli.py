@@ -67,7 +67,6 @@ from typing import (
 )
 from unittest.mock import Mock
 
-import chardet
 import pyperclip
 
 # Imports of third party libraries that are USED in the class
@@ -91,6 +90,10 @@ from ecli.ui.KeyBinder import KeyBinder
 from ecli.ui.PanelManager import PanelManager
 from ecli.ui.panels import FileBrowserPanel, GitPanel
 from ecli.utils.logging_config import logger
+from ecli.utils.text_buffer import (
+    detect_and_decode_text,
+    split_text_preserving_content,
+)
 from ecli.utils.utils import hex_to_xterm
 
 
@@ -408,6 +411,8 @@ class Ecli:
         self.modified: bool = False
         self.encoding: str = "UTF-8"
         self.filename: Optional[str] = None
+        self._file_loaded_from_disk: bool = False
+        self._file_had_final_newline: bool = False
         self.insert_mode: bool = True
         self.status_message: str = "Ready"
         self._last_status_msg_sent: Optional[str] = None
@@ -1239,58 +1244,57 @@ class Ecli:
             Token.Error: self.colors.get("error"),
         }
 
-        # Palette for legacy TTY terminals (hardcoded colors)
-        tty_color_map = {
-            Token.Keyword: curses.color_pair(2),
-            Token.Keyword.Constant: curses.color_pair(2),
-            Token.Keyword.Declaration: curses.color_pair(2),
-            Token.Keyword.Namespace: curses.color_pair(2),
-            Token.Keyword.Pseudo: curses.color_pair(2),
-            Token.Keyword.Reserved: curses.color_pair(2),
-            Token.Keyword.Type: curses.color_pair(2),
-            Token.Name.Builtin: curses.color_pair(7),
-            Token.Name.Function: curses.color_pair(3),
-            Token.Name.Class: curses.color_pair(4),
-            Token.Name.Decorator: curses.color_pair(5),
-            Token.Name.Exception: curses.color_pair(8) | curses.A_BOLD,
-            Token.Name.Variable: curses.color_pair(6),
-            Token.Name.Attribute: curses.color_pair(6),
-            Token.Name.Tag: curses.color_pair(5),
-            Token.Literal.String: curses.color_pair(3),
-            Token.Literal.String.Doc: curses.color_pair(1),
-            Token.Literal.String.Interpol: curses.color_pair(3),
-            Token.Literal.String.Escape: curses.color_pair(5),
-            Token.Literal.String.Backtick: curses.color_pair(3),
-            Token.Literal.String.Delimiter: curses.color_pair(3),
-            Token.Literal.Number: curses.color_pair(4),
-            Token.Literal.Number.Float: curses.color_pair(4),
-            Token.Literal.Number.Hex: curses.color_pair(4),
-            Token.Literal.Number.Integer: curses.color_pair(4),
-            Token.Literal.Number.Oct: curses.color_pair(4),
-            Token.Comment: curses.color_pair(1),
-            Token.Comment.Multiline: curses.color_pair(1),
-            Token.Comment.Preproc: curses.color_pair(1),
-            Token.Comment.Special: curses.color_pair(1) | curses.A_BOLD,
-            Token.Operator: curses.color_pair(6),
-            Token.Operator.Word: curses.color_pair(2),
-            Token.Punctuation: curses.color_pair(6),
-            Token.Text: curses.color_pair(0),
-            Token.Text.Whitespace: curses.color_pair(0),
-            Token.Error: curses.color_pair(8) | curses.A_BOLD,
-            Token.Generic.Heading: curses.color_pair(5) | curses.A_BOLD,
-            Token.Generic.Subheading: curses.color_pair(5),
-            Token.Generic.Deleted: curses.color_pair(8),
-            Token.Generic.Inserted: curses.color_pair(4),
-            Token.Generic.Emph: curses.color_pair(3) | curses.A_BOLD,
-            Token.Generic.Strong: curses.color_pair(2) | curses.A_BOLD,
-            Token.Generic.Prompt: curses.color_pair(7),
-            Token.Generic.Output: curses.color_pair(0),
-        }
-
         # --- Choose which palette to use ---
-        token_color_map = (
-            semantic_color_map if self.is_256_color_terminal else tty_color_map
-        )
+        if self.is_256_color_terminal:
+            token_color_map = semantic_color_map
+        else:
+            # Palette for legacy TTY terminals (hardcoded colors).
+            token_color_map = {
+                Token.Keyword: curses.color_pair(2),
+                Token.Keyword.Constant: curses.color_pair(2),
+                Token.Keyword.Declaration: curses.color_pair(2),
+                Token.Keyword.Namespace: curses.color_pair(2),
+                Token.Keyword.Pseudo: curses.color_pair(2),
+                Token.Keyword.Reserved: curses.color_pair(2),
+                Token.Keyword.Type: curses.color_pair(2),
+                Token.Name.Builtin: curses.color_pair(7),
+                Token.Name.Function: curses.color_pair(3),
+                Token.Name.Class: curses.color_pair(4),
+                Token.Name.Decorator: curses.color_pair(5),
+                Token.Name.Exception: curses.color_pair(8) | curses.A_BOLD,
+                Token.Name.Variable: curses.color_pair(6),
+                Token.Name.Attribute: curses.color_pair(6),
+                Token.Name.Tag: curses.color_pair(5),
+                Token.Literal.String: curses.color_pair(3),
+                Token.Literal.String.Doc: curses.color_pair(1),
+                Token.Literal.String.Interpol: curses.color_pair(3),
+                Token.Literal.String.Escape: curses.color_pair(5),
+                Token.Literal.String.Backtick: curses.color_pair(3),
+                Token.Literal.String.Delimiter: curses.color_pair(3),
+                Token.Literal.Number: curses.color_pair(4),
+                Token.Literal.Number.Float: curses.color_pair(4),
+                Token.Literal.Number.Hex: curses.color_pair(4),
+                Token.Literal.Number.Integer: curses.color_pair(4),
+                Token.Literal.Number.Oct: curses.color_pair(4),
+                Token.Comment: curses.color_pair(1),
+                Token.Comment.Multiline: curses.color_pair(1),
+                Token.Comment.Preproc: curses.color_pair(1),
+                Token.Comment.Special: curses.color_pair(1) | curses.A_BOLD,
+                Token.Operator: curses.color_pair(6),
+                Token.Operator.Word: curses.color_pair(2),
+                Token.Punctuation: curses.color_pair(6),
+                Token.Text: curses.color_pair(0),
+                Token.Text.Whitespace: curses.color_pair(0),
+                Token.Error: curses.color_pair(8) | curses.A_BOLD,
+                Token.Generic.Heading: curses.color_pair(5) | curses.A_BOLD,
+                Token.Generic.Subheading: curses.color_pair(5),
+                Token.Generic.Deleted: curses.color_pair(8),
+                Token.Generic.Inserted: curses.color_pair(4),
+                Token.Generic.Emph: curses.color_pair(3) | curses.A_BOLD,
+                Token.Generic.Strong: curses.color_pair(2) | curses.A_BOLD,
+                Token.Generic.Prompt: curses.color_pair(7),
+                Token.Generic.Output: curses.color_pair(0),
+            }
 
         default_color = self.colors.get("default", curses.A_NORMAL)
 
@@ -1301,6 +1305,9 @@ class Ecli:
                 return [(line_content, default_color)]
 
             for token_type, text_value in raw_tokens:
+                text_value = text_value.rstrip("\r\n")
+                if not text_value:
+                    continue
                 color_attr = default_color
                 # Traverse up the token tree to find a matching color.
                 # E.g., Token.Keyword.Constant will match Token.Keyword if not defined itself.
@@ -1521,7 +1528,7 @@ class Ecli:
         # Detect by filename
         if self.filename and self.filename != "noname":
             try:
-                lexer = get_lexer_for_filename(self.filename, stripall=True)
+                lexer = get_lexer_for_filename(self.filename, stripall=False)
                 logging.debug(f"Pygments: Detected '{lexer.name}' by filename.")
                 return lexer
             except Exception:
@@ -1531,7 +1538,7 @@ class Ecli:
         content_sample = "\n".join(self.text[:200])[:10000]
         if content_sample.strip():
             try:
-                lexer = guess_lexer(content_sample, stripall=True)
+                lexer = guess_lexer(content_sample, stripall=False)
                 logging.debug(f"Pygments: Guessed '{lexer.name}' by content.")
                 return lexer
             except Exception:
@@ -4816,104 +4823,19 @@ class Ecli:
                 return True
 
             # 4. Detect file encoding and read content
-            lines: Optional[list[str]] = None
-            final_encoding_used: str = "utf-8"  # Default if all else fails
-
             try:
-                sample_size_for_chardet = 1024 * 20
-                raw_data_sample: bytes
+                raw_data: bytes
                 with self.safe_open(actual_filename_to_open, mode="rb") as f_binary:
-                    raw_data_sample = f_binary.read(sample_size_for_chardet)
+                    raw_data = f_binary.read()
 
-                if not raw_data_sample:
-                    logging.info(
-                        f"File '{actual_filename_to_open}' is empty or could not be read for chardet."
-                    )
-                    lines = [""]
-                    final_encoding_used = self.encoding
-                else:
-                    chardet_result = chardet.detect(raw_data_sample)
-                    encoding_guess = chardet_result.get("encoding")
-                    confidence = chardet_result.get("confidence", 0.0)
-                    logging.debug(
-                        f"Chardet detected encoding '{encoding_guess}' with confidence {confidence:.2f} "
-                        f"for '{actual_filename_to_open}'."
-                    )
-
-                    encodings_to_try_ordered: list[tuple[Optional[str], str]] = []
-                    if encoding_guess and confidence >= 0.75:
-                        encodings_to_try_ordered.append((encoding_guess, "strict"))
-
-                    # Add common fallbacks, ensuring UTF-8 is prominent
-                    common_fallbacks = [("utf-8", "strict"), ("latin-1", "strict")]
-                    if (
-                        encoding_guess
-                        and (encoding_guess, "replace") not in encodings_to_try_ordered
-                    ):
-                        # Try detected encoding with 'replace' if strict fails for it or if confidence was low
-                        if not (encoding_guess and confidence >= 0.75):
-                            encodings_to_try_ordered.append((encoding_guess, "replace"))
-
-                    for enc_fb, err_fb in common_fallbacks:
-                        if (enc_fb, err_fb) not in encodings_to_try_ordered:
-                            encodings_to_try_ordered.append((enc_fb, err_fb))
-
-                    # Final absolute fallback
-                    if ("utf-8", "replace") not in encodings_to_try_ordered:
-                        encodings_to_try_ordered.append(("utf-8", "replace"))
-
-                    seen_enc_err_pairs = set()
-                    unique_encodings_to_try = []
-                    for enc, err_handling in encodings_to_try_ordered:
-                        if (
-                            enc and (enc, err_handling) not in seen_enc_err_pairs
-                        ):  # Ensure enc is not None
-                            unique_encodings_to_try.append((enc, err_handling))
-                            seen_enc_err_pairs.add((enc, err_handling))
-                        elif (
-                            not enc
-                            and ("utf-8", err_handling) not in seen_enc_err_pairs
-                        ):  # If chardet returns None for encoding
-                            unique_encodings_to_try.append(
-                                ("utf-8", err_handling)
-                            )  # Default to utf-8
-                            seen_enc_err_pairs.add(("utf-8", err_handling))
-
-                    for enc_attempt, error_policy in unique_encodings_to_try:
-                        try:
-                            logging.debug(
-                                f"Attempting to read '{actual_filename_to_open}' with encoding '{enc_attempt}' \
-                                    (errors='{error_policy}')"
-                            )
-                            with self.safe_open(
-                                actual_filename_to_open,
-                                "r",
-                                encoding=enc_attempt,
-                                errors=error_policy,
-                            ) as f_text:
-                                lines = f_text.read().splitlines()
-                            final_encoding_used = (
-                                enc_attempt if enc_attempt else "utf-8"
-                            )
-                            logging.info(
-                                f"Successfully read '{actual_filename_to_open}' using encoding '{final_encoding_used}' \
-                                    with errors='{error_policy}'."
-                            )
-                            break
-                        except (UnicodeDecodeError, OSError, LookupError) as e_read:
-                            logging.warning(
-                                f"Failed to read '{actual_filename_to_open}' with encoding '{enc_attempt}' \
-                                    (errors='{error_policy}'): {e_read}"
-                            )
-
-                if lines is None:
-                    self._set_status_message(
-                        f"Error reading '{os.path.basename(actual_filename_to_open)}': Could not decode content."
-                    )
-                    logging.error(
-                        f"All attempts to read and decode '{actual_filename_to_open}' failed."
-                    )
-                    return True
+                raw_text, final_encoding_used = detect_and_decode_text(raw_data)
+                lines = split_text_preserving_content(raw_text)
+                self._file_had_final_newline = raw_text.endswith(("\n", "\r"))
+                logging.info(
+                    "Successfully read '%s' using encoding '%s'.",
+                    actual_filename_to_open,
+                    final_encoding_used,
+                )
 
             except Exception as e_detect_read:
                 self._set_status_message(
@@ -4924,14 +4846,14 @@ class Ecli:
                 )
                 return True
 
-            self.text = lines if lines is not None else [""]
+            self.text = lines
             self.filename = actual_filename_to_open
             self.modified = False
+            self._file_loaded_from_disk = True
             self.encoding = final_encoding_used
 
             self.set_initial_cursor_position()
             self.history.clear()
-            self._ensure_trailing_newline()
             self._set_status_message(
                 f"Opened '{os.path.basename(self.filename)}' (enc: {self.encoding}, {len(self.text)} lines)"
             )
@@ -5018,6 +4940,10 @@ class Ecli:
                 f"No write permissions for '{os.path.basename(self.filename)}' or its directory."
             )
             return True  # Status changed
+
+        if not self.modified:
+            self._set_status_message(f"Saved to {os.path.basename(self.filename)}")
+            return self.status_message != original_status
 
         # Attempt to write the file to the existing path
         try:
@@ -5230,13 +5156,21 @@ class Ecli:
         # Create a copy for safe modification
         lines_to_save = list(self.text)
 
-        # If the last line is empty and the second-to-last is not, remove it for saving
-        if len(lines_to_save) > 1 and not lines_to_save[-1] and lines_to_save[-2]:
-            lines_to_save.pop()
-        elif len(lines_to_save) == 1 and not lines_to_save[0]:
-            # If the file contains only one empty line (our technical one)
-            lines_to_save = []  # Save as an empty file
-        content_to_write = os.linesep.join(lines_to_save)
+        if getattr(self, "_file_loaded_from_disk", False):
+            if len(lines_to_save) == 1 and not lines_to_save[0]:
+                content_to_write = ""
+            else:
+                content_to_write = os.linesep.join(lines_to_save)
+                if getattr(self, "_file_had_final_newline", False):
+                    content_to_write += os.linesep
+        else:
+            # If the last line is empty and the second-to-last is not, remove it for saving
+            if len(lines_to_save) > 1 and not lines_to_save[-1] and lines_to_save[-2]:
+                lines_to_save.pop()
+            elif len(lines_to_save) == 1 and not lines_to_save[0]:
+                # If the file contains only one empty line (our technical one)
+                lines_to_save = []  # Save as an empty file
+            content_to_write = os.linesep.join(lines_to_save)
 
         try:
             with self.safe_open(
@@ -5244,7 +5178,9 @@ class Ecli:
             ) as f:
                 text_f = cast(TextIO, f)
                 text_f.write(content_to_write)
-                if content_to_write:
+                if content_to_write and not getattr(
+                    self, "_file_loaded_from_disk", False
+                ):
                     text_f.write(os.linesep)
 
             logging.debug(f"Successfully wrote to '{target_filename}'")
@@ -5256,6 +5192,8 @@ class Ecli:
                     self.git.update_git_info()
 
             self.modified = False
+            self._file_loaded_from_disk = True
+            self._file_had_final_newline = content_to_write.endswith(os.linesep)
             self.detect_language()
 
             # Update Git information as file state on disk has changed

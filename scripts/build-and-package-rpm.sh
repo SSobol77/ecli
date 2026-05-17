@@ -21,7 +21,7 @@
 #   3) Builds a standalone binary via PyInstaller (uses packaging/pyinstaller/ecli.spec if present).
 #   4) Stages a minimal FHS payload for RPM.
 #   5) Builds .rpm with FPM, places artifacts under releases/<version>/.
-#   6) Normalizes file name to ecli_<version>_linux_<arch>.rpm and generates .sha256.
+#   6) Normalizes file name to ecli_<version>_<platform>_<arch>.rpm and generates .sha256.
 #
 # Requirements in the build environment:
 #   - python3.11 + pip, pyinstaller
@@ -55,6 +55,8 @@ case "${RAW_ARCH}" in
   aarch64|arm64) NORMALIZED_ARCH="arm64" ;;
   *) NORMALIZED_ARCH="${RAW_ARCH}" ;;
 esac
+RPM_PLATFORM_LABEL="${RPM_PLATFORM_LABEL:-linux}"
+RPM_DEPENDS="${RPM_DEPENDS:-ncurses-libs;libyaml}"
 
 # ------------------------------------------------------------------------------
 # Read version from pyproject.toml (works on Py 3.10/3.11)
@@ -116,6 +118,13 @@ need fpm
 need rpmbuild    # provided by rpm-build
 need gzip
 
+RPM_DEPEND_ARGS=()
+IFS=";" read -r -a RPM_DEPEND_LIST <<< "${RPM_DEPENDS}"
+for dep in "${RPM_DEPEND_LIST[@]}"; do
+  [[ -n "${dep}" ]] || continue
+  RPM_DEPEND_ARGS+=(--depends "${dep}")
+done
+
 # ------------------------------------------------------------------------------
 # Build binary with PyInstaller
 # ------------------------------------------------------------------------------
@@ -165,20 +174,20 @@ if [[ -f "packaging/linux/fpm-common/${PACKAGE_NAME}.desktop" ]]; then
 else
   cat > "${APPS_DIR}/${PACKAGE_NAME}.desktop" <<EOF
 [Desktop Entry]
+Type=Application
 Name=ECLI
-Comment=Fast terminal code editor
+Comment=Terminal-first engineering operations workbench
 Exec=${PACKAGE_NAME}
 Icon=${PACKAGE_NAME}
 Terminal=true
-Type=Application
-Categories=Development;TextEditor;
+Categories=Development;IDE;Utility;
 StartupNotify=false
 EOF
 fi
 
 # Icon (optional)
-if [[ -f "img/logo_m.png" ]]; then
-  install -m 0644 "img/logo_m.png" "${ICON_DIR}/${PACKAGE_NAME}.png"
+if [[ -f "src/ecli/assets/ecli.png" ]]; then
+  install -m 0644 "src/ecli/assets/ecli.png" "${ICON_DIR}/${PACKAGE_NAME}.png"
 fi
 
 # Docs (gzip README/LICENSE if present)
@@ -231,8 +240,7 @@ fpm -s dir -t rpm \
   --category "${CATEGORY}" \
   --rpm-os linux \
   --rpm-summary "Terminal DevOps editor with AI and Git integration" \
-  --depends "ncurses-libs" \
-  --depends "libyaml" \
+  "${RPM_DEPEND_ARGS[@]}" \
   --rpm-auto-add-directories \
   --after-install "packaging/linux/fpm-common/postinst" \
   --before-remove "packaging/linux/fpm-common/prerm" \
@@ -248,7 +256,7 @@ ACTUAL_RPM="$(ls -1 "${RELEASES_DIR}"/${PACKAGE_NAME}-*.rpm 2>/dev/null | head -
 # ------------------------------------------------------------------------------
 # Normalize file name and generate SHA256
 # ------------------------------------------------------------------------------
-NORMALIZED_RPM="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_linux_${NORMALIZED_ARCH}.rpm"
+NORMALIZED_RPM="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_${RPM_PLATFORM_LABEL}_${NORMALIZED_ARCH}.rpm"
 if [[ "${ACTUAL_RPM}" != "${NORMALIZED_RPM}" ]]; then
   cp -f "${ACTUAL_RPM}" "${NORMALIZED_RPM}"
 fi

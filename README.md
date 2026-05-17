@@ -51,30 +51,32 @@ See the LICENSE file in the project root for full license text.
 
 ## 🚀 About ECLI
 
-**ECLI** (Editor CLI) is a terminal-first engineering operations workbench. It
-combines a curses-based editor with right-side workflow panels and a typed
-service foundation for configuration, project discovery, command-plan previews,
-policy checks, audit logging, privileged-action refusal paths, and read-only
-system diagnostics.
+**ECLI** (Editor CLI) is a terminal-first engineering operations workbench. It combines a curses-based editor with right-side workflow panels and a typed service foundation for configuration, project discovery, command-plan previews,policy checks, audit logging, privileged-action refusal paths, and read-only system diagnostics.
 
-The v0.2.0 Services Foundation release keeps the editor as the default product
-surface while making the new services visible through TUI panels and a minimal
-read-only CLI. It does not execute remediation, apply command plans, launch
-VMLab runtimes, or perform real privileged operations.
+The v0.2.1 release keeps the Services Foundation editor surface intact and hardens release packaging, source-text preservation, and cross-platform install paths. It does not execute remediation, apply command plans, launch VMLab runtimes, or perform real privileged operations.
 
 ### ✨ Key Features
 
-
 * 🧠 **AI Code Assistant** - F7 panel for code-generation and refactoring help when a user-provided API key is configured
+
 * 🩺 **System Doctor** - F8 read-only diagnostics panel with structured findings and preview-only remediation plans
+
 * 🧭 **Services Panel** - right-side visibility into the Phase 1 service composition root
+
 * 📋 **Command Plan Preview** - draft plans from eligible diagnostics, exportable as JSON or Markdown without execution
+
 * 📂 **File Manager** - F10 project navigation and file preview workflow
+
 * 🌱 **Git Panel** - F9 repository panel for existing Git workflows
+
 * 🔎 **Diagnostics/Lint** - F4 diagnostics and lint panel
+
 * ❓ **Help** - F1 help panel with current keybindings
+
 * 🌈 **Syntax Highlighting** - terminal highlighting for common source formats
+
 * 📝 **LSP Integration** - Language Server Protocol support where configured
+
 * 🔄 **Cross-Platform Packaging** - PyPI, Linux, FreeBSD, macOS, and Windows release artifacts
 
 ---
@@ -83,27 +85,43 @@ VMLab runtimes, or perform real privileged operations.
 
 ### Fastest Installation (Pre-built Packages)
 
-Download and install a pre-compiled package for your platform:
+Download and install a pre-compiled package for your platform when available:
 
-```bash
+```shell
 # Debian/Ubuntu
-sudo apt install ./ecli_0.2.0_linux_x86_64.deb
+sudo apt install ./ecli_<version>_linux_x86_64.deb
 
-# Fedora/RHEL/Rocky
-sudo dnf install ./ecli_0.2.0_linux_x86_64.rpm
+# Fedora/RHEL/Rocky/Alma
+sudo dnf install ./ecli_<version>_linux_x86_64.rpm
+
+# SUSE/openSUSE
+sudo zypper install ./ecli_<version>_opensuse_x86_64.rpm
+
+# Arch Linux
+sudo pacman -U ./ecli_<version>_arch_x86_64.pkg.tar.zst
+
+# Slackware
+sudo installpkg ecli_<version>_slackware_x86_64.txz
+
+# NixOS / Nix
+nix run .
+
+# AppImage
+chmod +x ./ecli_<version>_linux_x86_64.AppImage
+./ecli_<version>_linux_x86_64.AppImage
 
 # Windows (PowerShell)
-.\ecli_0.2.0_win_x86_64_setup.exe
-# Portable alternative: .\ecli_0.2.0_win_x86_64.exe
+.\ecli_<version>_win_x86_64_setup.exe
+# Portable alternative: .\ecli_<version>_win_x86_64.exe
 # See docs/install/windows.md for checksum verification and SmartScreen notes.
 
 # macOS
-open ecli_0.2.0_macos_universal2.dmg
+open ecli_<version>_macos_universal2.dmg
 # First launch is blocked by Gatekeeper; see docs/install/macos.md
 # for the one-time "Open Anyway" or xattr workaround.
 ```
 
-All packages available at [GitHub Releases](https://github.com/SSobol77/ecli/releases)
+Release artifacts are published at [GitHub Releases](https://github.com/SSobol77/ecli/releases) when available.
 
 ### Run from Source
 
@@ -117,14 +135,28 @@ make install
 make run
 ```
 
-### Install via Python Package Manager
+### Install from PyPI
 
 ```bash
-pip install ecli-editor
+sudo apt update
+sudo apt install pipx
+pipx ensurepath
+pipx install ecli-editor
+ecli
 ```
 
-The Python distribution name is `ecli-editor`; the import package remains
-`ecli`, and the installed CLI command remains `ecli`.
+The Python distribution name is `ecli-editor`; the import package remains `ecli`, and the installed CLI command remains `ecli`.
+
+Optional Linux desktop launcher and icon integration after `pipx` or `pip` installation:
+
+```bash
+ecli-install-desktop-entry
+```
+
+This installs a user-level launcher at
+`~/.local/share/applications/ecli.desktop` and the icon at
+`~/.local/share/icons/hicolor/256x256/apps/ecli.png`.
+It does not require `sudo` and is safe to run again.
 
 ---
 
@@ -139,6 +171,7 @@ For detailed platform-specific installation instructions, system dependencies, a
 These dependencies are required for terminal UI, clipboard integration, YAML acceleration, and UTF-8 support.
 
 **Debian/Ubuntu:**
+
 ```bash
 sudo apt update && sudo apt install \
   libncurses6 libncursesw6 libtinfo6 \
@@ -147,42 +180,87 @@ sudo apt update && sudo apt install \
   libyaml-dev xclip xsel
 ```
 
-**Fedora/CentOS/RHEL:**
+**Fedora/RHEL/Rocky/Alma:**
+
 ```bash
 sudo dnf install ncurses ncurses-devel libyaml-devel xclip xsel
 ```
 
+**SUSE/openSUSE runtime:**
+
+```bash
+sudo zypper install ncurses6 libyaml-0-2 xclip xsel
+```
+
+For local RPM/package builds on SUSE/openSUSE:
+
+```bash
+sudo zypper install python3 python3-pip python3-devel gcc make rpm-build
+```
+
 **Arch Linux:**
+
 ```bash
 sudo pacman -S ncurses libyaml xclip xsel
 ```
 
+**Slackware:**
+
+Install these from the official Slackware series or SlackBuilds according to
+your Slackware release:
+
+```sh
+ncurses
+libyaml
+xclip or xsel, if available
+```
+
+For `.txz` package builds, the build host also needs `makepkg`, `tar`, `xz`,
+`python3`, PyInstaller, and the project Python build dependencies.
+
 **FreeBSD:**
-```bash
+
+```sh
 sudo pkg install ncurses libyaml xclip xsel
 ```
 
 **macOS:**
-```bash
+
+```shell
 brew install ncurses libyaml
 ```
+
+**Windows:**
+
+Prebuilt installer and portable `.exe` artifacts do not require a separate Python installation. Windows Terminal or another modern terminal is recommended, PowerShell is used for checksum examples, and Git is optional for repository workflows. The official installer normally bundles the required runtime components; install the Visual C++ runtime only if a release note says that a specific artifact requires it.
+
+For source/development builds on Windows, install Python 3.11+, Git,
+PowerShell 7, NSIS for installer builds, and Visual Studio Build Tools only when native dependency or build-tool compilation is required.
 
 #### 2. Install ECLI
 
 **Option A: Pre-built Packages (Recommended)**
 
-Download from [GitHub Releases](https://github.com/SSobol77/ecli/releases):
+Download from [GitHub Releases](https://github.com/SSobol77/ecli/releases) when available:
 
-- **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL), `.tar.gz`
-- **FreeBSD**: `.pkg`
-- **macOS**: `.dmg` ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/macos.md))
-- **Windows**: `.exe` installer or portable executable ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/windows.md))
-- **Release metadata**: CycloneDX SBOM and SHA256 sidecars for release artifacts
+* **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL and SUSE/openSUSE), Arch `pkg.tar.zst`, Slackware `.txz`, AppImage
+
+* **FreeBSD**: `.pkg`
+
+* **macOS**: `.dmg` ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/macos.md))
+
+* **Windows**: `.exe` installer or portable executable ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/windows.md))
+
+* **Release metadata**: CycloneDX SBOM and SHA256 sidecars for release artifacts
 
 **Option B: PyPI (Python Package Index)**
 
 ```bash
-pip install ecli-editor
+sudo apt update
+sudo apt install pipx
+pipx ensurepath
+pipx install ecli-editor
+ecli
 ```
 
 Import and launch names are unchanged:
@@ -195,7 +273,63 @@ import ecli
 ecli
 ```
 
-Requires Python 3.11+ and system dependencies listed above.
+For isolated development or testing:
+
+```bash
+python3 -m venv ~/.local/ecli-env
+source ~/.local/ecli-env/bin/activate
+pip install ecli-editor
+ecli
+```
+
+On Debian 13 and newer Ubuntu releases, direct system-level `pip install` may fail with `externally-managed-environment`. Use `pipx`, a virtual environment, or the official `.deb` package from GitHub Releases when available.
+
+Avoid `pip install --break-system-packages ecli-editor` unless you fully understand the apt package-management consequences.
+
+Requires Python 3.11+ and system dependencies listed above. Native packages may install launcher integration automatically; `pip`/`pipx` installs use `ecli-install-desktop-entry` for explicit Linux desktop integration.
+
+#### Linux Package Commands
+
+Use release artifacts from GitHub Releases when available. Exact artifact names include version and architecture.
+
+```bash
+# Debian / Ubuntu
+sudo apt install ./ecli_<version>_linux_x86_64.deb
+
+# Fedora / RHEL
+sudo dnf install ./ecli_<version>_linux_x86_64.rpm
+
+# SUSE / openSUSE
+sudo zypper install ./ecli_<version>_opensuse_x86_64.rpm
+
+# Arch Linux release artifact
+sudo pacman -U ./ecli_<version>_arch_x86_64.pkg.tar.zst
+
+# Arch Linux local PKGBUILD
+cd packaging/arch
+makepkg -si
+
+# Slackware
+sudo installpkg ecli_<version>_slackware_x86_64.txz
+sudo upgradepkg ecli_<version>_slackware_x86_64.txz
+sudo removepkg ecli
+
+# NixOS / Nix
+nix run .
+nix build .
+nix profile install .
+
+# FreeBSD
+sudo pkg add ./ecli_<version>_freebsd_x86_64.pkg
+
+# AppImage
+chmod +x ./ecli_<version>_linux_x86_64.AppImage
+./ecli_<version>_linux_x86_64.AppImage
+```
+
+The Arch package is named `ecli-editor` and installs the `ecli` command. Raw `makepkg` output may use `ecli-editor-<version>-1-<arch>.pkg.tar.zst`;
+
+the ECLI release script normalizes it to `ecli_<version>_arch_<arch>.pkg.tar.zst` for GitHub Releases. AUR publishing is not implemented by this repository yet. If openSUSE dependencies are missing, use `zypper` to resolve them from configured repositories.
 
 ---
 
@@ -203,10 +337,13 @@ Requires Python 3.11+ and system dependencies listed above.
 
 ### Prerequisites
 
-- Python 3.11+
-- Git
-- System dependencies (see above)
-- `uv` package manager (optional, for faster builds)
+* Python 3.11+
+
+* Git
+
+* System dependencies (see above)
+
+* `uv` package manager (optional, for faster builds)
 
 ### Build Steps
 
@@ -229,8 +366,9 @@ make help              # See all available build targets
 
 ECLI features a comprehensive multi-platform build system. For detailed information:
 
-- **Build from Source**: Read [docs/contributor/build-from-source.md](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md)
-- **Packaging Flows**: See [docs/release/packaging-flows.md](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md)
+* **Build from Source**: Read [docs/contributor/build-from-source.md](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md)
+
+* **Packaging Flows**: See [docs/release/packaging-flows.md](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md)
 
 #### Common Build Commands
 
@@ -264,8 +402,7 @@ ecli [options] [file]
 
 ### Keyboard Shortcuts
 
-Master ECLI with these essential keyboard shortcuts. Press `F1` anytime inside
-the editor to open the help screen.
+Master ECLI with these essential keyboard shortcuts. Press `F1` anytime inside the editor to open the help screen.
 
 #### Basic Editing
 
@@ -318,9 +455,7 @@ the editor to open the help screen.
 | `Insert` | Toggle Insert / Overwrite mode |
 | `F12` | Switch focus between editor windows and panels |
 
-The right side of the editor hosts workflow panels. The v0.2.0 service panels
-are read-only or preview-only: System Doctor does not mutate host state, Command
-Plan previews do not execute, and the Services panel reports composition status.
+The right side of the editor hosts workflow panels. The v0.2.1 service panels are read-only or preview-only: System Doctor does not mutate host state, Command Plan previews do not execute, and the Services panel reports composition status.
 
 ### Minimal Service CLI
 
@@ -331,8 +466,7 @@ python3 -m ecli
 python3 -m ecli pyproject.toml
 ```
 
-The explicit service flags provide read-only inspection without bypassing the
-TUI model:
+The explicit service flags provide read-only inspection without bypassing the TUI model:
 
 ```bash
 python3 -m ecli --services
@@ -340,9 +474,7 @@ python3 -m ecli --doctor
 python3 -m ecli --plan-preview
 ```
 
-Use `--json` for deterministic JSON output where supported. These commands are
-inspection and preview surfaces only; they do not execute plans, run privileged
-commands, install packages, start VMLab, or apply remediation.
+Use `--json` for deterministic JSON output where supported. These commands are inspection and preview surfaces only; they do not execute plans, run privileged commands, install packages, start VMLab, or apply remediation.
 
 ### AI Configuration
 
@@ -352,9 +484,7 @@ AI features require user-provided provider credentials. API keys belong in:
 ~/.config/ecli/.env
 ```
 
-Provider selection belongs in `config.toml`, not in `.env`. If a selected
-provider key is missing, the AI panel reports a normal configuration message
-instead of a Python traceback.
+Provider selection belongs in `config.toml`, not in `.env`. If a selected provider key is missing, the AI panel reports a normal configuration message instead of a Python traceback.
 
 For comprehensive keybindings and usage guide, see [Getting Started](https://github.com/SSobol77/ecli/blob/main/docs/contributor/development-setup.md).
 
@@ -365,53 +495,80 @@ For comprehensive keybindings and usage guide, see [Getting Started](https://git
 Complete documentation is organized by audience:
 
 ### For Users
-- [Installation Guide](https://github.com/SSobol77/ecli/blob/main/docs/contributor/install.md) - Detailed setup instructions
-- [Build from Source](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md) - Build system quick start
-- [Getting Started](https://github.com/SSobol77/ecli/blob/main/docs/contributor/development-setup.md) - First steps with ECLI
+
+* [Installation Guide](https://github.com/SSobol77/ecli/blob/main/docs/contributor/install.md) - Detailed setup instructions
+
+* [Build from Source](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md) - Build system quick start
+
+* [Getting Started](https://github.com/SSobol77/ecli/blob/main/docs/contributor/development-setup.md) - First steps with ECLI
 
 ### For Developers
-- [Development Setup](https://github.com/SSobol77/ecli/blob/main/docs/contributor/development-setup.md) - Development environment
-- [Architecture Overview](https://github.com/SSobol77/ecli/blob/main/docs/architecture/current-architecture.md) - System design
-- [Packaging Flows](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md) - Release packaging overview
-- [Build from Source](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md) - Local build commands
-- [Contributor Guide](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md) - Contributing to ECLI
+
+* [Development Setup](https://github.com/SSobol77/ecli/blob/main/docs/contributor/development-setup.md) - Development environment
+
+* [Architecture Overview](https://github.com/SSobol77/ecli/blob/main/docs/architecture/current-architecture.md) - System design
+
+* [Packaging Flows](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md) - Release packaging overview
+
+* [Build from Source](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md) - Local build commands
+
+* [Contributor Guide](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md) - Contributing to ECLI
 
 ### For System Administrators
-- [Supported Platforms](https://github.com/SSobol77/ecli/blob/main/docs/product/supported-platforms.md) - Platform matrix
-- [Configuration Guide](https://github.com/SSobol77/ecli/blob/main/docs/config/README.md) - Configuration options
-- [Deployment Guide](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md) - Production deployment
+
+* [Supported Platforms](https://github.com/SSobol77/ecli/blob/main/docs/product/supported-platforms.md) - Platform matrix
+
+* [Configuration Guide](https://github.com/SSobol77/ecli/blob/main/docs/config/README.md) - Configuration options
+
+* [Deployment Guide](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md) - Production deployment
 
 ### Reference
-- [API Documentation](https://github.com/SSobol77/ecli/blob/main/docs/extensions/plugin-api.md) - Plugin development
-- [Architecture Details](https://github.com/SSobol77/ecli/blob/main/docs/architecture/README.md) - System internals
-- [Release Process](https://github.com/SSobol77/ecli/blob/main/docs/release/release-process.md) - Release management
-- [Quality Standards](https://github.com/SSobol77/ecli/blob/main/docs/quality/README.md) - Testing and quality gates
+
+* [API Documentation](https://github.com/SSobol77/ecli/blob/main/docs/extensions/plugin-api.md) - Plugin development
+
+* [Architecture Details](https://github.com/SSobol77/ecli/blob/main/docs/architecture/README.md) - System internals
+
+* [Release Process](https://github.com/SSobol77/ecli/blob/main/docs/release/release-process.md) - Release management
+
+* [Quality Standards](https://github.com/SSobol77/ecli/blob/main/docs/quality/README.md) - Testing and quality gates
 
 ---
 
 ## 🏗️ Architecture
 
-ECLI v0.2.0 keeps the existing editor/TUI behavior and introduces the Services
-Foundation as typed, testable service-layer infrastructure:
+ECLI v0.2.1 keeps the existing editor/TUI behavior and introduces the Services Foundation as typed, testable service-layer infrastructure:
 
-- **Core Editor**: curses-based terminal editor with async task integration
-- **Right-Side Panels**: Help, Diagnostics/Lint, AI Code Assistant, System Doctor, Git, File Manager, Services, and Command Plan previews
-- **ConfigService**: typed layered configuration loading
-- **ProjectService**: deterministic project discovery and path normalization
-- **CommandPlanService**: draft command-plan models and preview/export behavior
-- **BuiltInPolicyEngine**: deterministic built-in policy evaluation rules
-- **AuditLogService**: append-only JSONL audit records with mandatory redaction
-- **PrivilegedActionService**: refusal-only/dry-run-only skeleton for future elevated operations
-- **SystemDoctor**: read-only diagnostic skeleton with draft remediation-plan generation
-- **ServiceRegistry**: explicit composition root without global service-locator state
+* **Core Editor**: curses-based terminal editor with async task integration
 
-Safety boundaries for v0.2.0:
+* **Right-Side Panels**: Help, Diagnostics/Lint, AI Code Assistant, System Doctor, Git, File Manager, Services, and Command Plan previews
 
-- SystemDoctor is read-only.
-- CommandPlan output is draft/preview-only.
-- PrivilegedActionService refuses real execution in this release.
-- Service panels are visible in the UI but do not execute remediation.
-- VMLab runtime behavior is not included in v0.2.0.
+* **ConfigService**: typed layered configuration loading
+
+* **ProjectService**: deterministic project discovery and path normalization
+
+* **CommandPlanService**: draft command-plan models and preview/export behavior
+
+* **BuiltInPolicyEngine**: deterministic built-in policy evaluation rules
+
+* **AuditLogService**: append-only JSONL audit records with mandatory redaction
+
+* **PrivilegedActionService**: refusal-only/dry-run-only skeleton for future elevated operations
+
+* **SystemDoctor**: read-only diagnostic skeleton with draft remediation-plan generation
+
+* **ServiceRegistry**: explicit composition root without global service-locator state
+
+**Safety boundaries for v0.2.1:**
+
+* SystemDoctor is read-only.
+
+* CommandPlan output is draft/preview-only.
+
+* PrivilegedActionService refuses real execution in this release.
+
+* Service panels are visible in the UI but do not execute remediation.
+
+* VMLab runtime behavior is not included in v0.2.1.
 
 For detailed architecture information, see [Architecture Overview](https://github.com/SSobol77/ecli/blob/main/docs/architecture/current-architecture.md).
 
@@ -422,12 +579,19 @@ For detailed architecture information, see [Architecture Overview](https://githu
 We welcome contributions! Here's how to get started:
 
 1. **Fork** the repository
+
 2. **Clone** your fork: `git clone https://github.com/YOUR_USERNAME/ecli.git`
+
 3. **Create** a feature branch: `git checkout -b feature/your-feature`
+
 4. **Make** your changes
+
 5. **Test** your changes: `make clean && make install && make run`
+
 6. **Commit** with clear messages
+
 7. **Push** to your fork
+
 8. **Open** a Pull Request
 
 For detailed contribution guidelines, see [CONTRIBUTING](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md).
@@ -458,7 +622,7 @@ black src/
 
 ### Project Structure
 
-```
+```txt
 ecli/
 ├── src/ecli/              # Main source code
 │   ├── core/              # Core editor functionality
@@ -477,28 +641,41 @@ ecli/
 
 Found a bug? Please help us by opening an issue on GitHub:
 
-- [Issue Tracker](https://github.com/SSobol77/ecli/issues)
-- Include: OS, Python version, ECLI version, and reproduction steps
-- Check [Known Issues](https://github.com/SSobol77/ecli/issues?q=label%3Aknown-issue) first
+* [Issue Tracker](https://github.com/SSobol77/ecli/issues)
+
+* Include: OS, Python version, ECLI version, and reproduction steps
+
+* Check [Known Issues](https://github.com/SSobol77/ecli/issues?q=label%3Aknown-issue) first
 
 ---
 
 ## 📋 Requirements
 
 ### Minimum Requirements
-- **OS**: Linux, macOS, FreeBSD, or Windows
-- **Python**: 3.11 or higher
-- **Terminal**: Supports 256 colors and UTF-8
+
+* **OS**: Linux, macOS, FreeBSD, or Windows
+
+* **Python**: 3.11 or higher
+
+* **Terminal**: Supports 256 colors and UTF-8
 
 ### Supported Platforms
-- Ubuntu 20.04 LTS and newer
-- Debian 11 and newer
-- Fedora 36 and newer
-- RHEL/CentOS/Rocky 8.0 and newer
-- Arch Linux (current)
-- FreeBSD 14.0 and newer
-- macOS 12 and newer
-- Windows 10/11
+
+* Ubuntu 20.04 LTS and newer
+
+* Debian 11 and newer
+
+* Fedora 36 and newer
+
+* RHEL/CentOS/Rocky 8.0 and newer
+
+* Arch Linux (current)
+
+* FreeBSD 14.0 and newer
+
+* macOS 12 and newer
+
+* Windows 10/11
 
 See [Supported Platforms](https://github.com/SSobol77/ecli/blob/main/docs/product/supported-platforms.md) for detailed compatibility matrix.
 
@@ -512,21 +689,29 @@ ECLI is licensed under the [Apache License 2.0](https://github.com/SSobol77/ecli
 
 ## 🔗 Links
 
-- **Website**: https://www.ecli.io
-- **GitHub**: https://github.com/SSobol77/ecli
-- **Issues**: https://github.com/SSobol77/ecli/issues
-- **Discussions**: https://github.com/SSobol77/ecli/discussions
-- **PyPI**: https://pypi.org/project/ecli-editor/
-- **Releases**: https://github.com/SSobol77/ecli/releases
+* **Website**: <https://www.ecli.io>
+
+* **GitHub**: <https://github.com/SSobol77/ecli>
+
+* **Issues**: <https://github.com/SSobol77/ecli/issues>
+
+* **Discussions**: <https://github.com/SSobol77/ecli/discussions>
+
+* **PyPI**: <https://pypi.org/project/ecli-editor/>
+
+* **Releases**: <https://github.com/SSobol77/ecli/releases>
 
 ---
 
 ## 💬 Support
 
-- **Documentation**: Read [Build from Source](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md) and [Packaging Flows](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md)
-- **Community**: GitHub Discussions
-- **Bugs**: GitHub Issues
-- **Development**: See [Contributing](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md)
+* **Documentation**: Read [Build from Source](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md) and [Packaging Flows](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md)
+
+* **Community**: GitHub Discussions
+
+* **Bugs**: GitHub Issues
+
+* **Development**: See [Contributing](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md)
 
 ---
 

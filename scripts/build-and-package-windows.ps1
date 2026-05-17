@@ -96,6 +96,7 @@ $buildRoot = Join-Path $projectRoot "build\windows"
 $distDir = Join-Path $buildRoot "dist"
 $workDir = Join-Path $buildRoot "work"
 $specPath = Join-Path $projectRoot "packaging\pyinstaller\ecli.spec"
+$iconPath = Join-Path $projectRoot "img\logo_m.ico"
 
 if (-not (Test-Path -LiteralPath $specPath)) {
   Write-Err "Missing canonical PyInstaller spec: $specPath"
@@ -145,6 +146,9 @@ $nsisDefines = @(
   "/DOUTFILE=$installerFullPath",
   "/DINPUT_EXE=$portableFullPath"
 )
+if (Test-Path -LiteralPath $iconPath) {
+  $nsisDefines += "/DICON_ICO=$iconPath"
+}
 & $makensis $nsisDefines $nsisScript
 
 if (-not (Test-Path -LiteralPath $installerPath)) {

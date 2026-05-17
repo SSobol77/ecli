@@ -30,6 +30,12 @@
 #   - no Apple Developer ID
 #   - no notarization
 #   - no stapling
+#
+# Icon policy:
+#   - The canonical PNG is packaged at src/ecli/assets/ecli.png.
+#   - A macOS .app bundle requires .icns; this script uses img/logo_m.icns when
+#     present and otherwise leaves the bundle icon unset rather than adding a
+#     non-deterministic conversion dependency.
 # ==============================================================================
 
 set -euo pipefail
@@ -175,7 +181,13 @@ if [ "${ECLI_BUILD_MACOS_APP:-0}" = "1" ]; then
   RES_DIR="${CONTENTS}/Resources"
   mkdir -p "$MACOS_DIR" "$RES_DIR"
   install -m 755 "$UNIVERSAL_BIN" "${MACOS_DIR}/ecli"
-  [ -f "img/logo_m.icns" ] && install -m 644 "img/logo_m.icns" "${RES_DIR}/AppIcon.icns"
+  if [ -f "img/logo_m.icns" ]; then
+    install -m 644 "img/logo_m.icns" "${RES_DIR}/AppIcon.icns"
+    ICON_PLIST_ENTRY='  <key>CFBundleIconFile</key><string>AppIcon</string>'
+  else
+    ICON_PLIST_ENTRY=''
+    err "No deterministic .icns asset found; macOS app icon is not set."
+  fi
   cat > "${CONTENTS}/Info.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -190,7 +202,7 @@ if [ "${ECLI_BUILD_MACOS_APP:-0}" = "1" ]; then
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>NSHighResolutionCapable</key><true/>
-  <key>CFBundleIconFile</key><string>AppIcon</string>
+${ICON_PLIST_ENTRY}
 </dict>
 </plist>
 EOF

@@ -906,7 +906,7 @@ Required schema:
   "source": "user",
   "details": {},
   "metadata": {
-    "ecli_version": "0.2.0",
+    "ecli_version": "0.2.1",
     "schema_revision": "audit-v1"
   }
 }

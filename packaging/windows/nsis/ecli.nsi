@@ -23,6 +23,11 @@ SetCompressorDictSize 32
 !ifndef OUTFILE
   !define OUTFILE "ecli_${VERSION}_win_x86_64_setup.exe"
 !endif
+!ifdef ICON_ICO
+  Icon "${ICON_ICO}"
+  !define MUI_ICON "${ICON_ICO}"
+  !define MUI_UNICON "${ICON_ICO}"
+!endif
 
 OutFile "${OUTFILE}"
 InstallDir "$PROGRAMFILES64\${COMPANY}\${APPNAME}"

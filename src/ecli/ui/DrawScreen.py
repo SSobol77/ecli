@@ -33,6 +33,7 @@ import logging
 import os
 import time
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 from wcwidth import wcwidth
 from ecli.utils.utils import CALM_BG_IDX, WHITE_FG_IDX, get_file_icon
@@ -42,7 +43,43 @@ if TYPE_CHECKING:
     from ecli.core.Ecli import Ecli
 
 
-## ================= сlass DrawScreen ==============================
+def prepare_visible_text_segment(
+    source: str,
+    cells_to_skip: int,
+    max_cells: int,
+    char_width: Callable[[str], int] | None = None,
+) -> str:
+    """Return the visible slice of a line without mutating or stripping it."""
+    if max_cells <= 0:
+        return ""
+
+    width_of = char_width or _default_char_width
+    skipped = 0
+    drawn = 0
+    visible: list[str] = []
+
+    for ch in source:
+        ch_width = width_of(ch)
+        if skipped + ch_width <= cells_to_skip:
+            skipped += ch_width
+            continue
+        if skipped < cells_to_skip < skipped + ch_width:
+            skipped += ch_width
+            continue
+        if drawn + ch_width > max_cells:
+            break
+        visible.append(ch)
+        drawn += ch_width
+
+    return "".join(visible)
+
+
+def _default_char_width(ch: str) -> int:
+    width = wcwidth(ch)
+    return width if width >= 0 else 1
+
+
+## ================= class DrawScreen ==============================
 class DrawScreen:
     """DrawScreen Class
     =========================
@@ -380,21 +417,12 @@ class DrawScreen:
                 logical_col_abs += token_disp_width
                 continue
 
-            # Cut left part safely (do not split a wide char).
-            visible_part = self._safe_cut_left(token_text, cells_cut_left)
-            if not visible_part:
-                logical_col_abs += token_disp_width
-                continue
-
-            # Cut right part to fit remaining screen width.
-            text_to_draw = ""
-            drawn_w = 0
-            for ch in visible_part:
-                char_w = self.editor.get_char_width(ch)
-                if drawn_w + char_w > visible_w:
-                    break
-                text_to_draw += ch
-                drawn_w += char_w
+            text_to_draw = prepare_visible_text_segment(
+                token_text,
+                cells_cut_left,
+                visible_w,
+                self.editor.get_char_width,
+            )
 
             if text_to_draw:
                 try:

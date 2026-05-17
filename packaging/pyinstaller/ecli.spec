@@ -25,19 +25,28 @@ project_root = Path(os.environ.get("ECLI_REPO_ROOT", os.getcwd())).resolve()
 entry_point = project_root / "main.py"
 src_dir = project_root / "src"
 config_file = project_root / "config.toml"
+asset_icon = src_dir / "ecli" / "assets" / "ecli.png"
+windows_icon = project_root / "img" / "logo_m.ico"
 
 if not entry_point.is_file():
     raise SystemExit(f"Missing PyInstaller entry point: {entry_point}")
 if not config_file.is_file():
     raise SystemExit(f"Missing PyInstaller data file: {config_file}")
+if not asset_icon.is_file():
+    raise SystemExit(f"Missing packaged icon asset: {asset_icon}")
 
 one_dir = os.environ.get("ECLI_PYINSTALLER_ONEDIR") == "1"
 build_macos_app = (
     sys.platform == "darwin" and os.environ.get("ECLI_BUILD_MACOS_APP") == "1"
 )
 
-datas = [(str(config_file), ".")]
+datas = [(str(config_file), "."), (str(asset_icon), "ecli/assets")]
 binaries = []
+exe_icon_kwargs = (
+    {"icon": str(windows_icon)}
+    if sys.platform == "win32" and windows_icon.is_file()
+    else {}
+)
 
 hiddenimports = [
     "ecli",
@@ -98,6 +107,7 @@ if one_dir or build_macos_app:
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
+        **exe_icon_kwargs,
     )
     coll = COLLECT(
         exe,
@@ -142,4 +152,5 @@ else:
         target_arch=None,
         codesign_identity=None,
         entitlements_file=None,
+        **exe_icon_kwargs,
     )
