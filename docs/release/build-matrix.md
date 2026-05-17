@@ -30,15 +30,18 @@ See the LICENSE file in the project root for full license text.
 
 - Linux packaging relies on FPM and platform-specific dependencies.
 
+- openSUSE/SUSE RPM builds require `python3`, `python3-pip`,
+  `python3-devel`, `gcc`, `make`, and `rpm-build`; runtime packages include  `ncurses6`, `libyaml-0-2`, and optional clipboard tools `xclip` or `xsel`.
+
 - Arch packaging requires `makepkg`; raw package names are normalized by the ECLI release script.
 
-- Slackware packaging requires Slackware `makepkg` and emits normalized ECLI `.txz` release names.
+- Slackware packaging requires Slackware `makepkg`, `tar`, `xz`, `python3`, PyInstaller, and project Python build dependencies. Runtime packages include `ncurses`, `libyaml`, and `xclip` or `xsel` when available for the target release.
 
 - Nix packaging requires flakes and nixpkgs inputs.
 
 - FreeBSD packaging requires native FreeBSD runtime context (host/VM/chroot pattern).
 
-- Windows installer path requires NSIS (`makensis`).
+- Windows installer path requires Python 3.11+, Git, PowerShell 7, and NSIS (`makensis`). Visual Studio Build Tools are required only when native dependencies or build tooling need local compilation.
 
 - macOS DMG path relies on `hdiutil` and Python tooling.
 

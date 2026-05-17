@@ -28,9 +28,41 @@ flowchart LR
 ## Step-by-Step Path
 
 1. Sync dependencies: `uv sync`
+
 2. Runtime check: `python main.py`
+
 3. Build/package by target artifact
+
 4. Verify output naming and checksums
+
+## Build Dependencies
+
+### SUSE / openSUSE
+
+Install the local RPM/package build toolchain:
+
+```bash
+sudo zypper install python3 python3-pip python3-devel gcc make rpm-build
+```
+
+Runtime dependency checks for installed packages use:
+
+```bash
+sudo zypper install ncurses6 libyaml-0-2 xclip xsel
+```
+
+### Slackware
+
+Slackware `.txz` package builds require a Slackware build host with `makepkg`, `tar`, `xz`, `python3`, PyInstaller, and the project Python build dependencies.
+
+Install `ncurses`, `libyaml`, and `xclip` or `xsel` from the official
+Slackware series or SlackBuilds according to the target release.
+
+### Windows
+
+Source and package builds on Windows require `Python 3.11+`, `Git`, and `PowerShell 7`. Installer builds additionally require NSIS.
+
+Visual Studio Build Tools are only required if native dependencies or build tooling need local compilation.
 
 ## Build Matrix
 

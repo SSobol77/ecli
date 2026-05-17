@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.2.1 - Release Hardening and Packaging
+
+ECLI v0.2.1 is a release-hardening update for source editing correctness,
+Python package assets, Linux desktop integration, and Linux package coverage.
+
+### Fixed
+
+- Packaged the application icon in PyPI wheel and source distributions.
+- Added deterministic package-resource lookup for the ECLI icon.
+- Preserved source-file indentation and whitespace when opening and saving text
+  files.
+- Preferred strict UTF-8 decoding before detector fallback, preventing valid
+  UTF-8 Cyrillic source files from being misidentified as MacRoman.
+
+### Added
+
+- `ecli-install-desktop-entry` for explicit user-level Linux desktop launcher
+  and icon registration after `pip`/`pipx` installs.
+- SUSE/openSUSE RPM release support.
+- Slackware `.txz` package support.
+- Arch Linux `PKGBUILD` support with normalized ECLI release artifact names.
+- Nix/NixOS flake and package expression support.
+- Normalized release artifact naming contract for Linux package outputs.
+
+### Changed
+
+- Project package version is `0.2.1`.
+- Installation documentation now covers `pipx`, virtual environments,
+  Debian/Ubuntu externally managed Python environments, Linux desktop launcher
+  registration, and the added Linux package families.
+
 ## 0.2.0 - Services Foundation
 
 ECLI v0.2.0 prepares the Services Foundation release. The editor remains the

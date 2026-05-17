@@ -23,4 +23,5 @@ Authoritative files:
 - `release-process.md`
 - `release-checklist.md`
 - `artifact-verification.md`
+- `v0.2.1.md`
 - `v0.2.0.md`

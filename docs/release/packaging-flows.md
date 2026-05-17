@@ -21,10 +21,13 @@ See the LICENSE file in the project root for full license text.
 - RPM flow: `scripts/build-and-package-rpm.sh`
 
 - openSUSE/SUSE RPM flow: `scripts/build-and-package-opensuse-rpm.sh`
+  - build prerequisites: `python3`, `python3-pip`, `python3-devel`, `gcc`, `make`, `rpm-build`; runtime packages include `ncurses6`, `libyaml-0-2`, and optional clipboard tools `xclip` or `xsel`.
 
 - Arch Linux package flow: `scripts/build-and-package-arch.sh`
 
 - Slackware package flow: `scripts/build-and-package-slackware.sh`
+  - build prerequisites: Slackware `makepkg`, `tar`, `xz`, `python3`,
+    PyInstaller, and project Python build dependencies.
 
 - Nix package flow: `flake.nix` / `packaging/nix/package.nix`
 
@@ -53,5 +56,6 @@ Governance rule:
 ## Windows
 
 - Portable EXE and installer flow: `scripts/build-and-package-windows.ps1`
+  - build prerequisites: Python 3.11+, Git, PowerShell 7, NSIS for installer builds, and Visual Studio Build Tools only when native compilation is required.
 
 - NSIS script: `packaging/windows/nsis/ecli.nsi`

@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-
 from pathlib import Path
 
 
@@ -91,12 +90,19 @@ def test_release_docs_use_normalized_linux_package_names() -> None:
         "docs/INSTALL.md",
         "docs/contributor/install.md",
         "docs/contributor/build-from-source.md",
+        "docs/install/windows.md",
         "docs/release/artifact-contract.md",
     ]
     docs = "\n".join((ROOT / path).read_text(encoding="utf-8") for path in doc_paths)
 
-    assert "ecli_0.2.0_" not in docs
-    assert "ecli-editor-0.2.0-1-" not in docs
+    forbidden_package_examples = [
+        "ecli_0.2.0_",
+        "ecli_0.2.1_",
+        "ecli-editor-0.2.0-1-",
+        "ecli-editor-0.2.1-1-",
+    ]
+    for forbidden in forbidden_package_examples:
+        assert forbidden not in docs
 
     assert "ecli_<version>_linux_x86_64.deb" in docs
     assert "ecli_<version>_linux_x86_64.rpm" in docs
@@ -108,3 +114,30 @@ def test_release_docs_use_normalized_linux_package_names() -> None:
     assert "ecli-editor-<version>-1-<arch>.pkg.tar.zst" in docs
     assert "ecli_<version>_arch_<arch>.pkg.tar.zst" in docs
     assert "ecli_<version>_slackware_<arch>.txz" in docs
+
+
+def test_install_docs_cover_suse_slackware_and_windows_dependencies() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    install_docs = "\n".join(
+        (ROOT / path).read_text(encoding="utf-8")
+        for path in [
+            "docs/INSTALL.md",
+            "docs/contributor/install.md",
+            "docs/install/windows.md",
+        ]
+    )
+
+    assert "**SUSE/openSUSE runtime:**" in readme
+    assert "sudo zypper install ncurses6 libyaml-0-2 xclip xsel" in readme
+    assert "**Slackware:**" in readme
+    assert "official Slackware series or SlackBuilds" in readme
+    assert "**Windows:**" in readme
+    assert "Prebuilt installer and portable `.exe` artifacts do not require" in readme
+
+    assert "### SUSE / openSUSE" in install_docs
+    assert "sudo zypper install ncurses6 libyaml-0-2 xclip xsel" in install_docs
+    assert "### Slackware" in install_docs
+    assert "official Slackware series or SlackBuilds" in install_docs
+    assert "### Windows" in install_docs
+    assert "PowerShell is used for checksum examples" in install_docs
+    assert "Visual Studio Build Tools only" in install_docs

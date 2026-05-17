@@ -56,11 +56,49 @@ ecli
 
 Native `.deb`, `.rpm`, `.dmg`, and `.exe` installers may provide launcher integration automatically.
 
+## Platform Dependencies
+
+### SUSE / openSUSE
+
+Runtime dependencies for the openSUSE/SUSE RPM path:
+
+```bash
+sudo zypper install ncurses6 libyaml-0-2 xclip xsel
+```
+
+Build dependencies for local RPM/package generation:
+
+```bash
+sudo zypper install python3 python3-pip python3-devel gcc make rpm-build
+```
+
+### Slackware
+
+Slackware package names vary by release. Install these from the official Slackware series or SlackBuilds according to your Slackware release:
+
+```text
+ncurses
+libyaml
+xclip or xsel, if available
+```
+
+For `.txz` package builds, the build host also needs `makepkg`, `tar`, `xz`, `python3`, PyInstaller, and the project Python build dependencies.
+
+### Windows
+
+Prebuilt `.exe` installer and portable artifacts do not require a separate Python installation. Windows Terminal or another modern terminal is recommended. PowerShell is used for checksum examples, and Git is optional for repository workflows.
+
+The official installer normally bundles required runtime components. Install a Visual C++ runtime only if a release note for a specific artifact says it is required.
+
+For source/development builds on Windows, install Python 3.11+, Git,
+PowerShell 7, NSIS for installer builds, and Visual Studio Build Tools only when native dependencies or build tooling require compilation.
+
 ## Installing from Linux packages
 
 Release artifacts are published from the repository at
-<https://github.com/SSobol77/ecli> when available. Exact file names include the
-version and architecture.
+<https://github.com/SSobol77/ecli> when available.
+
+Exact file names include the version and architecture.
 
 ### Debian / Ubuntu
 
@@ -70,6 +108,7 @@ ecli
 ```
 
 If the package is not available for your platform, use the `pipx` flow above.
+
 The Debian/Ubuntu `externally-managed-environment` explanation below still applies to direct system `pip` installs.
 
 ### Fedora / RHEL

@@ -53,7 +53,7 @@ See the LICENSE file in the project root for full license text.
 
 **ECLI** (Editor CLI) is a terminal-first engineering operations workbench. It combines a curses-based editor with right-side workflow panels and a typed service foundation for configuration, project discovery, command-plan previews,policy checks, audit logging, privileged-action refusal paths, and read-only system diagnostics.
 
-The v0.2.0 Services Foundation release keeps the editor as the default product surface while making the new services visible through TUI panels and a minimal read-only CLI. It does not execute remediation, apply command plans, launch VMLab runtimes, or perform real privileged operations.
+The v0.2.1 release keeps the Services Foundation editor surface intact and hardens release packaging, source-text preservation, and cross-platform install paths. It does not execute remediation, apply command plans, launch VMLab runtimes, or perform real privileged operations.
 
 ### ✨ Key Features
 
@@ -180,10 +180,22 @@ sudo apt update && sudo apt install \
   libyaml-dev xclip xsel
 ```
 
-**Fedora/CentOS/RHEL:**
+**Fedora/RHEL/Rocky/Alma:**
 
 ```bash
 sudo dnf install ncurses ncurses-devel libyaml-devel xclip xsel
+```
+
+**SUSE/openSUSE runtime:**
+
+```bash
+sudo zypper install ncurses6 libyaml-0-2 xclip xsel
+```
+
+For local RPM/package builds on SUSE/openSUSE:
+
+```bash
+sudo zypper install python3 python3-pip python3-devel gcc make rpm-build
 ```
 
 **Arch Linux:**
@@ -192,17 +204,38 @@ sudo dnf install ncurses ncurses-devel libyaml-devel xclip xsel
 sudo pacman -S ncurses libyaml xclip xsel
 ```
 
+**Slackware:**
+
+Install these from the official Slackware series or SlackBuilds according to
+your Slackware release:
+
+```sh
+ncurses
+libyaml
+xclip or xsel, if available
+```
+
+For `.txz` package builds, the build host also needs `makepkg`, `tar`, `xz`,
+`python3`, PyInstaller, and the project Python build dependencies.
+
 **FreeBSD:**
 
-```bash
+```sh
 sudo pkg install ncurses libyaml xclip xsel
 ```
 
 **macOS:**
 
-```bash
+```shell
 brew install ncurses libyaml
 ```
+
+**Windows:**
+
+Prebuilt installer and portable `.exe` artifacts do not require a separate Python installation. Windows Terminal or another modern terminal is recommended, PowerShell is used for checksum examples, and Git is optional for repository workflows. The official installer normally bundles the required runtime components; install the Visual C++ runtime only if a release note says that a specific artifact requires it.
+
+For source/development builds on Windows, install Python 3.11+, Git,
+PowerShell 7, NSIS for installer builds, and Visual Studio Build Tools only when native dependency or build-tool compilation is required.
 
 #### 2. Install ECLI
 
@@ -211,9 +244,13 @@ brew install ncurses libyaml
 Download from [GitHub Releases](https://github.com/SSobol77/ecli/releases) when available:
 
 * **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL and SUSE/openSUSE), Arch `pkg.tar.zst`, Slackware `.txz`, AppImage
+
 * **FreeBSD**: `.pkg`
+
 * **macOS**: `.dmg` ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/macos.md))
+
 * **Windows**: `.exe` installer or portable executable ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/windows.md))
+
 * **Release metadata**: CycloneDX SBOM and SHA256 sidecars for release artifacts
 
 **Option B: PyPI (Python Package Index)**
@@ -246,6 +283,7 @@ ecli
 ```
 
 On Debian 13 and newer Ubuntu releases, direct system-level `pip install` may fail with `externally-managed-environment`. Use `pipx`, a virtual environment, or the official `.deb` package from GitHub Releases when available.
+
 Avoid `pip install --break-system-packages ecli-editor` unless you fully understand the apt package-management consequences.
 
 Requires Python 3.11+ and system dependencies listed above. Native packages may install launcher integration automatically; `pip`/`pipx` installs use `ecli-install-desktop-entry` for explicit Linux desktop integration.
@@ -289,7 +327,9 @@ chmod +x ./ecli_<version>_linux_x86_64.AppImage
 ./ecli_<version>_linux_x86_64.AppImage
 ```
 
-The Arch package is named `ecli-editor` and installs the `ecli` command. Raw `makepkg` output may use `ecli-editor-<version>-1-<arch>.pkg.tar.zst`; the ECLI release script normalizes it to `ecli_<version>_arch_<arch>.pkg.tar.zst` for GitHub Releases. AUR publishing is not implemented by this repository yet. If openSUSE dependencies are missing, use `zypper` to resolve them from configured repositories.
+The Arch package is named `ecli-editor` and installs the `ecli` command. Raw `makepkg` output may use `ecli-editor-<version>-1-<arch>.pkg.tar.zst`;
+
+the ECLI release script normalizes it to `ecli_<version>_arch_<arch>.pkg.tar.zst` for GitHub Releases. AUR publishing is not implemented by this repository yet. If openSUSE dependencies are missing, use `zypper` to resolve them from configured repositories.
 
 ---
 
@@ -298,8 +338,11 @@ The Arch package is named `ecli-editor` and installs the `ecli` command. Raw `ma
 ### Prerequisites
 
 * Python 3.11+
+
 * Git
+
 * System dependencies (see above)
+
 * `uv` package manager (optional, for faster builds)
 
 ### Build Steps
@@ -412,7 +455,7 @@ Master ECLI with these essential keyboard shortcuts. Press `F1` anytime inside t
 | `Insert` | Toggle Insert / Overwrite mode |
 | `F12` | Switch focus between editor windows and panels |
 
-The right side of the editor hosts workflow panels. The v0.2.0 service panels are read-only or preview-only: System Doctor does not mutate host state, Command Plan previews do not execute, and the Services panel reports composition status.
+The right side of the editor hosts workflow panels. The v0.2.1 service panels are read-only or preview-only: System Doctor does not mutate host state, Command Plan previews do not execute, and the Services panel reports composition status.
 
 ### Minimal Service CLI
 
@@ -515,7 +558,7 @@ ECLI v0.2.1 keeps the existing editor/TUI behavior and introduces the Services F
 
 * **ServiceRegistry**: explicit composition root without global service-locator state
 
-Safety boundaries for v0.2.1:
+**Safety boundaries for v0.2.1:**
 
 * SystemDoctor is read-only.
 
@@ -525,7 +568,7 @@ Safety boundaries for v0.2.1:
 
 * Service panels are visible in the UI but do not execute remediation.
 
-* VMLab runtime behavior is not included in v0.2.0.
+* VMLab runtime behavior is not included in v0.2.1.
 
 For detailed architecture information, see [Architecture Overview](https://github.com/SSobol77/ecli/blob/main/docs/architecture/current-architecture.md).
 

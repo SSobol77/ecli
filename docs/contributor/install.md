@@ -30,9 +30,47 @@ See the LICENSE file in the project root for full license text.
 | Windows | `.exe` | Provisionally supported (validate per release) | run installer EXE or portable EXE | launch + version/help check | see `docs/install/windows.md`; NSIS installer is recommended |
 | Any | Python package | Fallback path | `pipx install ecli-editor` | `ecli` | distribution name is `ecli-editor`; import and CLI names remain `ecli` |
 
+## Platform Dependencies
+
+### SUSE / openSUSE
+
+Runtime packages for installed RPMs:
+
+```bash
+sudo zypper install ncurses6 libyaml-0-2 xclip xsel
+```
+
+Build packages for local RPM/package generation:
+
+```bash
+sudo zypper install python3 python3-pip python3-devel gcc make rpm-build
+```
+
+### Slackware
+
+**Slackware** package names and repository layout vary by release. Install these from the official **Slackware** series or SlackBuilds according to your **Slackware** release:
+
+```text
+ncurses
+libyaml
+xclip or xsel, if available
+```
+
+For `.txz` package builds, the build host also needs `makepkg`, `tar`, `xz`, `python3`, PyInstaller, and the project Python build dependencies.
+
+### Windows
+
+Prebuilt installer and portable `.exe` artifacts do not require a separate Python installation. Windows Terminal or another modern terminal is recommended. PowerShell is used for checksum examples. Git is optional for repository workflows.
+
+The official installer normally bundles required runtime components. Install a Visual C++ runtime only if release notes for a specific artifact identify that requirement.
+
+For source/development builds on Windows, install Python 3.11+, Git,
+PowerShell 7, NSIS for installer builds, and Visual Studio Build Tools only when native dependencies or build tooling require compilation.
+
 ## Install from PyPI
 
 For user-level application installs on Linux, `pipx` is the recommended path.
+
 It keeps ECLI isolated from the system Python environment while exposing the terminal command on the user's `PATH`.
 
 ```bash
