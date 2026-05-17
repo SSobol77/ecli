@@ -21,6 +21,54 @@ from typing import Any
 from ecli.core.Ecli import Ecli
 
 
+CYRILLIC_HEADER = (
+    "# --- \u041f\u043e\u0442\u043e\u043a\u043e\u0431\u0435\u0437\u043e"
+    "\u043f\u0430\u0441\u043d\u044b\u0439 \u043c\u0435\u043d\u0435"
+    "\u0434\u0436\u0435\u0440 \u0441\u043e\u0441\u0442\u043e\u044f"
+    "\u043d\u0438\u0439 ---"
+)
+CYRILLIC_DOC = (
+    "    \u041a\u043b\u0430\u0441\u0441 \u0434\u043b\u044f \u0443"
+    "\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u0441"
+    "\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435\u043c \u0443"
+    "\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432 \u0432 \u043f"
+    "\u0430\u043c\u044f\u0442\u0438. \u041f\u043e\u0442\u043e\u043a"
+    "\u043e\u0431\u0435\u0437\u043e\u043f\u0430\u0441\u0435\u043d."
+)
+CYRILLIC_STATIC_COMMENT = (
+    "        # \u0421\u0442\u0430\u0442\u0438\u0447\u0435\u0441"
+    "\u043a\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c"
+    "\u0430\u0446\u0438\u044f \u043e\u0431 \u0443\u0441\u0442"
+    "\u0440\u043e\u0439\u0441\u0442\u0432\u0430\u0445"
+)
+CYRILLIC_DYNAMIC_COMMENT = (
+    "        # \u0414\u0438\u043d\u0430\u043c\u0438\u0447\u0435"
+    "\u0441\u043a\u043e\u0435 \u0441\u043e\u0441\u0442\u043e"
+    "\u044f\u043d\u0438\u0435"
+)
+CYRILLIC_HEADER_FRAGMENT = (
+    "\u041f\u043e\u0442\u043e\u043a\u043e\u0431\u0435\u0437\u043e"
+    "\u043f\u0430\u0441\u043d\u044b\u0439 \u043c\u0435\u043d\u0435"
+    "\u0434\u0436\u0435\u0440"
+)
+CYRILLIC_DOC_FRAGMENT = (
+    "\u041a\u043b\u0430\u0441\u0441 \u0434\u043b\u044f \u0443"
+    "\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u0441"
+    "\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435\u043c \u0443"
+    "\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432"
+)
+CYRILLIC_STATIC_FRAGMENT = (
+    "\u0421\u0442\u0430\u0442\u0438\u0447\u0435\u0441\u043a"
+    "\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430"
+    "\u0446\u0438\u044f"
+)
+CYRILLIC_DYNAMIC_FRAGMENT = (
+    "\u0414\u0438\u043d\u0430\u043c\u0438\u0447\u0435\u0441"
+    "\u043a\u043e\u0435 \u0441\u043e\u0441\u0442\u043e\u044f"
+    "\u043d\u0438\u0435"
+)
+
+
 class FakeHistory:
     def clear(self) -> None:
         return None
@@ -67,10 +115,10 @@ def test_open_preserves_source_indentation_and_save_without_edit(
     expected_lines = [
         "# --- Thread-safe state manager ---",
         "class DeviceManager:",
-        "    \"\"\"",
+        '    """',
         "    Class for managing device state in memory.",
         "    Thread-safe.",
-        "    \"\"\"",
+        '    """',
         "    def __init__(self, device_config):",
         "        self.lock = threading.Lock()",
         "        # Static device information",
@@ -78,7 +126,7 @@ def test_open_preserves_source_indentation_and_save_without_edit(
         "        # Dynamic state",
         "        self.clients = {}",
         "        self.last_telemetry = {}",
-        "        self.statuses = {name: \"offline\" for name in self.devices_config}",
+        '        self.statuses = {name: "offline" for name in self.devices_config}',
         "",
         "    def get_all_statuses(self):",
         "        with self.lock:",
@@ -133,16 +181,16 @@ def test_open_utf8_cyrillic_source_uses_utf8_and_preserves_indentation(
     tmp_path: Path,
 ) -> None:
     expected_lines = [
-        "# --- Потокобезопасный менеджер состояний ---",
+        CYRILLIC_HEADER,
         "class DeviceManager:",
-        "    \"\"\"",
-        "    Класс для управления состоянием устройств в памяти. Потокобезопасен.",
-        "    \"\"\"",
+        '    """',
+        CYRILLIC_DOC,
+        '    """',
         "    def __init__(self, device_config):",
         "        self.lock = threading.Lock()",
-        "        # Статическая информация об устройствах",
+        CYRILLIC_STATIC_COMMENT,
         "        self.devices_config = {d['name']: d for d in device_config}",
-        "        # Динамическое состояние",
+        CYRILLIC_DYNAMIC_COMMENT,
         "        self.clients = {}",
     ]
     original_bytes = ("\n".join(expected_lines) + "\n").encode("utf-8")
@@ -155,10 +203,10 @@ def test_open_utf8_cyrillic_source_uses_utf8_and_preserves_indentation(
     assert editor.encoding == "UTF-8"
     assert editor.encoding != "MACROMAN"
     assert editor.text == expected_lines
-    assert "Потокобезопасный менеджер" in editor.text[0]
-    assert "Класс для управления состоянием устройств" in editor.text[3]
-    assert "Статическая информация" in editor.text[7]
-    assert "Динамическое состояние" in editor.text[9]
+    assert CYRILLIC_HEADER_FRAGMENT in editor.text[0]
+    assert CYRILLIC_DOC_FRAGMENT in editor.text[3]
+    assert CYRILLIC_STATIC_FRAGMENT in editor.text[7]
+    assert CYRILLIC_DYNAMIC_FRAGMENT in editor.text[9]
     assert editor.text[3].startswith("    ")
     assert editor.text[6].startswith("        ")
     assert source_file.read_bytes() == original_bytes

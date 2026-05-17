@@ -15,8 +15,7 @@
 
 from __future__ import annotations
 
-import importlib.resources as resources
-
+from importlib import resources
 from importlib.resources.abc import Traversable
 
 

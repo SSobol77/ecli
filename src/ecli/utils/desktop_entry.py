@@ -15,10 +15,9 @@
 
 from __future__ import annotations
 
-import importlib.resources as resources
 import shutil
 import sys
-
+from importlib import resources
 from pathlib import Path
 
 from ecli.utils.resources import get_icon_path

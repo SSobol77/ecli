@@ -19,8 +19,51 @@ import codecs
 
 import pytest
 
-import ecli.utils.text_buffer as text_buffer
+from ecli.utils import text_buffer
 from ecli.utils.text_buffer import detect_and_decode_text, split_text_preserving_content
+
+
+CYRILLIC_HEADER = (
+    "# --- \u041f\u043e\u0442\u043e\u043a\u043e\u0431\u0435\u0437\u043e"
+    "\u043f\u0430\u0441\u043d\u044b\u0439 \u043c\u0435\u043d\u0435"
+    "\u0434\u0436\u0435\u0440 \u0441\u043e\u0441\u0442\u043e\u044f"
+    "\u043d\u0438\u0439 ---\n"
+)
+CYRILLIC_DOC = (
+    "    \u041a\u043b\u0430\u0441\u0441 \u0434\u043b\u044f \u0443"
+    "\u043f\u0440\u0430\u0432\u043b\u0435\u043d\u0438\u044f \u0441"
+    "\u043e\u0441\u0442\u043e\u044f\u043d\u0438\u0435\u043c \u0443"
+    "\u0441\u0442\u0440\u043e\u0439\u0441\u0442\u0432 \u0432 \u043f"
+    "\u0430\u043c\u044f\u0442\u0438. \u041f\u043e\u0442\u043e\u043a"
+    "\u043e\u0431\u0435\u0437\u043e\u043f\u0430\u0441\u0435\u043d.\n"
+)
+CYRILLIC_STATIC_COMMENT = (
+    "    # \u0421\u0442\u0430\u0442\u0438\u0447\u0435\u0441"
+    "\u043a\u0430\u044f \u0438\u043d\u0444\u043e\u0440\u043c"
+    "\u0430\u0446\u0438\u044f \u043e\u0431 \u0443\u0441\u0442"
+    "\u0440\u043e\u0439\u0441\u0442\u0432\u0430\u0445\n"
+)
+CYRILLIC_DYNAMIC_COMMENT = (
+    "    # \u0414\u0438\u043d\u0430\u043c\u0438\u0447\u0435"
+    "\u0441\u043a\u043e\u0435 \u0441\u043e\u0441\u0442\u043e"
+    "\u044f\u043d\u0438\u0435\n"
+)
+CYRILLIC_HEADER_FRAGMENT = (
+    "\u041f\u043e\u0442\u043e\u043a\u043e\u0431\u0435\u0437\u043e"
+    "\u043f\u0430\u0441\u043d\u044b\u0439 \u043c\u0435\u043d\u0435"
+    "\u0434\u0436\u0435\u0440"
+)
+CYRILLIC_BOM_SOURCE = (
+    "# \u041f\u043e\u0442\u043e\u043a\u043e\u0431\u0435\u0437\u043e"
+    "\u043f\u0430\u0441\u043d\u044b\u0439 \u043c\u0435\u043d\u0435"
+    "\u0434\u0436\u0435\u0440\nclass DeviceManager:\n    pass\n"
+)
+CYRILLIC_WINDOWS_1251_SOURCE = (
+    "# \u0421\u0442\u0430\u0442\u0438\u0447\u0435\u0441\u043a\u0430"
+    "\u044f \u0438\u043d\u0444\u043e\u0440\u043c\u0430\u0446\u0438"
+    "\u044f \u043e\u0431 \u0443\u0441\u0442\u0440\u043e\u0439"
+    "\u0441\u0442\u0432\u0430\u0445\n"
+)
 
 
 def test_split_text_preserves_whitespace_except_lf_terminators() -> None:
@@ -49,26 +92,28 @@ def test_split_text_empty_file_model_is_single_empty_line() -> None:
 
 
 def test_detect_and_decode_prefers_strict_utf8_for_cyrillic_source() -> None:
-    source = (
-        "# --- Потокобезопасный менеджер состояний ---\n"
-        "class DeviceManager:\n"
-        "    \"\"\"\n"
-        "    Класс для управления состоянием устройств в памяти. Потокобезопасен.\n"
-        "    \"\"\"\n"
-        "    # Статическая информация об устройствах\n"
-        "    # Динамическое состояние\n"
+    source = "".join(
+        [
+            CYRILLIC_HEADER,
+            "class DeviceManager:\n",
+            '    """\n',
+            CYRILLIC_DOC,
+            '    """\n',
+            CYRILLIC_STATIC_COMMENT,
+            CYRILLIC_DYNAMIC_COMMENT,
+        ]
     )
 
     decoded, label = detect_and_decode_text(source.encode("utf-8"))
 
     assert decoded == source
     assert label == "UTF-8"
-    assert "Потокобезопасный менеджер" in decoded
+    assert CYRILLIC_HEADER_FRAGMENT in decoded
     assert "MACROMAN" not in label
 
 
 def test_detect_and_decode_utf8_bom_does_not_expose_bom_character() -> None:
-    source = "# Потокобезопасный менеджер\nclass DeviceManager:\n    pass\n"
+    source = CYRILLIC_BOM_SOURCE
 
     decoded, label = detect_and_decode_text(codecs.BOM_UTF8 + source.encode("utf-8"))
 
@@ -80,7 +125,7 @@ def test_detect_and_decode_utf8_bom_does_not_expose_bom_character() -> None:
 def test_detect_and_decode_accepts_high_confidence_windows_1251_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    source = "# Статическая информация об устройствах\n"
+    source = CYRILLIC_WINDOWS_1251_SOURCE
     raw = source.encode("windows-1251")
     monkeypatch.setattr(
         text_buffer.chardet,
