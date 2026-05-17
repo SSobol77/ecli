@@ -53,7 +53,124 @@ ecli
 ```
 
 `pip`/`pipx` installation provides the terminal command. GUI desktop launcher integration is installed explicitly by `ecli-install-desktop-entry`.
+
 Native `.deb`, `.rpm`, `.dmg`, and `.exe` installers may provide launcher integration automatically.
+
+## Installing from Linux packages
+
+Release artifacts are published from the repository at
+<https://github.com/SSobol77/ecli> when available. Exact file names include the
+version and architecture.
+
+### Debian / Ubuntu
+
+```bash
+sudo apt install ./ecli_<version>_linux_x86_64.deb
+ecli
+```
+
+If the package is not available for your platform, use the `pipx` flow above.
+The Debian/Ubuntu `externally-managed-environment` explanation below still applies to direct system `pip` installs.
+
+### Fedora / RHEL
+
+```bash
+sudo dnf install ./ecli_<version>_linux_x86_64.rpm
+ecli
+```
+
+### SUSE / openSUSE
+
+```bash
+sudo zypper install ./ecli_<version>_opensuse_x86_64.rpm
+ecli
+```
+
+If dependencies are missing, let `zypper` resolve them from the configured SUSE repositories. Prefer the official release artifact when available.
+
+### Arch Linux
+
+Install a release artifact when available:
+
+```bash
+sudo pacman -U ./ecli_<version>_arch_x86_64.pkg.tar.zst
+ecli
+```
+
+Build locally from the repository PKGBUILD:
+
+```bash
+cd packaging/arch
+makepkg -si
+ecli
+```
+
+ECLI is not yet published to AUR by this repository.
+
+Raw `makepkg` output may use the native Arch filename
+
+`ecli-editor-<version>-1-<arch>.pkg.tar.zst`
+
+The ECLI release script normalizes this to
+
+`ecli_<version>_arch_<arch>.pkg.tar.zst`
+
+for GitHub Releases.
+
+### Slackware
+
+```bash
+sudo installpkg ecli_<version>_slackware_x86_64.txz
+ecli
+```
+
+Upgrade:
+
+```bash
+sudo upgradepkg ecli_<version>_slackware_x86_64.txz
+```
+
+Remove:
+
+```bash
+sudo removepkg ecli
+```
+
+### NixOS / Nix
+
+Run from the local flake:
+
+```bash
+nix run .
+```
+
+Build locally:
+
+```bash
+nix build .
+```
+
+Install into the current Nix profile:
+
+```bash
+nix profile install .
+```
+
+For NixOS configuration, import the local package expression or flake output manually and add it to `environment.systemPackages`.
+
+### FreeBSD
+
+```bash
+sudo pkg add ./ecli_<version>_freebsd_x86_64.pkg
+ecli
+```
+
+### AppImage
+
+```bash
+chmod +x ./ecli_<version>_linux_x86_64.AppImage
+./ecli_<version>_linux_x86_64.AppImage
+```
 
 ## Debian 13 / Ubuntu Python Protection
 

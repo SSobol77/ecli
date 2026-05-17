@@ -53,7 +53,7 @@ The sidecar format is compatible with coreutils:
 The installer is the recommended Windows path for normal workstations:
 
 ```powershell
-.\ecli_0.2.0_win_x86_64_setup.exe
+.\ecli_<version>_win_x86_64_setup.exe
 ```
 
 The NSIS installer writes ECLI under `C:\Program Files\Cartesian School\ECLI`,
@@ -71,7 +71,7 @@ The registered uninstall metadata includes `DisplayName`, `DisplayVersion`,
 Use the portable executable when you do not want a machine-level installation:
 
 ```powershell
-.\ecli_0.2.0_win_x86_64.exe
+.\ecli_<version>_win_x86_64.exe
 ```
 
 The portable artifact is a PyInstaller `--onefile` executable. It does not

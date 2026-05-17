@@ -1,0 +1,83 @@
+# SPDX-License-Identifier: Apache-2.0
+#
+# Project: Ecli
+# File: packaging/arch/PKGBUILD
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+
+pkgname=ecli-editor
+pkgver=0.2.0
+pkgrel=1
+pkgdesc="Terminal-first engineering operations workbench"
+arch=("x86_64" "aarch64")
+url="https://www.ecli.io"
+license=("Apache-2.0")
+depends=("glibc" "ncurses" "libyaml")
+optdepends=("xclip: clipboard integration" "xsel: clipboard integration")
+makedepends=(
+  "python"
+  "python-pip"
+  "python-pyinstaller"
+  "python-aiohttp"
+  "python-attrs"
+  "python-cattrs"
+  "python-chardet"
+  "python-dotenv"
+  "python-libcst"
+  "python-lsprotocol"
+  "python-packaging"
+  "python-pygments"
+  "python-pyperclip"
+  "python-pygls"
+  "python-toml"
+  "python-wcwidth"
+  "python-yaml"
+)
+provides=("ecli")
+conflicts=("ecli")
+source=()
+sha256sums=()
+
+_repo_root="${ECLI_REPO_ROOT:-${startdir}/../..}"
+
+prepare() {
+  rm -rf "${srcdir}/ecli-source"
+  mkdir -p "${srcdir}/ecli-source"
+  tar \
+    --exclude=".git" \
+    --exclude="build" \
+    --exclude="dist" \
+    --exclude="releases" \
+    --exclude="*.egg-info" \
+    -C "${_repo_root}" \
+    -cf - . | tar -C "${srcdir}/ecli-source" -xf -
+}
+
+build() {
+  cd "${srcdir}/ecli-source"
+  ECLI_REPO_ROOT="${srcdir}/ecli-source" \
+    pyinstaller packaging/pyinstaller/ecli.spec --clean --noconfirm
+}
+
+package() {
+  cd "${srcdir}/ecli-source"
+
+  local executable=""
+  if [[ -x "dist/ecli/ecli" ]]; then
+    executable="dist/ecli/ecli"
+  elif [[ -x "dist/ecli" ]]; then
+    executable="dist/ecli"
+  else
+    echo "PyInstaller output not found under dist/." >&2
+    return 1
+  fi
+
+  install -Dm755 "${executable}" "${pkgdir}/usr/bin/ecli"
+  install -Dm644 "packaging/linux/fpm-common/ecli.desktop" \
+    "${pkgdir}/usr/share/applications/ecli.desktop"
+  install -Dm644 "src/ecli/assets/ecli.png" \
+    "${pkgdir}/usr/share/icons/hicolor/256x256/apps/ecli.png"
+  install -Dm644 "LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+  install -Dm644 "README.md" "${pkgdir}/usr/share/doc/${pkgname}/README.md"
+}

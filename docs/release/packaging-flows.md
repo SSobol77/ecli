@@ -17,18 +17,33 @@ See the LICENSE file in the project root for full license text.
 ## Linux
 
 - DEB flow: `scripts/build-and-package-deb.sh`
+
 - RPM flow: `scripts/build-and-package-rpm.sh`
+
+- openSUSE/SUSE RPM flow: `scripts/build-and-package-opensuse-rpm.sh`
+
+- Arch Linux package flow: `scripts/build-and-package-arch.sh`
+
+- Slackware package flow: `scripts/build-and-package-slackware.sh`
+
+- Nix package flow: `flake.nix` / `packaging/nix/package.nix`
+
 - AppImage flow: `scripts/package_appimage.sh`
 
 ## FreeBSD
 
 Supported paths:
+
 - native host/VM: `scripts/build-and-package-freebsd.sh`
+
 - chroot-based: `tools/freebsd-chroot-build.sh` (via make target)
+
 - port-oriented build path: `scripts/build_freebsd_port.sh`
+
 - CI VM path: `.github/workflows/freebsd-pkg.yml`
 
 Governance rule:
+
 - FreeBSD outputs must be treated as release artifacts, not source-history payload by default.
 
 ## macOS
@@ -38,4 +53,5 @@ Governance rule:
 ## Windows
 
 - Portable EXE and installer flow: `scripts/build-and-package-windows.ps1`
+
 - NSIS script: `packaging/windows/nsis/ecli.nsi`

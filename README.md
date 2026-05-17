@@ -87,20 +87,36 @@ The v0.2.0 Services Foundation release keeps the editor as the default product s
 
 Download and install a pre-compiled package for your platform when available:
 
-```bash
+```shell
 # Debian/Ubuntu
-sudo apt install ./ecli_0.2.0_linux_x86_64.deb
+sudo apt install ./ecli_<version>_linux_x86_64.deb
 
 # Fedora/RHEL/Rocky/Alma
-sudo dnf install ./ecli_0.2.0_linux_x86_64.rpm
+sudo dnf install ./ecli_<version>_linux_x86_64.rpm
+
+# SUSE/openSUSE
+sudo zypper install ./ecli_<version>_opensuse_x86_64.rpm
+
+# Arch Linux
+sudo pacman -U ./ecli_<version>_arch_x86_64.pkg.tar.zst
+
+# Slackware
+sudo installpkg ecli_<version>_slackware_x86_64.txz
+
+# NixOS / Nix
+nix run .
+
+# AppImage
+chmod +x ./ecli_<version>_linux_x86_64.AppImage
+./ecli_<version>_linux_x86_64.AppImage
 
 # Windows (PowerShell)
-.\ecli_0.2.0_win_x86_64_setup.exe
-# Portable alternative: .\ecli_0.2.0_win_x86_64.exe
+.\ecli_<version>_win_x86_64_setup.exe
+# Portable alternative: .\ecli_<version>_win_x86_64.exe
 # See docs/install/windows.md for checksum verification and SmartScreen notes.
 
 # macOS
-open ecli_0.2.0_macos_universal2.dmg
+open ecli_<version>_macos_universal2.dmg
 # First launch is blocked by Gatekeeper; see docs/install/macos.md
 # for the one-time "Open Anyway" or xattr workaround.
 ```
@@ -194,7 +210,7 @@ brew install ncurses libyaml
 
 Download from [GitHub Releases](https://github.com/SSobol77/ecli/releases) when available:
 
-* **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL), `.tar.gz`
+* **Linux**: `.deb` (Debian/Ubuntu), `.rpm` (Fedora/RHEL and SUSE/openSUSE), Arch `pkg.tar.zst`, Slackware `.txz`, AppImage
 * **FreeBSD**: `.pkg`
 * **macOS**: `.dmg` ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/macos.md))
 * **Windows**: `.exe` installer or portable executable ([install notes](https://github.com/SSobol77/ecli/blob/main/docs/install/windows.md))
@@ -233,6 +249,47 @@ On Debian 13 and newer Ubuntu releases, direct system-level `pip install` may fa
 Avoid `pip install --break-system-packages ecli-editor` unless you fully understand the apt package-management consequences.
 
 Requires Python 3.11+ and system dependencies listed above. Native packages may install launcher integration automatically; `pip`/`pipx` installs use `ecli-install-desktop-entry` for explicit Linux desktop integration.
+
+#### Linux Package Commands
+
+Use release artifacts from GitHub Releases when available. Exact artifact names include version and architecture.
+
+```bash
+# Debian / Ubuntu
+sudo apt install ./ecli_<version>_linux_x86_64.deb
+
+# Fedora / RHEL
+sudo dnf install ./ecli_<version>_linux_x86_64.rpm
+
+# SUSE / openSUSE
+sudo zypper install ./ecli_<version>_opensuse_x86_64.rpm
+
+# Arch Linux release artifact
+sudo pacman -U ./ecli_<version>_arch_x86_64.pkg.tar.zst
+
+# Arch Linux local PKGBUILD
+cd packaging/arch
+makepkg -si
+
+# Slackware
+sudo installpkg ecli_<version>_slackware_x86_64.txz
+sudo upgradepkg ecli_<version>_slackware_x86_64.txz
+sudo removepkg ecli
+
+# NixOS / Nix
+nix run .
+nix build .
+nix profile install .
+
+# FreeBSD
+sudo pkg add ./ecli_<version>_freebsd_x86_64.pkg
+
+# AppImage
+chmod +x ./ecli_<version>_linux_x86_64.AppImage
+./ecli_<version>_linux_x86_64.AppImage
+```
+
+The Arch package is named `ecli-editor` and installs the `ecli` command. Raw `makepkg` output may use `ecli-editor-<version>-1-<arch>.pkg.tar.zst`; the ECLI release script normalizes it to `ecli_<version>_arch_<arch>.pkg.tar.zst` for GitHub Releases. AUR publishing is not implemented by this repository yet. If openSUSE dependencies are missing, use `zypper` to resolve them from configured repositories.
 
 ---
 
