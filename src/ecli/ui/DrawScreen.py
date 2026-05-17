@@ -79,7 +79,7 @@ def _default_char_width(ch: str) -> int:
     return width if width >= 0 else 1
 
 
-## ================= сlass DrawScreen ==============================
+## ================= class DrawScreen ==============================
 class DrawScreen:
     """DrawScreen Class
     =========================
