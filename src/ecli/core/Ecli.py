@@ -65,7 +65,6 @@ from typing import (
     cast,
     overload,
 )
-from unittest.mock import Mock
 
 import pyperclip
 
@@ -89,7 +88,7 @@ from ecli.ui.DrawScreen import DrawScreen
 from ecli.ui.KeyBinder import KeyBinder
 from ecli.ui.PanelManager import PanelManager
 from ecli.ui.panels import FileBrowserPanel, GitPanel
-from ecli.utils.logging_config import logger
+from ecli.utils.logging_config import logger, log_record_to_file_handlers
 from ecli.utils.text_buffer import (
     detect_and_decode_text,
     split_text_preserving_content,
@@ -100,6 +99,63 @@ from ecli.utils.utils import hex_to_xterm
 # --- CONDITIONAL IMPORT FOR UNIX SYSTEMS ---
 if sys.platform != "win32":
     import termios
+
+
+class _LightweightGitBridge:
+    """No-op Git bridge used by lightweight editor instances."""
+
+    info: tuple[str, str, str] = ("", "", "")
+
+    def update_git_info(self) -> None:
+        return None
+
+    def reset_state(self) -> None:
+        return None
+
+    def process_queues(self) -> bool:
+        return False
+
+
+class _LightweightLinterBridge:
+    """No-op linter bridge used by lightweight editor instances."""
+
+    def shutdown(self) -> None:
+        return None
+
+    def reload_devops_module(self) -> bool:
+        return False
+
+    def run_linter(self, _code: str) -> list[Any]:
+        return []
+
+    def process_lsp_queue(self) -> bool:
+        return False
+
+
+class _LightweightPanelManager:
+    """No-op panel manager used by lightweight editor instances."""
+
+    def __init__(self) -> None:
+        self.registered_panels: dict[str, Any] = {}
+        self.active_panel: Any = None
+
+    def is_panel_active(self) -> bool:
+        return False
+
+    def show_panel_instance(self, _panel: Any) -> None:
+        return None
+
+    def show_panel(self, _panel_name: str, **_kwargs: Any) -> None:
+        return None
+
+    def close_active_panel(self) -> None:
+        self.active_panel = None
+
+    def handle_key(self, _key_input: Any) -> bool:
+        return False
+
+    def draw_active_panel(self) -> None:
+        return None
 
 
 ## ==================== Ecli Class ====================
@@ -475,10 +531,9 @@ class Ecli:
             if self.panel_manager:
                 self.panel_manager.registered_panels["git"] = GitPanel
         else:
-            # Use Mocks for lightweight mode to avoid AttributeError
-            self.git = Mock()
-            self.linter_bridge = Mock()
-            self.panel_manager = Mock()
+            self.git = _LightweightGitBridge()
+            self.linter_bridge = _LightweightLinterBridge()
+            self.panel_manager = _LightweightPanelManager()
 
         # KeyBinder is initialized last as it may depend on other components
         self.keybinder: KeyBinder = KeyBinder(self)
@@ -556,15 +611,20 @@ class Ecli:
         self._cli_intended_path = intended
 
         # 1) If editor already has a dedicated API, use it.
-        for meth_name in ("preload_cli_document", "open_or_create"):
-            if hasattr(self, meth_name) and getattr(self, meth_name) is not self.preload_cli_document:
+        for meth_name in ("open_or_create",):
+            if hasattr(self, meth_name):
                 try:
                     getattr(self, meth_name)(intended)  # type: ignore[misc]
                     # also mirror filename state for downstream save logic
                     self._set_current_path(intended)
                     return
-                except Exception:
-                    logger.debug("%s(%s) failed, will try fallbacks", meth_name, intended, exc_info=True)
+                except Exception as exc:
+                    logger.debug(
+                        "%s(%s) failed, will try fallbacks: %s",
+                        meth_name,
+                        intended,
+                        exc,
+                    )
 
         # 2) If file exists, use open_file; else create empty buffer with that name.
         if os.path.exists(intended):
@@ -760,10 +820,39 @@ class Ecli:
         return self.cursor_y, self.cursor_y
 
     # --- Panel toggles ---
+    def _is_active_panel_type(self, panel_type_name: str) -> bool:
+        """Return True when the named panel class is currently visible."""
+        panel_manager = getattr(self, "panel_manager", None)
+        if not panel_manager or not panel_manager.is_panel_active():
+            return False
+        active_panel = getattr(panel_manager, "active_panel", None)
+        return active_panel.__class__.__name__ == panel_type_name
+
+    def _is_file_browser_active(self) -> bool:
+        """Return True when the File Manager panel is currently active."""
+        return self._is_active_panel_type("FileBrowserPanel")
+
+    def _close_file_browser_for_ai(self) -> None:
+        """Close the File Manager before running the editor-scoped AI flow."""
+        panel_manager = getattr(self, "panel_manager", None)
+        if panel_manager and self._is_file_browser_active():
+            panel_manager.close_active_panel()
+            self.focus = "editor"
+
     def toggle_widget_panel(self) -> bool:
         """Keeps original AI widget behaviour (bound to F7).
         Shows widget selection menu and launches the selected one.
         """
+        if self._is_file_browser_active():
+            self._close_file_browser_for_ai()
+
+        if self.panel_manager and self.panel_manager.is_panel_active():
+            self._set_status_message(
+                "AI Code Assistant is available from the editor. Close active panel first."
+            )
+            self._force_full_redraw = True
+            return True
+
         # This function now simply calls select_ai_provider_and_ask,
         # which in turn will call the non-blocking panel.
         logging.debug("toggle_widget_panel -> AI panel request.")
@@ -1025,6 +1114,39 @@ class Ecli:
         start_coords, end_coords = norm_range
         start_row, start_col = start_coords
         end_row, end_col = end_coords
+
+        if not self.text:
+            log_record_to_file_handlers(
+                logging.WARNING,
+                "get_selected_text: empty text buffer",
+                logger_name="ecli.selection",
+            )
+            return ""
+
+        if not all(
+            isinstance(value, int)
+            for value in (start_row, start_col, end_row, end_col)
+        ):
+            log_record_to_file_handlers(
+                logging.WARNING,
+                "get_selected_text: non-integer selection coordinates",
+                logger_name="ecli.selection",
+            )
+            return ""
+
+        if not (0 <= start_row < len(self.text)) or not (0 <= end_row < len(self.text)):
+            log_record_to_file_handlers(
+                logging.WARNING,
+                "get_selected_text: selection rows out of bounds (%s..%s), text lines=%s",
+                start_row,
+                end_row,
+                len(self.text),
+                logger_name="ecli.selection",
+            )
+            return ""
+
+        start_col = max(0, min(start_col, len(self.text[start_row])))
+        end_col = max(0, min(end_col, len(self.text[end_row])))
 
         if start_row == end_row:
             # Single-line selection
@@ -7588,6 +7710,16 @@ class Ecli:
         if self.git:
             any_state_changed_by_queues |= self.git.process_queues()
 
+        panel_manager = getattr(self, "panel_manager", None)
+        if (
+            panel_manager
+            and panel_manager.is_panel_active()
+            and hasattr(panel_manager.active_panel, "process_queues")
+        ):
+            any_state_changed_by_queues |= bool(
+                panel_manager.active_panel.process_queues()
+            )
+
         # 3. Delegate Linter/LSP queue processing.
         if self.linter_bridge:
             any_state_changed_by_queues |= self.linter_bridge.process_lsp_queue()
@@ -7806,11 +7938,11 @@ class Ecli:
     def _handle_input_dispatch(self, key_input: Any) -> bool:
         """Dispatches a key press to the correct handler (panel or editor).
 
-        This method determines the current focus of the application.
-        - If the focus is on a panel (`self.focus == 'panel'`) and a panel is
-          active, the key press is passed to the `PanelManager` for handling.
-        - Otherwise, the key press is handled by the main editor's input handler
-          (`self.handle_input`, which is an alias for `self.keybinder.handle_input`).
+        Routing order:
+        1. Global Help shortcut.
+        2. Global AI Code Assistant shortcut.
+        3. Focused active panel.
+        4. Main editor keybinder.
 
         Args:
             key_input: The key event received from curses.
@@ -7819,6 +7951,12 @@ class Ecli:
             bool: The result from the called handler, indicating whether the key
                   press caused a state change (True) or not (False).
         """
+        if self.keybinder.is_key_for_action(key_input, "help"):
+            return self.handle_input(key_input)
+
+        if self.keybinder.is_key_for_action(key_input, "toggle_widget_panel"):
+            return self.handle_input(key_input)
+
         if (
             self.focus == "panel"
             and self.panel_manager

@@ -17,7 +17,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "ecli-editor"
-version = "0.2.1"
+version = "0.2.2"
 description = "ECLI — terminal-first engineering operations workbench"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -84,7 +84,12 @@ dev = [
     "pytest-cov>=6.0.0",
     "coverage>=7.4.0",
     "build>=1.2",
-    "twine>=5.0",
+    "twine>=6.2.0",
+    "cyclonedx-bom>=4.0",
+]
+release = [
+    "build>=1.2",
+    "twine>=6.2.0",
     "cyclonedx-bom>=4.0",
 ]
 

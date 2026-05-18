@@ -39,6 +39,8 @@ typing-extensions>=4.14.1
 wcwidth>=0.2.13
 yarl>=1.20.1
 -e .
+# Release tooling
+twine>=6.2.0
 # Test dependencies
 coverage>=7.10.0
 iniconfig>=2.1.0

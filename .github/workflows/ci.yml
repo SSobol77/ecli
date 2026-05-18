@@ -19,16 +19,22 @@ name: CI
     branches: [main]
     paths:
       - ".github/workflows/ci.yml"
+      - "Makefile"
       - "main.py"
       - "pyproject.toml"
+      - "scripts/check_runtime_imports.py"
+      - "scripts/verify_runtime.sh"
       - "src/**"
       - "tests/**"
   pull_request:
     branches: [main]
     paths:
       - ".github/workflows/ci.yml"
+      - "Makefile"
       - "main.py"
       - "pyproject.toml"
+      - "scripts/check_runtime_imports.py"
+      - "scripts/verify_runtime.sh"
       - "src/**"
       - "tests/**"
 

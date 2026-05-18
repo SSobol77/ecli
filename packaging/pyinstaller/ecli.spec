@@ -25,6 +25,7 @@ project_root = Path(os.environ.get("ECLI_REPO_ROOT", os.getcwd())).resolve()
 entry_point = project_root / "main.py"
 src_dir = project_root / "src"
 config_file = project_root / "config.toml"
+pyproject_file = project_root / "pyproject.toml"
 asset_icon = src_dir / "ecli" / "assets" / "ecli.png"
 windows_icon = project_root / "img" / "logo_m.ico"
 
@@ -32,6 +33,8 @@ if not entry_point.is_file():
     raise SystemExit(f"Missing PyInstaller entry point: {entry_point}")
 if not config_file.is_file():
     raise SystemExit(f"Missing PyInstaller data file: {config_file}")
+if not pyproject_file.is_file():
+    raise SystemExit(f"Missing PyInstaller metadata file: {pyproject_file}")
 if not asset_icon.is_file():
     raise SystemExit(f"Missing packaged icon asset: {asset_icon}")
 
@@ -39,8 +42,13 @@ one_dir = os.environ.get("ECLI_PYINSTALLER_ONEDIR") == "1"
 build_macos_app = (
     sys.platform == "darwin" and os.environ.get("ECLI_BUILD_MACOS_APP") == "1"
 )
+strip_binaries = sys.platform != "win32"
 
-datas = [(str(config_file), "."), (str(asset_icon), "ecli/assets")]
+datas = [
+    (str(config_file), "."),
+    (str(pyproject_file), "."),
+    (str(asset_icon), "ecli/assets"),
+]
 binaries = []
 exe_icon_kwargs = (
     {"icon": str(windows_icon)}
@@ -99,7 +107,7 @@ if one_dir or build_macos_app:
         name="ecli",
         debug=False,
         bootloader_ignore_signals=False,
-        strip=True,
+        strip=strip_binaries,
         upx=True,
         console=True,
         disable_windowed_traceback=False,
@@ -113,7 +121,7 @@ if one_dir or build_macos_app:
         exe,
         a.binaries,
         a.datas,
-        strip=True,
+        strip=strip_binaries,
         upx=True,
         upx_exclude=[],
         name="ecli",
@@ -142,7 +150,7 @@ else:
         name="ecli",
         debug=False,
         bootloader_ignore_signals=False,
-        strip=True,
+        strip=strip_binaries,
         upx=True,
         upx_exclude=[],
         runtime_tmpdir=None,

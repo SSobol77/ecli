@@ -21,6 +21,8 @@ name: macOS DMG
       - ".github/workflows/macos-dmg.yml"
       - "src/**"
       - "scripts/build-and-package-macos.sh"
+      - "scripts/check_runtime_imports.py"
+      - "scripts/verify_runtime.sh"
       - "packaging/pyinstaller/ecli.spec"
       - "ecli.spec"
       - "pyproject.toml"
@@ -50,7 +52,7 @@ jobs:
 
       - name: Verify artifact contract
         run: |
-          make package-macos-assert
+          make package-macos-assert MACOS_ASSERT_MODE=structural
           make show-macos-artifacts
 
       - name: Read version
@@ -58,30 +60,6 @@ jobs:
         run: |
           VER=$(awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $2; exit}' pyproject.toml)
           echo "version=$VER" >> "$GITHUB_OUTPUT"
-
-      - name: Smoke test Universal2 binary inside DMG
-        run: |
-          set -euo pipefail
-          version="${{ steps.ver.outputs.version }}"
-          dmg="releases/${version}/ecli_${version}_macos_universal2.dmg"
-          mountpoint="$RUNNER_TEMP/ecli-dmg"
-          mkdir -p "$mountpoint"
-          hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "$dmg"
-          trap 'hdiutil detach "$mountpoint"' EXIT
-          if [ -x "$mountpoint/ecli" ]; then
-            binary="$mountpoint/ecli"
-          elif [ -x "$mountpoint/ECLI.app/Contents/MacOS/ecli" ]; then
-            binary="$mountpoint/ECLI.app/Contents/MacOS/ecli"
-          else
-            echo "No ECLI binary found inside mounted DMG."
-            find "$mountpoint" -maxdepth 4 -print
-            exit 1
-          fi
-          info="$(lipo -info "$binary")"
-          echo "$info"
-          echo "$info" | grep -q x86_64
-          echo "$info" | grep -q arm64
-          codesign --verify --verbose "$binary"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

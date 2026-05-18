@@ -87,6 +87,9 @@ PY
 }
 ok "Version: ${VERSION}"
 
+log "Checking production runtime imports..."
+"$PYTHON_BIN" scripts/check_runtime_imports.py
+
 RELEASES_DIR="releases/${VERSION}"
 PKG_NAME_BASE="ecli_${VERSION}_macos_${MACOS_ARCH}"
 DMG_PATH="${RELEASES_DIR}/${PKG_NAME_BASE}.dmg"
@@ -236,4 +239,5 @@ log "Writing SHA256 sidecar..."
 
 ok "DMG: $DMG_PATH"
 ok "SHA: $SHA_PATH"
+./scripts/verify_runtime.sh "$DMG_PATH"
 log "Done."

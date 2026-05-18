@@ -44,9 +44,9 @@ from __future__ import annotations
 import curses
 import logging
 import os
+import queue
 import shlex
 import shutil
-import subprocess
 import textwrap
 import threading
 from pathlib import Path
@@ -55,11 +55,10 @@ from typing import TYPE_CHECKING, Any, Optional
 import pyperclip
 from wcwidth import wcswidth
 
-from ecli.integrations.GitBridge import GitBridge
+from ecli.integrations.GitBridge import GitBridge, GitCommandResult
 from ecli.services.models.doctor import DoctorContext, DoctorFinding
 from ecli.services.models.plan import CommandPlan
 from ecli.utils.logging_config import logger
-from ecli.utils.utils import safe_run
 
 
 if TYPE_CHECKING:
@@ -1719,8 +1718,7 @@ class CommandPlanPanel(_ReadOnlyRightPanel):
                 lines.append(f"    argv: {shlex.join(step.argv)}")
             try:
                 export_markdown = (
-                    self._service_registry()
-                    .command_plan_service.export_markdown(plan)
+                    self._service_registry().command_plan_service.export_markdown(plan)
                 )
                 lines.extend(["", "Markdown preview:", *export_markdown.splitlines()])
             except Exception:
@@ -1884,6 +1882,9 @@ class GitPanel(BasePanel):
             )
         self.git_bridge: GitBridge = main_editor_instance.git
         self.output_lines: list[str] = ["Select a command from the menu to run."]
+        self.command_results: queue.Queue[tuple[int, GitCommandResult]] = queue.Queue()
+        self.current_command_label: str = ""
+        self._command_generation = 0
         self.menu_items = [
             "Status",
             "Diff",
@@ -1962,62 +1963,130 @@ class GitPanel(BasePanel):
         self, cmd_list: list[str], show_running: bool = True
     ) -> None:
         """Runs a command in a separate thread (for long, non-interactive operations)."""
+        if self.is_busy:
+            return
+
+        self.is_busy = True
+        self._command_generation += 1
+        command_generation = self._command_generation
+        self.current_command_label = " ".join(cmd_list)
+        if show_running:
+            self._set_output_lines([f"Running: {self.current_command_label}..."])
+        self._update_status_help()
 
         def worker() -> None:
-            self.is_busy = True
             try:
-                # If the check passed, change the directory
-                if show_running:
-                    self.output_lines = [f"Running: {' '.join(cmd_list)}..."]
                 result = self._run_git_command(cmd_list)
-                # Update output based on result
-                if result.returncode == 0:
-                    output = result.stdout.strip()
-                    self.output_lines = output.splitlines() or [
-                        "Command successful (no output)"
-                    ]
-                else:  # Error occurred
-                    self.output_lines = [f"ERROR (code {result.returncode}):"] + (
-                        result.stderr.strip().splitlines() or ["(no error message)"]
-                    )
-                self.git_bridge.update_git_info()
-            finally:  # Ensure busy state is reset
-                self.is_busy = False
+            except Exception as exc:
+                result = GitCommandResult(
+                    command_label=" ".join(cmd_list),
+                    cwd=str(Path.cwd()),
+                    returncode=127,
+                    stdout="",
+                    stderr=str(exc),
+                    error=str(exc),
+                )
+            self.command_results.put((command_generation, result))
 
         threading.Thread(target=worker, daemon=True).start()
 
     def _run_command_sync(self, cmd_list: list[str]) -> None:
         """Executes a command synchronously and immediately updates output_lines."""
+        if self.is_busy:
+            return
+
         self.is_busy = True
-        # Remove unnecessary redrawing, the prompt will handle it
+        self._command_generation += 1
+        self.current_command_label = " ".join(cmd_list)
         try:
             result = self._run_git_command(cmd_list)
-            # Update output based on result
-            if result.returncode == 0:
-                output = result.stdout.strip()
-                self.output_lines = output.splitlines() or [
-                    "Command successful (no output)."
-                ]
-                self.editor._set_status_message(
-                    f"Git {cmd_list[1]} successful."
-                )  # Notify about success
-            else:  # Error occurred
-                err_summary = (
-                    result.stderr.strip().splitlines()[0]
-                    if result.stderr.strip()
-                    else "(no error message)"
-                )
-                self.output_lines = [
-                    f"ERROR (code {result.returncode}):"
-                ] + result.stderr.strip().splitlines()
-                self.editor._set_status_message(
-                    f"Git {cmd_list[1]} failed: {err_summary[:50]}..."
-                )  # Notify about error
-
-            # Update overall information in any case
-            self.git_bridge.update_git_info()
-        finally:  # Ensure busy state is reset
+            self._render_command_result(result)
+            if result.error != "not_repo":
+                self.git_bridge.update_git_info(force=True)
+        finally:
             self.is_busy = False
+            self._update_status_help()
+            self.editor._force_full_redraw = True
+
+    def process_queues(self) -> bool:
+        """Render completed Git command results on the UI thread."""
+        changed = False
+        try:
+            while True:
+                command_generation, result = self.command_results.get_nowait()
+                if command_generation != self._command_generation:
+                    changed = True
+                    continue
+                self._render_command_result(result)
+                self.is_busy = False
+                if result.error != "not_repo":
+                    self.git_bridge.update_git_info(force=True)
+                self._update_status_help()
+                changed = True
+        except queue.Empty:
+            pass
+
+        if changed:
+            self.editor._force_full_redraw = True
+        return changed
+
+    def _set_output_lines(self, lines: list[str]) -> None:
+        self.output_lines = lines or [""]
+        self.scroll_offset = 0
+        self.editor._force_full_redraw = True
+
+    def _cancel_current_operation(self) -> None:
+        self._command_generation += 1
+        self.is_busy = False
+        self.current_command_label = ""
+        self._set_output_lines(["Operation cancelled."])
+        self._update_status_help()
+
+    def _empty_success_message(self, result: GitCommandResult) -> str:
+        if result.command_label.startswith("git status"):
+            return "Clean working tree."
+        return "Command successful (no output)."
+
+    def _render_command_result(self, result: GitCommandResult) -> None:
+        if result.error == "not_repo":
+            self._set_output_lines(["Not a Git repository."])
+            return
+
+        if result.timed_out:
+            lines = [
+                f"Command timed out: {result.command_label}",
+                f"CWD: {result.cwd}",
+            ]
+            if result.error:
+                lines.append(result.error)
+            self._set_output_lines(lines)
+            return
+
+        stdout = result.stdout.strip()
+        stderr = result.stderr.strip()
+        if result.returncode == 0:
+            if stdout:
+                self._set_output_lines(stdout.splitlines())
+            elif stderr:
+                self._set_output_lines(stderr.splitlines())
+            else:
+                self._set_output_lines([self._empty_success_message(result)])
+            return
+
+        lines = [
+            f"Command failed: {result.command_label}",
+            f"CWD: {result.cwd}",
+            f"Return code: {result.returncode}",
+        ]
+        if stderr:
+            lines.append("stderr:")
+            lines.extend(stderr.splitlines())
+        if stdout:
+            lines.append("stdout:")
+            lines.extend(stdout.splitlines())
+        if result.error and not stderr:
+            lines.append(result.error)
+        self._set_output_lines(lines)
 
     def _start_auto_update(self) -> None:
         """Starts the auto-update thread for git information."""
@@ -2045,12 +2114,7 @@ class GitPanel(BasePanel):
     def _update_git_info_background(self) -> None:
         """Updates the git information (file status, branch info) in the background."""
         try:
-            # Update only the main branch information
-            self.git_bridge.update_git_info()
-
-            # If the git status is on screen, update it
-            if not self.is_log_view and self.menu_items[self.selected_idx] == "Status":
-                self._handle_status(run_async=False)
+            self.git_bridge.update_git_info(force=True)
         except Exception as e:
             logger.error(f"GitPanel: Background update failed: {e}")
 
@@ -2319,7 +2383,7 @@ class GitPanel(BasePanel):
         logger.info("GitPanel: Opening panel.")
         curses.curs_set(0)
         if self.editor.git:
-            self.editor.git.update_git_info()
+            self.editor.git.update_git_info(force=True)
             self._handle_status()
             self._update_status_help()
 
@@ -2332,15 +2396,24 @@ class GitPanel(BasePanel):
 
     def _get_repo_dir(self) -> str:
         """Determines the repository directory based on the active file."""
-        if self.editor.filename and os.path.isfile(self.editor.filename):
-            return str(Path(self.editor.filename).parent)
+        repo_root = self.git_bridge.resolve_repo_root(self.editor.filename)
+        if repo_root is not None:
+            return repo_root
+        if self.editor.filename:
+            path = Path(self.editor.filename).expanduser()
+            if not path.is_absolute():
+                path = Path.cwd() / path
+            return str(path if path.is_dir() else path.parent)
         return os.getcwd()
 
-    def _run_git_command(self, cmd_list: list[str]) -> subprocess.CompletedProcess[str]:
+    def _run_git_command(self, cmd_list: list[str]) -> GitCommandResult:
         """Executes a Git command in the correct repository context."""
         logger.debug(f"GitPanel: Running command: {cmd_list}")
-        repo_dir = self._get_repo_dir()
-        return safe_run(cmd_list, cwd=repo_dir)
+        return self.git_bridge.run_git_command(
+            cmd_list,
+            file_path_context=self.editor.filename,
+            timeout=15.0,
+        )
 
     def _navigate_menu(self, direction: int) -> None:
         """Navigate through the menu items, skipping separators.
@@ -2406,7 +2479,12 @@ class GitPanel(BasePanel):
             allowing it to be processed by other handlers if necessary.
         """
         # Basic validity checks
-        if not self.visible or self.is_busy:
+        if not self.visible:
+            return False
+        if self.is_busy:
+            if key in (27, ord("q")):
+                self._cancel_current_operation()
+                return True
             return False
 
         # Handle log navigation first as it's a special case
@@ -2513,36 +2591,6 @@ class GitPanel(BasePanel):
         """Get the git command name from the command list."""
         return cmd_list[1] if len(cmd_list) > 1 else cmd_list[0]
 
-    def _handle_successful_command(self, result: Any, cmd_list: list[str]) -> None:
-        """Handle successful command execution output."""
-        output = result.stdout.strip()
-        self.output_lines = (
-            output.splitlines() if output else ["Command successful (no output)."]
-        )
-
-        cmd_name = self._get_command_name(cmd_list)
-        self.editor._set_status_message(f"Git {cmd_name} successful.")
-
-    def _handle_command_error(self, result: Any, cmd_list: list[str]) -> None:
-        """Handle command execution error output."""
-        error_lines = [f"ERROR (code {result.returncode}):"]
-        if result.stderr.strip():
-            error_lines.extend(result.stderr.strip().splitlines())
-        else:
-            error_lines.append("(no error message)")
-
-        self.output_lines = error_lines
-
-        cmd_name = self._get_command_name(cmd_list)
-        error_summary = (
-            result.stderr.strip().split("\n")[0]
-            if result.stderr.strip()
-            else "unknown error"
-        )
-        self.editor._set_status_message(
-            f"Git {cmd_name} failed: {error_summary[:50]}..."
-        )
-
     def _run_command_and_display_output(
         self, cmd_list: list[str], show_running: bool = True
     ) -> None:
@@ -2557,26 +2605,21 @@ class GitPanel(BasePanel):
             logger.debug(f"GitPanel: Running command: {cmd_list}")
 
             if show_running:
-                self.output_lines = [f"Running: {' '.join(cmd_list)}..."]
-                self.scroll_offset = 0
+                self._set_output_lines([f"Running: {' '.join(cmd_list)}..."])
                 self.draw()
                 self.win.refresh()
 
             result = self._run_git_command(cmd_list)
-
-            if result.returncode == 0:
-                self._handle_successful_command(result, cmd_list)
-            else:
-                self._handle_command_error(result, cmd_list)
+            self._render_command_result(result)
 
             # Refresh git info and reset scroll
-            self.editor.git.update_git_info()
+            if result.error != "not_repo":
+                self.editor.git.update_git_info(force=True)
             self.scroll_offset = 0
 
         except Exception as e:
             logger.error(f"GitPanel: Command execution failed: {e}")
-            self.output_lines = [f"Command execution failed: {str(e)}"]
-            self.editor._set_status_message("Git command execution failed.")
+            self._set_output_lines([f"Command execution failed: {str(e)}"])
         finally:
             self.is_busy = False
             self._update_status_help()
@@ -2602,6 +2645,19 @@ class GitPanel(BasePanel):
     def _draw_info_section(self) -> None:
         """Draws the repository info section."""
         branch, user, commits = self.git_bridge.info
+        repo_state = getattr(self.git_bridge, "repo_state", "unavailable")
+        if repo_state in {"not repo", "unavailable"} and not branch:
+            status_text = (
+                "● Not a Git repository"
+                if repo_state == "not repo"
+                else "● Git unavailable"
+            )
+            self.win.addnstr(1, 2, status_text, self.width - 4, self.attr_dim)
+            info_str = "Branch: - | User: - | Commits: 0"
+            self.win.addnstr(2, 2, info_str, self.width - 4, self.attr_branch)
+            self.win.hline(3, 1, curses.ACS_HLINE, self.width - 2, self.attr_border)
+            return
+
         clean_branch = branch.strip("*")
         has_changes = "*" in branch
 
@@ -2706,10 +2762,11 @@ class GitPanel(BasePanel):
     # --- Action Handlers ---
     def _handle_status(self, run_async=True) -> None:
         # Status can be called both synchronously (in the background) and asynchronously (by pressing 'r')
+        command = ["git", "status", "--short", "--branch"]
         if run_async:
-            self._run_command_async(["git", "status", "-s"])
+            self._run_command_async(command)
         else:
-            self._run_command_sync(["git", "status", "-s"])
+            self._run_command_sync(command)
 
     def _handle_diff(self) -> None:
         """Runs `git diff` and displays the output."""
@@ -2758,7 +2815,7 @@ class GitPanel(BasePanel):
             "Branch: <new_name> | del <name> | (empty to cancel)"
         )
         if not user_input:
-            self.output_lines.append("\nOperation cancelled.")
+            self._set_output_lines(["Operation cancelled."])
             return
 
         parts = user_input.strip().split()
@@ -2869,7 +2926,7 @@ class GitPanel(BasePanel):
             "Remote: add <name> <url> | remove <name> | (empty to cancel)"
         )
         if not action:
-            self.output_lines.append("\nOperation cancelled.")
+            self._set_output_lines(["Operation cancelled."])
             return
 
         try:

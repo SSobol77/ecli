@@ -37,32 +37,37 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Guard production runtime imports
+        run: python3 scripts/check_runtime_imports.py
+
       - name: Build wheel and sdist
         run: |
           set -euo pipefail
           python3 -m pip install --upgrade build twine
-          python3 -m build
-          python3 -m twine check --strict dist/*.whl dist/*.tar.gz
           VERSION=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+          RELEASE_DIR="releases/${VERSION}"
+          mkdir -p "${RELEASE_DIR}"
+          python3 -m build --outdir "${RELEASE_DIR}"
+          python3 -m twine check --strict \
+            "${RELEASE_DIR}/ecli_editor-${VERSION}-py3-none-any.whl" \
+            "${RELEASE_DIR}/ecli_editor-${VERSION}.tar.gz"
           python3 -m pip install --user cyclonedx-bom
           python3 -m cyclonedx_py environment \
             --pyproject pyproject.toml \
             --sv 1.5 \
             --output-format json \
-            --output-file "dist/ecli-editor-${VERSION}.cdx.json" \
+            --output-file "${RELEASE_DIR}/ecli-editor-${VERSION}.cdx.json" \
             --validate
-          cd dist
-          sha256sum "ecli-editor-${VERSION}.cdx.json" > "ecli-editor-${VERSION}.cdx.json.sha256"
-          cd ..
-          ls -lh dist/
+          (cd "${RELEASE_DIR}" && sha256sum "ecli-editor-${VERSION}.cdx.json" > "ecli-editor-${VERSION}.cdx.json.sha256")
+          ls -lh "${RELEASE_DIR}/"
 
       - name: Upload Python distributions
         uses: actions/upload-artifact@v4
         with:
           name: python-dist
           path: |
-            dist/*.whl
-            dist/*.tar.gz
+            releases/**/*.whl
+            releases/**/*.tar.gz
           if-no-files-found: error
 
       - name: Upload Python SBOM
@@ -70,8 +75,8 @@ jobs:
         with:
           name: python-sbom
           path: |
-            dist/*.cdx.json
-            dist/*.cdx.json.sha256
+            releases/**/*.cdx.json
+            releases/**/*.cdx.json.sha256
           if-no-files-found: error
 
   build-linux:
@@ -85,6 +90,12 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install host package inspection tools
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends rpm cpio
 
       - name: Build Linux archive
         run: make package-tar-linux
@@ -157,7 +168,7 @@ jobs:
             # dependency) has no FreeBSD prebuilt wheel and must be
             # compiled from source. Other build essentials cover any
             # additional native deps that may need on-VM compilation.
-            env ASSUME_ALWAYS_YES=yes pkg install -y rust pkgconf
+            env ASSUME_ALWAYS_YES=yes pkg install -y bash rust pkgconf
             rustc --version
             cargo --version
           run: |
@@ -210,32 +221,8 @@ jobs:
 
       - name: Verify DMG
         run: |
-          make package-macos-assert
+          make package-macos-assert MACOS_ASSERT_MODE=structural
           make show-macos-artifacts
-
-      - name: Smoke test Universal2 binary inside DMG
-        run: |
-          set -euo pipefail
-          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
-          dmg="releases/${version}/ecli_${version}_macos_universal2.dmg"
-          mountpoint="$RUNNER_TEMP/ecli-dmg"
-          mkdir -p "$mountpoint"
-          hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "$dmg"
-          trap 'hdiutil detach "$mountpoint"' EXIT
-          if [ -x "$mountpoint/ecli" ]; then
-            binary="$mountpoint/ecli"
-          elif [ -x "$mountpoint/ECLI.app/Contents/MacOS/ecli" ]; then
-            binary="$mountpoint/ECLI.app/Contents/MacOS/ecli"
-          else
-            echo "No ECLI binary found inside mounted DMG."
-            find "$mountpoint" -maxdepth 4 -print
-            exit 1
-          fi
-          info="$(lipo -info "$binary")"
-          echo "$info"
-          echo "$info" | grep -q x86_64
-          echo "$info" | grep -q arm64
-          codesign --verify --verbose "$binary"
 
       - name: Upload macOS DMG
         uses: actions/upload-artifact@v4

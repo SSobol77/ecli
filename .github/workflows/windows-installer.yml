@@ -21,6 +21,8 @@ name: Windows Installer
       - ".github/workflows/windows-installer.yml"
       - "src/**"
       - "scripts/build-and-package-windows.ps1"
+      - "scripts/check_runtime_imports.py"
+      - "scripts/verify_runtime.sh"
       - "packaging/windows/nsis/**"
       - "packaging/pyinstaller/ecli.spec"
       - "pyproject.toml"
@@ -164,6 +166,17 @@ jobs:
           if (-not (Test-Path $uninstaller)) { throw "Missing uninstaller: $uninstaller" }
           if ($props.UninstallString -notmatch [regex]::Escape($uninstaller)) {
             throw "UninstallString does not reference $uninstaller"
+          }
+
+          $installedExe = Join-Path $props.InstallLocation "ecli.exe"
+          if (-not (Test-Path $installedExe)) { throw "Missing installed launcher: $installedExe" }
+          $help = & $installedExe --help
+          if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($help -join "`n"))) {
+            throw "Installed ecli.exe --help failed"
+          }
+          $versionOutput = (& $installedExe --version) -join "`n"
+          if ($LASTEXITCODE -ne 0 -or $versionOutput.Trim() -ne "ecli $version") {
+            throw "Installed ecli.exe --version mismatch: '$versionOutput'"
           }
 
           $uninstall = Start-Process -FilePath $uninstaller -ArgumentList "/S" -Wait -PassThru

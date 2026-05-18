@@ -1,9 +1,9 @@
 ; =============================================================================
 ; ECLI — Windows Installer (NSIS, Unicode, x64)
 ; Accepts defines:
-;   /DVERSION=0.1.0
-;   /DOUTFILE="releases\0.1.0\ecli_0.1.0_win_x86_64_setup.exe"
-;   /DINPUT_EXE="releases\0.1.0\ecli_0.1.0_win_x86_64.exe"
+;   /DVERSION=0.2.2
+;   /DOUTFILE="releases\0.2.2\ecli_0.2.2_win_x86_64_setup.exe"
+;   /DINPUT_EXE="releases\0.2.2\ecli_0.2.2_win_x86_64.exe"
 ; Defaults are provided for local runs.
 ; =============================================================================
 
@@ -15,7 +15,7 @@ SetCompressorDictSize 32
 !define APPNAME   "ECLI"
 !define COMPANY   "Cartesian School"
 !ifndef VERSION
-  !define VERSION "0.1.0"
+  !define VERSION "0.2.2"
 !endif
 !ifndef INPUT_EXE
   !define INPUT_EXE "build\windows\dist\ecli.exe"

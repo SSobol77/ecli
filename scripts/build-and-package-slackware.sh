@@ -24,6 +24,7 @@ VERSION="$(awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $2; exit}' pypr
   echo "ERROR: Cannot read version from pyproject.toml" >&2
   exit 1
 }
+python3 scripts/check_runtime_imports.py
 
 RAW_ARCH="$(uname -m 2>/dev/null || echo x86_64)"
 case "${RAW_ARCH}" in
@@ -98,5 +99,6 @@ rm -f "${FINAL_TXZ}" "${FINAL_TXZ}.sha256"
 
 echo "==> Writing checksum"
 (cd "${RELEASES_DIR}" && sha256sum "$(basename "${FINAL_TXZ}")" > "$(basename "${FINAL_TXZ}").sha256")
+scripts/verify_runtime.sh "${FINAL_TXZ}"
 
 echo "DONE: ${FINAL_TXZ}"

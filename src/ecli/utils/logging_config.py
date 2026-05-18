@@ -20,12 +20,12 @@ application-wide logging handlers and log levels based on a supplied configurati
 
 Features:
     - Rotating file logging for general application events (editor.log).
-    - Optional console logging to stderr with configurable log level.
+    - Runtime logging is file-backed; curses sessions do not attach console handlers.
     - Optional separate error log file (error.log) for ERROR and CRITICAL events.
     - Optional key event tracing (keytrace.log) enabled via the MOOPS2_KEYTRACE environment variable.
     - Automatic creation of log directories, with fallback to the system temp directory on failure.
     - Safe reconfiguration: clears existing handlers to avoid duplicate logs when called multiple times.
-    - Never raises exceptions; all errors are reported to stderr and logging continues with best-effort.
+    - Never raises exceptions; setup-time failures use explicit stderr fallback before curses takes ownership.
 
 Usage:
     Import the module and call `setup_logging()` early in your application's startup sequence,
@@ -49,6 +49,7 @@ import logging.handlers
 import os
 import sys
 import tempfile
+from types import TracebackType
 from typing import Any, Optional
 
 
@@ -59,12 +60,65 @@ logger = logging.getLogger("ecli")  # main application logger
 KEY_LOGGER = logging.getLogger("ecli.keyevents")  # raw key-press trace
 
 
+def log_exception_to_file_handlers(
+    message: str,
+    exc: BaseException,
+    *,
+    logger_name: str = "ecli",
+) -> None:
+    """Log an exception through file-backed handlers without writing to stderr."""
+    root_logger = logging.getLogger()
+    exc_info: tuple[type[BaseException], BaseException, TracebackType | None] = (
+        type(exc),
+        exc,
+        exc.__traceback__,
+    )
+    record = root_logger.makeRecord(
+        logger_name,
+        logging.ERROR,
+        __file__,
+        0,
+        message,
+        (),
+        exc_info,
+        None,
+    )
+
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.FileHandler) and record.levelno >= handler.level:
+            handler.handle(record)
+
+
+def log_record_to_file_handlers(
+    level: int,
+    message: str,
+    *args: Any,
+    logger_name: str = "ecli",
+) -> None:
+    """Log a non-exception record through file-backed handlers only."""
+    root_logger = logging.getLogger()
+    record = root_logger.makeRecord(
+        logger_name,
+        level,
+        __file__,
+        0,
+        message,
+        args,
+        None,
+        None,
+    )
+
+    for handler in root_logger.handlers:
+        if isinstance(handler, logging.FileHandler) and record.levelno >= handler.level:
+            handler.handle(record)
+
+
 # --- Enhanced Logging Setup Function ---
 def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
     """Configures application-wide logging handlers and log levels.
 
     This function sets up a flexible logging system with support for file logging,
-    console logging, error-only file logging, and optional key event tracing.
+    error-only file logging, and optional key event tracing.
     It clears existing root logger handlers to avoid duplicate logs and applies
     settings from the provided configuration dictionary.
 
@@ -73,8 +127,8 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
 
     1. File handler – rotating editor.log capturing everything from
        the configured `file_level` (default DEBUG) upward.
-    2. Console handler – optional `stderr` output whose threshold is
-       `console_level` (default WARNING).
+    2. Console handler – intentionally disabled for runtime logging so log
+       records cannot corrupt the curses screen.
     3. Error-file handler – optional rotating error.log that stores
        only ERROR and CRITICAL events.
     4. Key-event handler – optional rotating keytrace.log enabled
@@ -92,10 +146,10 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
 
             - ``file_level`` (str): Log-level for editor.log
               (DEBUG, INFO, …).  Default: ``"DEBUG"``.
-            - ``console_level`` (str): Log-level for console output.
-              Default: ``"WARNING"``.
-            - ``log_to_console`` (bool): Disable/enable console handler.
-              Default: ``True``.
+            - ``console_level`` (str): Retained for configuration
+              compatibility; runtime console logging is disabled.
+            - ``log_to_console`` (bool): Retained for configuration
+              compatibility; runtime console logging is disabled.
             - ``separate_error_log`` (bool): Whether to create error.log.
               Default: ``False``.
 
@@ -107,9 +161,9 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
           propagate and attaches/clears its handlers independently.
 
     Notes:
-        The function never raises; all I/O or permission errors are
-        reported to stderr and the logging subsystem continues with a
-        best-effort configuration.
+        The function never raises; setup-time I/O or permission errors use
+        explicit stderr fallback before curses starts, and the logging subsystem
+        continues with a best-effort configuration.
 
     Example:
         >>> config = {
@@ -158,8 +212,9 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
             file=sys.stderr,
         )
 
-    # Console Handler
-    log_to_console_enabled = logging_config.get("log_to_console", True)
+    # Console logging is unsafe once curses owns the terminal. Startup failures
+    # that must be visible use explicit stderr printing in __main__.py instead.
+    log_to_console_enabled = False
     console_handler = None
     if log_to_console_enabled:
         console_level_str = logging_config.get("console_level", "WARNING").upper()
@@ -206,6 +261,11 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
         root_logger.addHandler(console_handler)
     if error_file_handler:
         root_logger.addHandler(error_file_handler)
+    if not root_logger.handlers:
+        # Prevent logging.lastResort from writing warnings/errors to stderr if
+        # file logging could not be initialized. Setup-time stderr diagnostics
+        # above are intentional; runtime logging records must stay off curses.
+        root_logger.addHandler(logging.NullHandler())
 
     root_logger.setLevel(
         log_file_level

@@ -34,6 +34,19 @@ See the LICENSE file in the project root for full license text.
 - Missing required artifacts must block release.
 - Workflow references to non-existent files must be resolved as release blockers.
 
+## Release Tooling Prerequisites
+
+Install release tooling before running Gate 2 validation from a clean
+maintainer environment:
+
+```sh
+python3 -m pip install -e ".[release]"
+```
+
+The `validate-gate2` target requires `twine` for strict PyPI wheel/sdist
+metadata validation. `twine` is declared only in release/development tooling
+dependencies, not in ECLI runtime dependencies.
+
 ## PyPI Namespace Pre-Reservation
 
 The Python distribution name is `ecli-editor`; the import package and console
@@ -58,8 +71,10 @@ Before enabling a publish workflow for a new package name:
 
    ```sh
    python3 -m build
-   python3 -m twine check --strict dist/*
-   python3 -m twine upload dist/*
+   version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+   python3 -m build --outdir "releases/${version}"
+   python3 -m twine check --strict "releases/${version}"/*.whl "releases/${version}"/ecli_editor-*.tar.gz
+   python3 -m twine upload "releases/${version}"/*.whl "releases/${version}"/ecli_editor-*.tar.gz
    ```
 
 4. Rotate or replace any token used for the bootstrap upload with a
@@ -101,8 +116,8 @@ remove the static token requirement.
 Release builds emit a CycloneDX SBOM for the Python distribution:
 
 ```text
-dist/ecli-editor-<version>.cdx.json
-dist/ecli-editor-<version>.cdx.json.sha256
+releases/<version>/ecli-editor-<version>.cdx.json
+releases/<version>/ecli-editor-<version>.cdx.json.sha256
 ```
 
 The SBOM is generated with the `cyclonedx-bom` Python distribution, invoked as

@@ -103,9 +103,24 @@ def test_resolve_version_falls_back_to_installed_package_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(ecli, "_source_tree_version", lambda: None)
+    monkeypatch.setattr(ecli, "_bundled_version", lambda: None)
     monkeypatch.setattr(ecli, "_installed_package_version", lambda: "1.2.3")
 
     assert ecli._resolve_version() == "1.2.3"
+
+
+def test_resolve_version_uses_pyinstaller_bundle_metadata(
+    version_workspace: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    (version_workspace / "pyproject.toml").write_text(
+        '[project]\nversion = "7.6.5"\n',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(ecli, "_source_tree_version", lambda: None)
+    monkeypatch.setattr(ecli.sys, "_MEIPASS", str(version_workspace), raising=False)
+
+    assert ecli._resolve_version() == "7.6.5"
 
 
 def test_installed_package_version_returns_none_when_metadata_is_missing(
@@ -123,6 +138,7 @@ def test_resolve_version_falls_back_to_local_when_metadata_is_unavailable(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(ecli, "_source_tree_version", lambda: None)
+    monkeypatch.setattr(ecli, "_bundled_version", lambda: None)
     monkeypatch.setattr(ecli, "_installed_package_version", lambda: None)
 
     assert ecli._resolve_version() == "0.0.0+local"
