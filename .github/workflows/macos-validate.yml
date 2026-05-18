@@ -22,6 +22,8 @@ name: macOS Contract Validate
       - "Makefile"
       - "pyproject.toml"
       - "scripts/build-and-package-macos.sh"
+      - "scripts/check_runtime_imports.py"
+      - "scripts/verify_runtime.sh"
       - "packaging/pyinstaller/ecli.spec"
       - "src/**"
       - "packaging/**"

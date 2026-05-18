@@ -26,6 +26,7 @@ SPEC_FILE="packaging/pyinstaller/ecli.spec"
 echo "==> Checking prerequisites"
 command -v python3 >/dev/null
 command -v pyinstaller >/dev/null
+python3 scripts/check_runtime_imports.py
 
 echo "==> Cleaning previous artifacts"
 rm -rf build/ dist/
@@ -35,6 +36,7 @@ PYI_ARGS=(--onefile --clean --noconfirm --strip)
 
 # Bundle optional configs if present
 [[ -f "config.toml" ]] && PYI_ARGS+=(--add-data "config.toml:.")
+[[ -f "pyproject.toml" ]] && PYI_ARGS+=(--add-data "pyproject.toml:.")
 [[ -d "config" ]] && PYI_ARGS+=(--add-data "config:config")
 
 if [[ -f "${SPEC_FILE}" ]]; then
@@ -46,8 +48,10 @@ fi
 # Sanity check
 if [[ -x "dist/${PACKAGE_NAME}/${PACKAGE_NAME}" ]]; then
   echo "==> OK: dist/${PACKAGE_NAME}/${PACKAGE_NAME}"
+  ./scripts/verify_runtime.sh --allow-nonrelease "dist/${PACKAGE_NAME}/${PACKAGE_NAME}"
 elif [[ -x "dist/${PACKAGE_NAME}" ]]; then
   echo "==> OK: dist/${PACKAGE_NAME}"
+  ./scripts/verify_runtime.sh --allow-nonrelease "dist/${PACKAGE_NAME}"
 else
   echo "Build output not found in dist/. Aborting." >&2
   exit 1

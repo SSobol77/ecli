@@ -20,7 +20,17 @@ set -euo pipefail
 # 3) runs appimage-builder to create an .AppImage
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-VERSION="${1:-0.1.0}"
+PROJECT_VERSION="$(python3 - <<'PY'
+import tomllib
+with open("pyproject.toml", "rb") as f:
+    print(tomllib.load(f)["project"]["version"])
+PY
+)"
+VERSION="${1:-$PROJECT_VERSION}"
+if [[ "$VERSION" != "$PROJECT_VERSION" ]]; then
+  echo "Requested AppImage version ${VERSION} does not match pyproject.toml version ${PROJECT_VERSION}." >&2
+  exit 2
+fi
 RAW_ARCH="${2:-$(uname -m 2>/dev/null || echo x86_64)}"
 case "$RAW_ARCH" in
   amd64|x86_64) ARCH="x86_64" ;;
@@ -32,6 +42,7 @@ APPDIR="$PROJECT_ROOT/packaging/linux/appimage/AppDir"
 
 mkdir -p "$OUT_DIR"
 printf 'LINUX_ARCH := %s\n' "$ARCH" > "$OUT_DIR/.linux.env"
+python3 "$PROJECT_ROOT/scripts/check_runtime_imports.py"
 # 1) Build the PyInstaller binary (if it hasn't been built yet)
 bash "$PROJECT_ROOT/scripts/build_pyinstaller_linux.sh"
 
@@ -81,15 +92,27 @@ appimage-builder \
   --skip-test
 popd
 
+APPIMAGE_FILE="$OUT_DIR/ecli_${VERSION}_linux_${ARCH}.AppImage"
+found_appimage=0
+
 # The output file will be in PROJECT_ROOT by default. Rename and move it to
 # the canonical release directory.
-find "$PROJECT_ROOT" -maxdepth 1 -type f -name "*.AppImage" -print0 | while IFS= read -r -d '' f; do
-  NEW="$OUT_DIR/ecli_${VERSION}_linux_${ARCH}.AppImage"
-  mv "$f" "$NEW"
-  echo "Created AppImage: $NEW"
-done
+while IFS= read -r -d '' f; do
+  found_appimage=1
+  rm -f "$APPIMAGE_FILE" "$APPIMAGE_FILE.sha256"
+  mv "$f" "$APPIMAGE_FILE"
+  echo "Created AppImage: $APPIMAGE_FILE"
+done < <(find "$PROJECT_ROOT" -maxdepth 1 -type f -name "*.AppImage" -print0)
+
+if [[ "$found_appimage" -eq 0 || ! -f "$APPIMAGE_FILE" ]]; then
+  echo "AppImage build did not produce ${APPIMAGE_FILE}." >&2
+  exit 1
+fi
 
 # zsync (optional for AppImageUpdate)
 if command -v appimagetool >/dev/null 2>&1; then
-  (cd "$OUT_DIR" && appimagetool --sign -v "ecli_${VERSION}_linux_${ARCH}.AppImage" || true)
+  (cd "$OUT_DIR" && appimagetool --sign -v "$(basename "$APPIMAGE_FILE")" || true)
 fi
+
+(cd "$OUT_DIR" && sha256sum "$(basename "$APPIMAGE_FILE")" > "$(basename "$APPIMAGE_FILE").sha256")
+"$PROJECT_ROOT/scripts/verify_runtime.sh" "$APPIMAGE_FILE"

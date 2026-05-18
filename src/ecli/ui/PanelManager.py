@@ -25,6 +25,8 @@ import curses
 import logging
 from typing import TYPE_CHECKING, Any, Optional
 
+from ecli.utils.logging_config import log_exception_to_file_handlers
+
 from .panels import (
     AiResponsePanel,
     BasePanel,
@@ -183,8 +185,15 @@ class PanelManager:
             try:
                 # The panel itself decides if it can handle the key.
                 return self.active_panel.handle_key(key)
-            except Exception:
-                logging.exception("Panel key-handler crashed")
+            except Exception as exc:
+                log_exception_to_file_handlers(
+                    "Panel key-handler crashed",
+                    exc,
+                    logger_name="ecli.input",
+                )
+                self.editor._set_status_message("Input handler error. See logs.")
+                self.editor._force_full_redraw = True
+                return True
         return False
 
     def draw_active_panel(self) -> None:

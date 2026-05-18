@@ -50,14 +50,18 @@ MAINTAINER="Siergej Sobolewski <s.sobolewski@hotmail.com>"
 HOMEPAGE="https://ecli.io"
 LICENSE="Apache-2.0"
 CATEGORY="editors"
+PYTHON_BIN="${PYTHON:-python3}"
 
-VERSION="$(python - <<'PY'
+VERSION="$("${PYTHON_BIN}" - <<'PY'
 import tomllib
 with open("pyproject.toml","rb") as f:
     print(tomllib.load(f)["project"]["version"])
 PY
 )"
 [ -n "${VERSION}" ] || { echo "Cannot read version from pyproject.toml"; exit 1; }
+
+echo "==> Checking production runtime imports"
+"${PYTHON_BIN}" scripts/check_runtime_imports.py
 
 ARCH_DEB="amd64"
 RAW_ARCH="$(uname -m 2>/dev/null || echo x86_64)"
@@ -72,6 +76,7 @@ STAGING_DIR="build/deb_staging"
 
 echo "==> Version: ${VERSION}"
 rm -rf build/ dist/
+rm -f "${FINAL_DEB_PATH}" "${FINAL_DEB_PATH}.sha256"
 
 echo "==> Building executable with PyInstaller"
 if [[ -f "packaging/pyinstaller/ecli.spec" ]]; then
@@ -83,6 +88,7 @@ else
     --onefile --clean --noconfirm --strip \
     --paths "src" \
     --add-data "config.toml:." \
+    --add-data "pyproject.toml:." \
     --hidden-import=ecli \
     --hidden-import=dotenv --collect-all=dotenv \
     --hidden-import=toml \
@@ -199,6 +205,7 @@ fpm -s dir -t deb \
 echo "==> Verify"
 dpkg-deb --info "${FINAL_DEB_PATH}" >/dev/null || true
 dpkg-deb --contents "${FINAL_DEB_PATH}" | head -20 || true
+scripts/verify_runtime.sh "${FINAL_DEB_PATH}"
 
 echo "==> Generating SHA-256 checksum"
 if command -v sha256sum >/dev/null 2>&1; then

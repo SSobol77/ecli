@@ -33,25 +33,11 @@ import logging
 import os
 import signal
 import sys
+import traceback
 from pathlib import Path
 from typing import Any, Optional
 
-from dotenv import load_dotenv
-
-# --- Step 1: Load Environment Variables from the User's Config Directory ---
-# Load ~/.config/ecli/.env early, before any other imports use environment.
-try:
-    user_config_dir = Path.home() / ".config" / "ecli"
-    dotenv_path = user_config_dir / ".env"
-    if dotenv_path.exists():
-        load_dotenv(dotenv_path=dotenv_path)
-except (RuntimeError, PermissionError, OSError) as e:
-    print(f"Warning: Could not load .env file: {e}", file=sys.stderr)
-except Exception as e:
-    print(
-        f"Warning: Unexpected error loading .env, continuing with defaults: {e}",
-        file=sys.stderr,
-    )
+from ecli import __version__
 
 # --- Step 2: Set up the Python Path ---
 # Ensure the 'ecli' package is importable for both source and bundled runs.
@@ -59,10 +45,66 @@ project_root = os.path.dirname(os.path.abspath(__file__))
 if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
+
+def _default_log_path() -> Path:
+    return Path.home() / ".config" / "ecli" / "logs" / "editor.log"
+
+
+def _write_unconfigured_startup_traceback(message: str, exc: BaseException) -> None:
+    """Best-effort traceback logging before configured logging is available."""
+    try:
+        log_path = _default_log_path()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("a", encoding="utf-8") as log_file:
+            log_file.write(f"CRITICAL - ecli - {message}: {exc}\n")
+            log_file.writelines(
+                traceback.format_exception(type(exc), exc, exc.__traceback__)
+            )
+    except Exception:
+        return
+
+
+def _print_startup_failure(message: str, exc: BaseException) -> None:
+    print(f"ECLI startup failure: {message}: {exc}", file=sys.stderr)
+    print(f"Full traceback logged to: {_default_log_path()}", file=sys.stderr)
+
+
+def _exit_startup_failure(message: str, exc: BaseException) -> None:
+    logger.critical("%s: %s", message, exc, exc_info=True)
+    _print_startup_failure(message, exc)
+    sys.exit(1)
+
+
+def _print_help() -> None:
+    print(
+        "Usage: ecli [OPTIONS] [FILE]\n"
+        "\n"
+        "ECLI terminal-first engineering operations workbench.\n"
+        "\n"
+        "Options:\n"
+        "  -h, --help       Show this help and exit.\n"
+        "  --version        Show version and exit.\n"
+        "  --services       Print ServiceRegistry service status.\n"
+        "  --doctor         Run read-only SystemDoctor diagnostics.\n"
+        "  --plan-preview   Print a draft CommandPlan preview.\n"
+    )
+
+
+def _print_version() -> None:
+    print(f"ecli {__version__}")
+
+
 # --- Step 2.5: Explicit read-only service CLI dispatch ---
 # Preserve the default editor path for `python -m ecli [file]`. Only explicit
 # Phase 1 service flags are handled here before curses/editor initialization.
 try:
+    if sys.argv[1:] in (["--help"], ["-h"]):
+        _print_help()
+        sys.exit(0)
+    if sys.argv[1:] == ["--version"]:
+        _print_version()
+        sys.exit(0)
+
     from ecli.cli import is_service_cli, run_service_cli
 
     if is_service_cli(sys.argv[1:]):
@@ -73,6 +115,25 @@ except Exception as e:
     print(f"ECLI service CLI error: {e}", file=sys.stderr)
     sys.exit(1)
 
+# --- Step 1: Load Environment Variables from the User's Config Directory ---
+# Load ~/.config/ecli/.env before runtime imports use environment.
+try:
+    from dotenv import load_dotenv
+
+    user_config_dir = Path.home() / ".config" / "ecli"
+    dotenv_path = user_config_dir / ".env"
+    if dotenv_path.exists():
+        load_dotenv(dotenv_path=dotenv_path)
+except ImportError as e:
+    print(f"Warning: Could not load dotenv support: {e}", file=sys.stderr)
+except (RuntimeError, PermissionError, OSError) as e:
+    print(f"Warning: Could not load .env file: {e}", file=sys.stderr)
+except Exception as e:
+    print(
+        f"Warning: Unexpected error loading .env, continuing with defaults: {e}",
+        file=sys.stderr,
+    )
+
 # --- Step 3: Immediate Logging and Configuration Setup ---
 try:
     from ecli.utils.logging_config import setup_logging
@@ -82,24 +143,20 @@ try:
     setup_logging(config)
     logger = logging.getLogger("ecli")
 except Exception as e:
-    # Logging is not ready; print to stderr and exit.
-    print(
-        f"FATAL: Could not initialize configuration or logging system: {e}",
-        file=sys.stderr,
-    )
-    import traceback
-
-    traceback.print_exc()
+    message = "Could not initialize configuration or logging system"
+    _write_unconfigured_startup_traceback(message, e)
+    _print_startup_failure(message, e)
+    traceback.print_exception(type(e), e, e.__traceback__, file=sys.stderr)
     sys.exit(1)
 
 # --- Step 4: Import the Core Application ---
 try:
     from ecli.core.Ecli import Ecli
-except ImportError as e:
-    logger.critical(
-        "Failed to import a critical application component: %s", e, exc_info=True
+except Exception as e:
+    _exit_startup_failure(
+        "Failed to import a critical application component",
+        e,
     )
-    sys.exit(1)
 
 
 def _resolve_cli_path(argv: list[str]) -> Optional[Path]:
@@ -288,8 +345,9 @@ def start() -> None:
         curses.wrapper(main_app_runner, config, file_to_open)
 
         logger.info("ECLI editor shut down gracefully.")
-    except Exception:
+    except Exception as e:
         logger.critical("Unhandled exception at the top level.", exc_info=True)
+        _print_startup_failure("Unhandled exception at the top level", e)
         sys.exit(1)
     finally:
         # Disable application modes after curses finishes:

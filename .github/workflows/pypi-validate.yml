@@ -80,7 +80,7 @@ jobs:
 
           wheel_name = project["name"].replace("-", "_")
           version = project["version"]
-          print(f"dist/{wheel_name}-{version}-py3-none-any.whl.sha256")
+          print(f"releases/{version}/{wheel_name}-{version}-py3-none-any.whl.sha256")
           PY
           )"
           cp "$wheel_sha" "$wheel_sha.bak"

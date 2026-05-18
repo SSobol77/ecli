@@ -21,7 +21,7 @@
         in
         pkgs.callPackage ./packaging/nix/package.nix {
           src = self;
-          version = "0.2.1";
+          version = "0.2.2";
         };
     in
     {

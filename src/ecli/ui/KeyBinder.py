@@ -49,6 +49,8 @@ import re
 from typing import TYPE_CHECKING, Any, Callable, Optional
 from wcwidth import wcswidth
 
+from ecli.utils.logging_config import log_exception_to_file_handlers
+
 if TYPE_CHECKING:
     from ecli.core.Ecli import Ecli
 
@@ -238,13 +240,19 @@ class KeyBinder:
                 return action_caused_visual_change
 
             except Exception as e_handler:
-                logging.exception(
-                    "Input handler critical error. This should be investigated."
+                log_exception_to_file_handlers(
+                    "Input handler critical error. This should be investigated.",
+                    e_handler,
+                    logger_name="ecli.input",
                 )
-                self.editor._set_status_message(
-                    f"Input handler error: {str(e_handler)[:50]}"
-                )
+                self.editor._set_status_message("Input handler error. See logs.")
+                if hasattr(self.editor, "_force_full_redraw"):
+                    self.editor._force_full_redraw = True
                 return True
+
+    def is_key_for_action(self, key: str | int, action_name: str) -> bool:
+        """Return True if key is bound to the named editor action."""
+        return key in self.keybindings.get(action_name, [])
 
     def _load_keybindings(self) -> dict[str, list[int | str]]:
         """Loads and returns the keybindings configuration for the editor.

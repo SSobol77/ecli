@@ -986,13 +986,20 @@ class DrawScreen:
                 "enabled", True
             ):
                 branch, user, commits = self.editor.git.info
-                if branch:
+                git_state = getattr(self.editor.git, "repo_state", "unavailable")
+                if git_state in {"clean", "dirty"} and branch:
                     dirty = "*" in branch
                     branch = branch.rstrip("*")
-                    git_txt = f" Git: {user}, {branch}, {commits or '0'}"
+                    git_txt = f" Git: {'dirty' if dirty else 'clean'}"
                     git_attr = c_dirty if dirty else c_git
+                elif git_state == "loading":
+                    git_txt = " Git: loading"
+                elif git_state == "not repo":
+                    git_txt = " Git: not repo"
+                elif git_state == "unavailable":
+                    git_txt = " Git: unavailable"
                 else:
-                    git_txt = " Git: None"
+                    git_txt = " Git: loading"
             right_w = self.editor.get_string_width(git_txt)
 
             # -- middle = status message --------------------------------

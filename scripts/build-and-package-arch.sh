@@ -24,6 +24,7 @@ VERSION="$(awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $2; exit}' pypr
   echo "ERROR: Cannot read version from pyproject.toml" >&2
   exit 1
 }
+python3 scripts/check_runtime_imports.py
 
 RAW_ARCH="$(uname -m 2>/dev/null || echo x86_64)"
 case "${RAW_ARCH}" in
@@ -65,6 +66,7 @@ cp -f "${raw_artifact}" "${NORMALIZED_ARTIFACT}"
 
 echo "==> Writing checksum"
 (cd "${RELEASES_DIR}" && sha256sum "$(basename "${NORMALIZED_ARTIFACT}")" > "$(basename "${NORMALIZED_ARTIFACT}").sha256")
+scripts/verify_runtime.sh "${NORMALIZED_ARTIFACT}"
 
 echo "Raw makepkg artifact: ${raw_artifact}"
 echo "DONE: ${NORMALIZED_ARTIFACT}"

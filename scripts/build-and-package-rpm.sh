@@ -84,6 +84,9 @@ fi
 export VERSION
 echo "==> Version: ${VERSION}"
 
+echo "==> Checking production runtime imports"
+python3 scripts/check_runtime_imports.py
+
 # ------------------------------------------------------------------------------
 # Paths
 # ------------------------------------------------------------------------------
@@ -96,8 +99,14 @@ APPS_DIR="${STAGING_DIR}/usr/share/applications"
 ICON_DIR="${STAGING_DIR}/usr/share/icons/hicolor/256x256/apps"
 
 RELEASES_DIR="${RELEASES_DIR:-releases/${VERSION}}"
+if [[ "${RELEASES_DIR}" != "releases/${VERSION}" ]]; then
+  die "RELEASES_DIR must match current project version: releases/${VERSION}"
+fi
 mkdir -p "${RELEASES_DIR}"
 printf 'LINUX_ARCH := %s\n' "${NORMALIZED_ARCH}" > "${RELEASES_DIR}/.linux.env"
+rm -f \
+  "${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_${RPM_PLATFORM_LABEL}_${NORMALIZED_ARCH}.rpm" \
+  "${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_${RPM_PLATFORM_LABEL}_${NORMALIZED_ARCH}.rpm.sha256"
 
 # ------------------------------------------------------------------------------
 # Helpers
@@ -141,6 +150,7 @@ else
     --onefile --clean --noconfirm --strip \
     --paths "src" \
     --add-data "config.toml:." \
+    --add-data "pyproject.toml:." \
     --hidden-import=ecli \
     --hidden-import=dotenv --collect-all=dotenv \
     --hidden-import=toml \
@@ -277,6 +287,7 @@ echo "✅ DONE"
 echo "RPM (actual): ${ACTUAL_RPM}"
 echo "RPM (normalized): ${NORMALIZED_RPM}"
 [[ -f "${NORMALIZED_RPM}.sha256" ]] && echo "SHA256: ${NORMALIZED_RPM}.sha256"
+scripts/verify_runtime.sh "${NORMALIZED_RPM}"
 
 # Optional quick metadata check (does not fail the build)
 if command -v rpm >/dev/null 2>&1; then

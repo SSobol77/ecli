@@ -60,6 +60,13 @@ define validate_if_present
 	fi
 endef
 
+define assert_current_release_file
+	@case "$(1)" in \
+		releases/$(PACKAGE_VERSION)/*) ;; \
+		*) echo "Artifact path is outside current release directory releases/$(PACKAGE_VERSION): $(1)"; exit 8 ;; \
+	esac
+endef
+
 .DEFAULT_GOAL := help
 
 # ---- FreeBSD .pkg (via vmactions/freebsd-vm) -------------------------------
@@ -198,16 +205,18 @@ distclean: clean
 # =============================================================================
 
 PYPI_VERSION    ?= $(PACKAGE_VERSION)
-PYPI_PKG_DIR    ?= dist
+PYPI_PKG_DIR    ?= $(RELEASE_DIR)
 PYPI_DIST_NAME   ?= ecli_editor
 PYPI_WHEEL_FILE ?= $(PYPI_PKG_DIR)/$(PYPI_DIST_NAME)-$(PYPI_VERSION)-py3-none-any.whl
 PYPI_SDIST_FILE ?= $(PYPI_PKG_DIR)/$(PYPI_DIST_NAME)-$(PYPI_VERSION).tar.gz
 
 .PHONY: package-pypi
-package-pypi: clean
+package-pypi: clean validate-runtime-imports
 	@echo "--> Building Python packages (wheel + sdist)..."
-	$(PYTHON) -m build
-	$(PYTHON) -m twine check --strict dist/*.whl dist/*.tar.gz
+	@mkdir -p "$(PYPI_PKG_DIR)"
+	@rm -f "$(PYPI_WHEEL_FILE)" "$(PYPI_WHEEL_FILE).sha256" "$(PYPI_SDIST_FILE)" "$(PYPI_SDIST_FILE).sha256"
+	$(PYTHON) -m build --outdir "$(PYPI_PKG_DIR)"
+	$(PYTHON) -m twine check --strict "$(PYPI_WHEEL_FILE)" "$(PYPI_SDIST_FILE)"
 	@for artifact in "$(PYPI_WHEEL_FILE)" "$(PYPI_SDIST_FILE)"; do \
 		dir="$$(dirname "$$artifact")"; \
 		base="$$(basename "$$artifact")"; \
@@ -225,6 +234,8 @@ package-pypi: clean
 .PHONY: package-pypi-assert
 package-pypi-assert:
 	@test -n "$(PYPI_VERSION)" || (echo "PYPI_VERSION is empty"; exit 1)
+	$(call assert_current_release_file,$(PYPI_WHEEL_FILE))
+	$(call assert_current_release_file,$(PYPI_SDIST_FILE))
 	$(call verify_sha256,$(PYPI_WHEEL_FILE))
 	$(call verify_sha256,$(PYPI_SDIST_FILE))
 	@echo "--> OK: $(PYPI_WHEEL_FILE)"
@@ -235,7 +246,7 @@ package-pypi-assert:
 .PHONY: show-python-artifacts
 show-python-artifacts:
 	@echo "Version: $(PYPI_VERSION)"
-	@ls -lh dist/ 2>/dev/null || echo "(no artifacts yet)"
+	@ls -lh "$(PYPI_PKG_DIR)"/*.whl "$(PYPI_PKG_DIR)"/*.tar.gz 2>/dev/null || echo "(no artifacts yet)"
 
 .PHONY: publish-pypi
 publish-pypi: package-pypi-assert
@@ -283,12 +294,12 @@ DEB_PKG_FILE    ?= $(DEB_PKG_DIR)/ecli_$(DEB_PKG_VERSION)_linux_$(LINUX_ARCH).de
 DEB_SHA_FILE    ?= $(DEB_PKG_FILE).sha256
 
 .PHONY: package-deb
-package-deb: clean
+package-deb: clean validate-runtime-imports
 	./scripts/build-and-package-deb.sh
 	$(MAKE) package-deb-assert
 
 .PHONY: package-deb-docker
-package-deb-docker: clean
+package-deb-docker: clean validate-runtime-imports
 	docker build -f docker/build-linux-deb.Dockerfile \
 		--build-arg PYTHON_VERSION=3.11 \
 		--build-arg DEBIAN_RELEASE=bullseye \
@@ -300,7 +311,9 @@ package-deb-docker: clean
 .PHONY: package-deb-assert
 package-deb-assert:
 	@test -n "$(DEB_PKG_VERSION)" || (echo "DEB_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
+	$(call assert_current_release_file,$(DEB_PKG_FILE))
 	$(call verify_sha256,$(DEB_PKG_FILE))
+	@./scripts/verify_runtime.sh "$(DEB_PKG_FILE)"
 	@echo "--> OK: $(DEB_PKG_FILE)"
 	@echo "--> OK: $(DEB_SHA_FILE)"
 
@@ -361,12 +374,12 @@ RPM_PKG_FILE    ?= $(RPM_PKG_DIR)/ecli_$(RPM_PKG_VERSION)_linux_$(LINUX_ARCH).rp
 RPM_SHA_FILE    ?= $(RPM_PKG_FILE).sha256
 
 .PHONY: package-rpm
-package-rpm: clean
+package-rpm: clean validate-runtime-imports
 	./scripts/build-and-package-rpm.sh
 	$(MAKE) package-rpm-assert
 
 .PHONY: package-rpm-docker
-package-rpm-docker: clean
+package-rpm-docker: clean validate-runtime-imports
 	docker build -f docker/build-linux-rpm.Dockerfile -t ecli-rpm:alma9 .
 	docker run --rm -v "$$(pwd):/app" -w /app ecli-rpm:alma9
 	$(MAKE) package-rpm-assert
@@ -375,7 +388,9 @@ package-rpm-docker: clean
 .PHONY: package-rpm-assert
 package-rpm-assert:
 	@test -n "$(RPM_PKG_VERSION)" || (echo "RPM_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
+	$(call assert_current_release_file,$(RPM_PKG_FILE))
 	$(call verify_sha256,$(RPM_PKG_FILE))
+	@./scripts/verify_runtime.sh "$(RPM_PKG_FILE)"
 	@echo "--> OK: $(RPM_PKG_FILE)"
 	@echo "--> OK: $(RPM_SHA_FILE)"
 
@@ -437,7 +452,7 @@ APPIMAGE_FILE    ?= $(APPIMAGE_PKG_DIR)/ecli_$(APPIMAGE_VERSION)_linux_$(LINUX_A
 APPIMAGE_SHA_FILE?= $(APPIMAGE_FILE).sha256
 
 .PHONY: package-appimage
-package-appimage: clean
+package-appimage: clean validate-runtime-imports
 	@command -v appimagetool >/dev/null 2>&1 || (echo "appimagetool not found. Install AppImageKit: https://github.com/AppImage/AppImageKit"; exit 1)
 	@echo "--> Building AppImage..."
 	bash ./scripts/package_appimage.sh "$(APPIMAGE_VERSION)" "$(LINUX_ARCH)"
@@ -450,7 +465,9 @@ package-appimage: clean
 .PHONY: package-appimage-assert
 package-appimage-assert:
 	@test -n "$(APPIMAGE_VERSION)" || (echo "APPIMAGE_VERSION is empty"; exit 1)
+	$(call assert_current_release_file,$(APPIMAGE_FILE))
 	$(call verify_sha256,$(APPIMAGE_FILE))
+	@./scripts/verify_runtime.sh "$(APPIMAGE_FILE)"
 	@echo "--> OK: $(APPIMAGE_FILE)"
 	@echo "--> OK: $(APPIMAGE_SHA_FILE)"
 
@@ -501,7 +518,7 @@ SNAP_FILE     ?= $(SNAP_PKG_DIR)/ecli_$(SNAP_VERSION)_linux_$(LINUX_ARCH).snap
 SNAP_SHA_FILE ?= $(SNAP_FILE).sha256
 
 .PHONY: package-snap
-package-snap: clean
+package-snap: clean validate-runtime-imports
 	@command -v snapcraft >/dev/null 2>&1 || (echo "snapcraft not found. Install: sudo snap install snapcraft --classic"; exit 1)
 	@test -f snapcraft.yaml || (echo "snapcraft.yaml not found in project root"; exit 1)
 	@echo "--> Building Snap..."
@@ -523,6 +540,7 @@ package-snap: clean
 
 .PHONY: package-snap-assert
 package-snap-assert:
+	$(call assert_current_release_file,$(SNAP_FILE))
 	$(call verify_sha256,$(SNAP_FILE))
 	@echo "--> OK: $(SNAP_FILE)"
 	@echo "--> OK: $(SNAP_SHA_FILE)"
@@ -554,22 +572,27 @@ TAR_LINUX_FILE?= $(TAR_PKG_DIR)/ecli_$(TAR_VERSION)_linux_$(LINUX_ARCH).tar.gz
 TAR_SHA_FILE  ?= $(TAR_LINUX_FILE).sha256
 
 .PHONY: package-tar-linux
-package-tar-linux: clean
-	@echo "--> Creating Linux tar.gz archive..."
+package-tar-linux: clean validate-runtime-imports
+	@echo "--> Building Linux binary tar.gz archive..."
 	@mkdir -p $(TAR_PKG_DIR)
-	@echo "ECLI v$(TAR_VERSION)" > RELEASE_NOTES.txt
-	@tar --exclude='.git' --exclude='.venv' --exclude='build' --exclude='dist' \
-		--exclude='releases' --exclude='__pycache__' --exclude='.pytest_cache' \
-		-czf "$(TAR_LINUX_FILE)" . \
-		--transform 's,^,ecli-$(TAR_VERSION)/,'
-	@rm -f RELEASE_NOTES.txt
+	@rm -f "$(TAR_LINUX_FILE)" "$(TAR_SHA_FILE)"
+	./scripts/build_pyinstaller_linux.sh
+	@rm -rf build/package-tar-linux
+	@mkdir -p build/package-tar-linux/ecli-$(TAR_VERSION)
+	@install -m 0755 dist/ecli build/package-tar-linux/ecli-$(TAR_VERSION)/ecli
+	@install -m 0644 README.md build/package-tar-linux/ecli-$(TAR_VERSION)/README.md
+	@install -m 0644 LICENSE build/package-tar-linux/ecli-$(TAR_VERSION)/LICENSE
+	@install -m 0644 CHANGELOG.md build/package-tar-linux/ecli-$(TAR_VERSION)/CHANGELOG.md
+	@tar -czf "$(TAR_LINUX_FILE)" -C build/package-tar-linux ecli-$(TAR_VERSION)
 	@cd $(TAR_PKG_DIR) && sha256sum $$(basename $(TAR_LINUX_FILE)) > $$(basename $(TAR_SHA_FILE))
 	$(MAKE) package-tar-linux-assert
 
 .PHONY: package-tar-linux-assert
 package-tar-linux-assert:
 	@test -n "$(TAR_VERSION)" || (echo "TAR_VERSION is empty"; exit 1)
+	$(call assert_current_release_file,$(TAR_LINUX_FILE))
 	$(call verify_sha256,$(TAR_LINUX_FILE))
+	@./scripts/verify_runtime.sh "$(TAR_LINUX_FILE)"
 	@echo "--> OK: $(TAR_LINUX_FILE)"
 	@echo "--> OK: $(TAR_SHA_FILE)"
 
@@ -620,7 +643,7 @@ package-freebsd-ci:
 # --- Local build on a real FreeBSD host/VM ------------------------------------
 # Runs the native packager script (PyInstaller -> stage -> pkg create).
 .PHONY: package-freebsd
-package-freebsd: clean
+package-freebsd: clean validate-runtime-imports
 	sh ./scripts/build-and-package-freebsd.sh
 	$(MAKE) package-freebsd-assert
 
@@ -628,7 +651,7 @@ package-freebsd: clean
 # Creates a clean 14.3 rootfs (base.txz), installs deps, runs the same build.
 # Requires root; keeps the host clean and returns artifacts into ./releases/.
 .PHONY: package-freebsd-chroot
-package-freebsd-chroot: clean
+package-freebsd-chroot: clean validate-runtime-imports
 	sudo tools/freebsd-chroot-build.sh
 	$(MAKE) package-freebsd-assert
 
@@ -636,7 +659,7 @@ package-freebsd-chroot: clean
 # Uses scripts/build_freebsd_port.sh to create a local port and `make package`.
 # Produces the same artifact names under releases/<version>/.
 .PHONY: package-freebsd-port
-package-freebsd-port: clean
+package-freebsd-port: clean validate-runtime-imports
 	sudo sh ./scripts/build_freebsd_port.sh
 	$(MAKE) package-freebsd-assert
 
@@ -644,7 +667,9 @@ package-freebsd-port: clean
 .PHONY: package-freebsd-assert
 package-freebsd-assert:
 	@test -n "$(FREEBSD_PKG_VERSION)" || (echo "FREEBSD_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
+	$(call assert_current_release_file,$(FREEBSD_PKG_FILE))
 	$(call verify_sha256,$(FREEBSD_PKG_FILE))
+	@./scripts/verify_runtime.sh "$(FREEBSD_PKG_FILE)"
 	@echo "--> OK: $(FREEBSD_PKG_FILE)"
 	@echo "--> OK: $(FREEBSD_SHA_FILE)"
 
@@ -727,14 +752,16 @@ MACOS_PKG_FILE    ?= $(MACOS_PKG_DIR)/ecli_$(MACOS_PKG_VERSION)_macos_$(MACOS_AR
 MACOS_SHA_FILE    ?= $(MACOS_PKG_FILE).sha256
 
 .PHONY: package-macos
-package-macos: clean
+package-macos: clean validate-runtime-imports
 	./scripts/build-and-package-macos.sh
 	$(MAKE) package-macos-assert
 
 .PHONY: package-macos-assert
 package-macos-assert:
 	@test -n "$(MACOS_PKG_VERSION)" || (echo "MACOS_PKG_VERSION empty (pyproject.toml)"; exit 1)
+	$(call assert_current_release_file,$(MACOS_PKG_FILE))
 	$(call verify_sha256,$(MACOS_PKG_FILE))
+	@./scripts/verify_runtime.sh "$(MACOS_PKG_FILE)"
 	@echo "--> OK: $(MACOS_PKG_FILE)"
 	@echo "--> OK: $(MACOS_SHA_FILE)"
 
@@ -802,15 +829,19 @@ WIN_SHA_FILE    ?= $(WIN_PORTABLE_SHA_FILE)
 
 # Local Windows build (run in PowerShell on Windows host)
 .PHONY: package-windows
-package-windows: clean
+package-windows: clean validate-runtime-imports
 	pwsh -File ./scripts/build-and-package-windows.ps1
 	$(MAKE) package-windows-assert
 
 .PHONY: package-windows-assert
 package-windows-assert:
 	@test -n "$(WIN_PKG_VERSION)" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
+	$(call assert_current_release_file,$(WIN_PORTABLE_FILE))
+	$(call assert_current_release_file,$(WIN_INSTALLER_FILE))
 	$(call verify_sha256,$(WIN_PORTABLE_FILE))
 	$(call verify_sha256,$(WIN_INSTALLER_FILE))
+	@./scripts/verify_runtime.sh --mode structural "$(WIN_PORTABLE_FILE)"
+	@./scripts/verify_runtime.sh --mode structural "$(WIN_INSTALLER_FILE)"
 	@echo "--> OK: $(WIN_PORTABLE_FILE)"
 	@echo "--> OK: $(WIN_PORTABLE_SHA_FILE)"
 	@echo "--> OK: $(WIN_INSTALLER_FILE)"
@@ -931,10 +962,10 @@ publish-all:
 	else \
 		echo "SKIP: Windows artifact not found: $(WIN_PKG_FILE)"; \
 	fi
-	@if ls dist/*.whl dist/*.tar.gz >/dev/null 2>&1; then \
+	@if [ -f "$(PYPI_WHEEL_FILE)" ] && [ -f "$(PYPI_SDIST_FILE)" ]; then \
 		$(MAKE) publish-pypi; \
 	else \
-		echo "SKIP: PyPI artifacts not found under dist/"; \
+		echo "SKIP: PyPI artifacts not found under $(PYPI_PKG_DIR)"; \
 	fi
 	@echo ""
 	@echo "╔═══════════════════════════════════════════════════════════════════════╗"
@@ -950,17 +981,28 @@ publish-all:
 validate-version-consistency:
 	@$(PYTHON) -c 'import pathlib, sys, tomllib; root=pathlib.Path.cwd().resolve(); sys.path.insert(0, str(root / "src")); import ecli; pyproject=tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))["project"]; expected=pyproject["version"]; actual=ecli.__version__; imported=pathlib.Path(ecli.__file__).resolve(); source_root=root / "src" / "ecli"; print(f"pyproject={expected} ecli.__version__={actual}"); ok=(actual == expected and imported.is_relative_to(source_root)); sys.exit(0 if ok else 1)'
 
+.PHONY: validate-runtime-imports
+validate-runtime-imports:
+	@$(PYTHON) scripts/check_runtime_imports.py
+	@echo "--> OK: production runtime imports"
+
 .PHONY: validate-pypi-contract
 validate-pypi-contract:
 	@test -f "$(PYPI_WHEEL_FILE)" || (echo "Missing $(PYPI_WHEEL_FILE)"; exit 2)
 	@test -f "$(PYPI_SDIST_FILE)" || (echo "Missing $(PYPI_SDIST_FILE)"; exit 2)
 	@test -f "$(PYPI_WHEEL_FILE).sha256" || (echo "Missing $(PYPI_WHEEL_FILE).sha256"; exit 3)
 	@test -f "$(PYPI_SDIST_FILE).sha256" || (echo "Missing $(PYPI_SDIST_FILE).sha256"; exit 3)
+	$(call assert_current_release_file,$(PYPI_WHEEL_FILE))
+	$(call assert_current_release_file,$(PYPI_SDIST_FILE))
 	@$(PYTHON) -m twine --version >/dev/null 2>&1 || (echo "Missing tooling: twine"; exit 5)
 	@$(PYTHON) -m twine check --strict "$(PYPI_WHEEL_FILE)" "$(PYPI_SDIST_FILE)" || exit 1
 	$(call verify_sha256,$(PYPI_WHEEL_FILE))
 	$(call verify_sha256,$(PYPI_SDIST_FILE))
 	@echo "--> OK: PyPI contract"
+
+.PHONY: validate-tar-linux-contract
+validate-tar-linux-contract: package-tar-linux-assert
+	@echo "--> OK: Linux tar contract"
 
 .PHONY: validate-deb-contract
 validate-deb-contract: package-deb-assert
@@ -987,7 +1029,7 @@ validate-windows-contract: package-windows-assert
 	@echo "--> OK: Windows contract"
 
 .PHONY: validate-gate2
-validate-gate2: validate-version-consistency
+validate-gate2: validate-version-consistency validate-runtime-imports
 	@if [ -f "$(PYPI_WHEEL_FILE)" ] || [ -f "$(PYPI_WHEEL_FILE).sha256" ] || [ -f "$(PYPI_SDIST_FILE)" ] || [ -f "$(PYPI_SDIST_FILE).sha256" ]; then \
 		$(MAKE) validate-pypi-contract; \
 	else \
@@ -996,6 +1038,7 @@ validate-gate2: validate-version-consistency
 	$(call validate_if_present,$(DEB_PKG_FILE),validate-deb-contract,DEB)
 	$(call validate_if_present,$(RPM_PKG_FILE),validate-rpm-contract,RPM)
 	$(call validate_if_present,$(APPIMAGE_FILE),validate-appimage-contract,AppImage)
+	$(call validate_if_present,$(TAR_LINUX_FILE),validate-tar-linux-contract,Linux tar)
 	$(call validate_if_present,$(FREEBSD_PKG_FILE),validate-freebsd-contract,FreeBSD)
 	$(call validate_if_present,$(MACOS_PKG_FILE),validate-macos-contract,macOS)
 	$(call validate_if_present,$(WIN_PKG_FILE),validate-windows-contract,Windows)
@@ -1014,7 +1057,7 @@ show-artifacts:
 	@echo "╚═══════════════════════════════════════════════════════════════════════╝"
 	@echo ""
 	@echo "Python (PyPI):"
-	@ls -lh dist/*.whl dist/*.tar.gz 2>/dev/null || echo "  (not built)"
+	@ls -lh "$(PYPI_PKG_DIR)"/*.whl "$(PYPI_PKG_DIR)"/*.tar.gz 2>/dev/null || echo "  (not built)"
 	@echo ""
 	@echo "Linux (Debian/Ubuntu):"
 	@ls -lh $(RELEASE_DIR)/ecli_*_linux_*.deb* 2>/dev/null || echo "  (not built)"

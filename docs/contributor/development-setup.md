@@ -31,6 +31,7 @@ See the LICENSE file in the project root for full license text.
 | `uv` | Recommended | deterministic dependency workflow | all platforms |
 | `pipx` | Optional | convenient tool installation | all platforms |
 | `ruff` / `pytest` toolchain | Role-dependent | local validation | maintainer-focused |
+| `twine` | Release-only | PyPI artifact validation in `make validate-gate2` | install via `.[release]`, `.[dev]`, or `requirements-dev.txt` |
 | `makensis` | Optional by role | Windows packaging | Windows packaging maintainers |
 | `hdiutil` | Optional by role | macOS DMG packaging | macOS only |
 | FreeBSD pkg toolchain | Optional by role | FreeBSD package build | FreeBSD environment only |

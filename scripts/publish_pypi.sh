@@ -21,9 +21,10 @@
 # Local maintainer publish from a clean workstation should be done
 # explicitly with the documented procedure:
 #
-#   python3 -m build
-#   python3 -m twine check --strict dist/*
-#   python3 -m twine upload dist/*
+#   version=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')
+#   python3 -m build --outdir "releases/${version}"
+#   python3 -m twine check --strict "releases/${version}"/*.whl "releases/${version}"/ecli_editor-*.tar.gz
+#   python3 -m twine upload "releases/${version}"/*.whl "releases/${version}"/ecli_editor-*.tar.gz
 #
 # See docs/release/release-process.md for the full procedure including
 # PyPI namespace pre-reservation and token rotation.

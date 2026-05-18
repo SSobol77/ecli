@@ -21,6 +21,8 @@ name: macOS DMG
       - ".github/workflows/macos-dmg.yml"
       - "src/**"
       - "scripts/build-and-package-macos.sh"
+      - "scripts/check_runtime_imports.py"
+      - "scripts/verify_runtime.sh"
       - "packaging/pyinstaller/ecli.spec"
       - "ecli.spec"
       - "pyproject.toml"

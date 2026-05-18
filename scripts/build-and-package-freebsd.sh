@@ -230,6 +230,7 @@ build_binary() {
       --onefile --clean --noconfirm --strip \
       --paths "src" \
       --add-data "config.toml:." \
+      --add-data "pyproject.toml:." \
       --hidden-import=ecli \
       --hidden-import=dotenv       --collect-all=dotenv \
       --hidden-import=toml \
@@ -400,11 +401,15 @@ install_python_dependencies
 VERSION="$(read_version)"
 print_step "Version detected: $VERSION"
 
+print_step "Checking production runtime imports..."
+python3.11 scripts/check_runtime_imports.py
+
 EXECUTABLE="$(build_binary)"
 print_step "Executable: $EXECUTABLE"
 
 STAGING_ROOT="$(stage_files "$EXECUTABLE" "$VERSION")"
 PKG_PATH="$(make_pkg "$STAGING_ROOT" "$VERSION")"
+./scripts/verify_runtime.sh "$PKG_PATH"
 
 print_header "DONE"
 print_step "Package:   $PKG_PATH"

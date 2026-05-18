@@ -53,7 +53,7 @@ See the LICENSE file in the project root for full license text.
 
 **ECLI** (Editor CLI) is a terminal-first engineering operations workbench. It combines a curses-based editor with right-side workflow panels and a typed service foundation for configuration, project discovery, command-plan previews,policy checks, audit logging, privileged-action refusal paths, and read-only system diagnostics.
 
-The v0.2.1 release keeps the Services Foundation editor surface intact and hardens release packaging, source-text preservation, and cross-platform install paths. It does not execute remediation, apply command plans, launch VMLab runtimes, or perform real privileged operations.
+The v0.2.2 release keeps the Services Foundation editor surface intact and hardens packaged/frozen runtime startup, release packaging, source-text preservation, and cross-platform install paths. It does not execute remediation, apply command plans, launch VMLab runtimes, or perform real privileged operations.
 
 ### ✨ Key Features
 
@@ -455,7 +455,7 @@ Master ECLI with these essential keyboard shortcuts. Press `F1` anytime inside t
 | `Insert` | Toggle Insert / Overwrite mode |
 | `F12` | Switch focus between editor windows and panels |
 
-The right side of the editor hosts workflow panels. The v0.2.1 service panels are read-only or preview-only: System Doctor does not mutate host state, Command Plan previews do not execute, and the Services panel reports composition status.
+The right side of the editor hosts workflow panels. The v0.2.2 service panels are read-only or preview-only: System Doctor does not mutate host state, Command Plan previews do not execute, and the Services panel reports composition status.
 
 ### Minimal Service CLI
 
@@ -536,7 +536,7 @@ Complete documentation is organized by audience:
 
 ## 🏗️ Architecture
 
-ECLI v0.2.1 keeps the existing editor/TUI behavior and introduces the Services Foundation as typed, testable service-layer infrastructure:
+ECLI v0.2.2 keeps the existing editor/TUI behavior and introduces the Services Foundation as typed, testable service-layer infrastructure:
 
 * **Core Editor**: curses-based terminal editor with async task integration
 
@@ -558,7 +558,7 @@ ECLI v0.2.1 keeps the existing editor/TUI behavior and introduces the Services F
 
 * **ServiceRegistry**: explicit composition root without global service-locator state
 
-**Safety boundaries for v0.2.1:**
+**Safety boundaries for v0.2.2:**
 
 * SystemDoctor is read-only.
 
@@ -568,7 +568,7 @@ ECLI v0.2.1 keeps the existing editor/TUI behavior and introduces the Services F
 
 * Service panels are visible in the UI but do not execute remediation.
 
-* VMLab runtime behavior is not included in v0.2.1.
+* VMLab runtime behavior is not included in v0.2.2.
 
 For detailed architecture information, see [Architecture Overview](https://github.com/SSobol77/ecli/blob/main/docs/architecture/current-architecture.md).
 

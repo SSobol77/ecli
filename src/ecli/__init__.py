@@ -13,6 +13,7 @@
 
 """ECLI — terminal-based text editor."""
 
+import sys
 import tomllib
 from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
@@ -49,8 +50,20 @@ def _installed_package_version(
         return None
 
 
+def _bundled_version() -> str | None:
+    bundle_root = getattr(sys, "_MEIPASS", None)
+    if not bundle_root:
+        return None
+    return _read_pyproject_version(Path(str(bundle_root)) / "pyproject.toml")
+
+
 def _resolve_version() -> str:
-    return _source_tree_version() or _installed_package_version() or "0.0.0+local"
+    return (
+        _source_tree_version()
+        or _bundled_version()
+        or _installed_package_version()
+        or "0.0.0+local"
+    )
 
 
 __version__ = _resolve_version()

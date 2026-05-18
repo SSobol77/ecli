@@ -84,6 +84,9 @@ if ([string]::IsNullOrWhiteSpace($version)) {
 }
 Write-Ok "Version: $version"
 
+Write-Info "Checking production runtime imports..."
+python scripts/check_runtime_imports.py
+
 $winArch = "x86_64"
 $releaseDir = Join-Path "releases" $version
 $portableName = "ecli_${version}_win_${winArch}.exe"
@@ -132,6 +135,31 @@ Write-Ok "Portable executable: $portablePath"
 
 Write-Info "Writing portable SHA256..."
 Write-Sha256Sidecar -ArtifactPath $portablePath
+
+Write-Info "Smoke-testing portable executable help/version..."
+$smokeHome = Join-Path $buildRoot "smoke-home"
+New-Item -ItemType Directory -Force -Path $smokeHome | Out-Null
+$oldUserProfile = $env:USERPROFILE
+$oldHome = $env:HOME
+try {
+  $env:USERPROFILE = $smokeHome
+  $env:HOME = $smokeHome
+  $helpOutput = & $portableFullPath --help
+  if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace(($helpOutput -join "`n"))) {
+    Write-Err "Portable executable --help smoke failed."
+    exit 4
+  }
+  $versionOutput = (& $portableFullPath --version) -join "`n"
+  if ($LASTEXITCODE -ne 0 -or $versionOutput.Trim() -ne "ecli $version") {
+    Write-Err "Portable executable --version smoke failed: '$versionOutput'"
+    exit 4
+  }
+}
+finally {
+  $env:USERPROFILE = $oldUserProfile
+  $env:HOME = $oldHome
+}
+Write-Ok "Portable executable help/version smoke passed."
 
 $makensis = Resolve-MakeNsis
 if (-not $makensis) {

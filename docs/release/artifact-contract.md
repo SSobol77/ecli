@@ -103,8 +103,8 @@ The artifact basename must not include a directory component.
 
 Release builds emit a CycloneDX SBOM alongside the Python distribution artifacts. SBOM filenames follow the PyPI distribution naming convention (hyphens, no platform/arch tokens) because they describe the Python distribution, not a native platform package:
 
-- `dist/ecli-editor-<version>.cdx.json`
-- `dist/ecli-editor-<version>.cdx.json.sha256`
+- `releases/<version>/ecli-editor-<version>.cdx.json`
+- `releases/<version>/ecli-editor-<version>.cdx.json.sha256`
 
 This is intentional inconsistency with native release artifacts (which use `ecli_<v>_<platform>_<arch>.<ext>` underscore convention). SBOMs apply to the Python wheel and sdist, both of which use PEP 427 / PEP 625 hyphen naming. The SBOM tracks the same convention.
 
