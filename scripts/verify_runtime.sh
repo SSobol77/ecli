@@ -101,14 +101,137 @@ fi
 
 tmpdir="$(mktemp -d)"
 mountpoint=""
+dmg_device=""
+
+private_var_path() {
+  case "$1" in
+    /var/*) printf '/private%s\n' "$1" ;;
+    *) printf '%s\n' "$1" ;;
+  esac
+}
+
+is_mountpoint_mounted() {
+  local path="$1"
+  local private_path
+  private_path="$(private_var_path "$path")"
+  mount | awk -v mp="$path" -v private_mp="$private_path" '
+    $3 == mp || $3 == private_mp { found = 1 }
+    END { exit found ? 0 : 1 }
+  '
+}
+
+is_dmg_device_attached() {
+  [ -n "$dmg_device" ] || return 1
+  hdiutil info 2>/dev/null | grep -F "$dmg_device" >/dev/null 2>&1
+}
+
+wait_for_mountpoint() {
+  local path="$1"
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if is_mountpoint_mounted "$path"; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+wait_for_detach() {
+  local path="$1"
+  local attempt
+  for attempt in 1 2 3 4 5 6 7 8 9 10; do
+    if ! is_mountpoint_mounted "$path" && ! is_dmg_device_attached; then
+      return 0
+    fi
+    sleep 1
+  done
+  return 1
+}
+
+detach_dmg() {
+  local target
+  local attempt
+  local output
+  local rc
+
+  set +e
+  if [ -z "$mountpoint" ]; then
+    set -e
+    return 0
+  fi
+  if ! is_mountpoint_mounted "$mountpoint" && ! is_dmg_device_attached; then
+    dmg_device=""
+    set -e
+    return 0
+  fi
+
+  target="${dmg_device:-$mountpoint}"
+  for attempt in 1 2 3; do
+    output="$(hdiutil detach "$target" 2>&1)"
+    rc=$?
+    if [ "$rc" -eq 0 ] && wait_for_detach "$mountpoint"; then
+      dmg_device=""
+      set -e
+      return 0
+    fi
+    echo "WARNING: hdiutil detach retry ${attempt}/3 failed or did not settle for ${target}." >&2
+    [ -z "$output" ] || printf '%s\n' "$output" >&2
+    sleep 1
+  done
+
+  output="$(hdiutil detach -force "$target" 2>&1)"
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    echo "WARNING: hdiutil detach -force failed for ${target}." >&2
+    [ -z "$output" ] || printf '%s\n' "$output" >&2
+  fi
+  if ! wait_for_detach "$mountpoint"; then
+    echo "WARNING: DMG mount/device did not fully detach before cleanup: ${mountpoint}" >&2
+  fi
+  dmg_device=""
+  set -e
+}
+
+attach_dmg() {
+  local artifact="$1"
+  local output_file="$tmpdir/hdiutil-attach.out"
+  local attempt
+  local rc
+
+  for attempt in 1 2 3 4 5; do
+    : >"$output_file"
+    set +e
+    hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "$artifact" >"$output_file" 2>&1
+    rc=$?
+    set -e
+
+    if [ "$rc" -eq 0 ]; then
+      dmg_device="$(awk '/^\/dev\/disk/ { print $1; exit }' "$output_file")"
+      if wait_for_mountpoint "$mountpoint"; then
+        return 0
+      fi
+      echo "WARNING: hdiutil attach succeeded but mountpoint did not settle: ${mountpoint}" >&2
+      detach_dmg
+    else
+      echo "WARNING: hdiutil attach failed for ${artifact} (attempt ${attempt}/5, rc=${rc})." >&2
+      sed 's/^/hdiutil: /' "$output_file" >&2
+    fi
+
+    if [ "$attempt" -lt 5 ]; then
+      sleep 2
+    fi
+  done
+
+  echo "ERR: failed to attach DMG: ${artifact}" >&2
+  sed 's/^/hdiutil: /' "$output_file" >&2
+  return 6
+}
+
 cleanup() {
   set +e
   if [ -n "$mountpoint" ] && command -v hdiutil >/dev/null 2>&1; then
-    for _attempt in 1 2 3; do
-      hdiutil detach "$mountpoint" >/dev/null 2>&1 && break
-      sleep 1
-    done
-    hdiutil detach -force "$mountpoint" >/dev/null 2>&1 || true
+    detach_dmg
   fi
   rm -rf "$tmpdir" >/dev/null 2>&1 || true
   return 0
@@ -185,7 +308,7 @@ extract_artifact() {
       fi
       mountpoint="$tmpdir/dmg"
       mkdir -p "$mountpoint"
-      hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "$artifact" >/dev/null
+      attach_dmg "$artifact" || return $?
       printf '%s\n' "$mountpoint"
       return 0
       ;;
@@ -320,7 +443,7 @@ extract_rc=0
 root="$(extract_artifact "$ARTIFACT")" || extract_rc=$?
 
 if [ "$extract_rc" -ne 0 ]; then
-  if [ "$MODE" = "native" ]; then
+  if [ "$MODE" = "native" ] || { [ "$host_os" = "Darwin" ] && [ "${ARTIFACT##*.}" = "dmg" ]; }; then
     exit "$extract_rc"
   fi
   run_structural_check "$ARTIFACT" "$tmpdir/root"
