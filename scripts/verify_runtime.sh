@@ -102,10 +102,16 @@ fi
 tmpdir="$(mktemp -d)"
 mountpoint=""
 cleanup() {
+  set +e
   if [ -n "$mountpoint" ] && command -v hdiutil >/dev/null 2>&1; then
-    hdiutil detach "$mountpoint" >/dev/null 2>&1 || true
+    for _attempt in 1 2 3; do
+      hdiutil detach "$mountpoint" >/dev/null 2>&1 && break
+      sleep 1
+    done
+    hdiutil detach -force "$mountpoint" >/dev/null 2>&1 || true
   fi
-  rm -rf "$tmpdir"
+  rm -rf "$tmpdir" >/dev/null 2>&1 || true
+  return 0
 }
 trap cleanup EXIT
 

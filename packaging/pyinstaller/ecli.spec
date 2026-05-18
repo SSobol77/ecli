@@ -42,6 +42,7 @@ one_dir = os.environ.get("ECLI_PYINSTALLER_ONEDIR") == "1"
 build_macos_app = (
     sys.platform == "darwin" and os.environ.get("ECLI_BUILD_MACOS_APP") == "1"
 )
+strip_binaries = sys.platform != "win32"
 
 datas = [
     (str(config_file), "."),
@@ -106,7 +107,7 @@ if one_dir or build_macos_app:
         name="ecli",
         debug=False,
         bootloader_ignore_signals=False,
-        strip=True,
+        strip=strip_binaries,
         upx=True,
         console=True,
         disable_windowed_traceback=False,
@@ -120,7 +121,7 @@ if one_dir or build_macos_app:
         exe,
         a.binaries,
         a.datas,
-        strip=True,
+        strip=strip_binaries,
         upx=True,
         upx_exclude=[],
         name="ecli",
@@ -149,7 +150,7 @@ else:
         name="ecli",
         debug=False,
         bootloader_ignore_signals=False,
-        strip=True,
+        strip=strip_binaries,
         upx=True,
         upx_exclude=[],
         runtime_tmpdir=None,
