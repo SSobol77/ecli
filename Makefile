@@ -750,18 +750,29 @@ MACOS_PKG_VERSION ?= $(PACKAGE_VERSION)
 MACOS_PKG_DIR     ?= releases/$(MACOS_PKG_VERSION)
 MACOS_PKG_FILE    ?= $(MACOS_PKG_DIR)/ecli_$(MACOS_PKG_VERSION)_macos_$(MACOS_ARCH).dmg
 MACOS_SHA_FILE    ?= $(MACOS_PKG_FILE).sha256
+MACOS_ASSERT_MODE ?= native
 
 .PHONY: package-macos
 package-macos: clean validate-runtime-imports
 	./scripts/build-and-package-macos.sh
-	$(MAKE) package-macos-assert
+	$(MAKE) package-macos-assert MACOS_ASSERT_MODE=structural
 
 .PHONY: package-macos-assert
 package-macos-assert:
 	@test -n "$(MACOS_PKG_VERSION)" || (echo "MACOS_PKG_VERSION empty (pyproject.toml)"; exit 1)
 	$(call assert_current_release_file,$(MACOS_PKG_FILE))
 	$(call verify_sha256,$(MACOS_PKG_FILE))
+ifeq ($(MACOS_ASSERT_MODE),native)
 	@./scripts/verify_runtime.sh "$(MACOS_PKG_FILE)"
+	@echo "--> OK: macOS native runtime artifact contract"
+else ifeq ($(MACOS_ASSERT_MODE),structural)
+	@test -s "$(MACOS_PKG_FILE)" || (echo "Missing or empty $(MACOS_PKG_FILE)"; exit 2)
+	@test -s "$(MACOS_SHA_FILE)" || (echo "Missing or empty $(MACOS_SHA_FILE)"; exit 3)
+	@echo "--> OK: macOS structural artifact contract"
+	@echo "--> INFO: native DMG runtime smoke already completed during build script"
+else
+	@echo "Invalid MACOS_ASSERT_MODE=$(MACOS_ASSERT_MODE) (expected native or structural)"; exit 2
+endif
 	@echo "--> OK: $(MACOS_PKG_FILE)"
 	@echo "--> OK: $(MACOS_SHA_FILE)"
 

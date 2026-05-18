@@ -162,3 +162,8 @@ The migration makes artifact discovery deterministic for CI and release automati
 - release workflow must validate expected artifact names and checksums before publish.
 
 - missing contract artifact must fail the pipeline.
+
+- macOS DMG package builds must perform one native mounted-DMG runtime smoke
+  during `scripts/build-and-package-macos.sh`. Follow-up assertions in the same
+  build job may use structural/checksum-only validation to avoid redundant
+  immediate `hdiutil attach` calls against the same image.
