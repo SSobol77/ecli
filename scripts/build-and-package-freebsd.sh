@@ -347,6 +347,7 @@ make_pkg() {
   mkdir -p "$META_DIR"
 
   MANIFEST_FILE="$META_DIR/+MANIFEST"
+  PLIST_FILE="$META_DIR/pkg-plist"
   cat > "$MANIFEST_FILE" <<EOF
 name: ${PACKAGE_NAME}
 version: ${VERSION}
@@ -363,11 +364,16 @@ licenses: [${LICENSE}]
 licenselogic: single
 EOF
 
+  {
+    printf '@cwd /usr/local\n'
+    (cd "$STAGING_ROOT/usr/local" && find . \( -type f -o -type l \) -print | sed 's#^\./##' | sort)
+  } > "$PLIST_FILE"
+
   RELEASES_DIR="releases/$VERSION"
   mkdir -p "$RELEASES_DIR"
 
   print_step "Creating .pkg with pkg create..."
-  pkg create -M "$MANIFEST_FILE" -r "$STAGING_ROOT" -o "$RELEASES_DIR"
+  pkg create -M "$MANIFEST_FILE" -p "$PLIST_FILE" -r "$STAGING_ROOT" -o "$RELEASES_DIR"
 
   # Normalize arch for filename
   RAW_ARCH="$(uname -m 2>/dev/null || echo amd64)"
@@ -383,6 +389,9 @@ EOF
   DEST_PKG="${RELEASES_DIR}/${PACKAGE_NAME}_${VERSION}_freebsd_${ARCH}.pkg"
   [ "$ORIG_PKG" != "$DEST_PKG" ] && mv -f "$ORIG_PKG" "$DEST_PKG"
   printf 'FREEBSD_ARCH := %s\n' "$ARCH" > "$RELEASES_DIR/.freebsd.env"
+
+  print_step "FreeBSD package payload:"
+  tar -tf "$DEST_PKG" | sed -n '1,80p' >&2
 
   # SHA256 sidecar
   if command -v sha256 >/dev/null 2>&1; then

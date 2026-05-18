@@ -17,6 +17,20 @@ name: Release
   push:
     tags:
       - "v*.*.*"
+  workflow_dispatch:
+    inputs:
+      publish_pypi:
+        description: "Publish Python distributions to PyPI. Keep false for v0.2.2 recovery because PyPI is already published."
+        required: false
+        default: "false"
+      publish_github_release:
+        description: "Create or update the GitHub Release and upload assets."
+        required: false
+        default: "true"
+      build_assets:
+        description: "Build release artifacts before publishing assets."
+        required: false
+        default: "true"
 
 permissions:
   contents: write
@@ -27,6 +41,7 @@ env:
 jobs:
   build-python:
     name: Build Python distributions
+    if: ${{ github.event_name == 'push' || github.event.inputs.build_assets != 'false' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -51,6 +66,11 @@ jobs:
           python3 -m twine check --strict \
             "${RELEASE_DIR}/ecli_editor-${VERSION}-py3-none-any.whl" \
             "${RELEASE_DIR}/ecli_editor-${VERSION}.tar.gz"
+          (
+            cd "${RELEASE_DIR}"
+            sha256sum "ecli_editor-${VERSION}-py3-none-any.whl" > "ecli_editor-${VERSION}-py3-none-any.whl.sha256"
+            sha256sum "ecli_editor-${VERSION}.tar.gz" > "ecli_editor-${VERSION}.tar.gz.sha256"
+          )
           python3 -m pip install --user cyclonedx-bom
           python3 -m cyclonedx_py environment \
             --pyproject pyproject.toml \
@@ -67,7 +87,9 @@ jobs:
           name: python-dist
           path: |
             releases/**/*.whl
+            releases/**/*.whl.sha256
             releases/**/*.tar.gz
+            releases/**/*.tar.gz.sha256
           if-no-files-found: error
 
       - name: Upload Python SBOM
@@ -81,6 +103,7 @@ jobs:
 
   build-linux:
     name: Build Linux packages
+    if: ${{ github.event_name == 'push' || github.event.inputs.build_assets != 'false' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -148,6 +171,7 @@ jobs:
 
   build-freebsd:
     name: Build FreeBSD package
+    if: ${{ github.event_name == 'push' || github.event.inputs.build_assets != 'false' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -202,6 +226,7 @@ jobs:
 
   build-macos:
     name: Build macOS DMG
+    if: ${{ github.event_name == 'push' || github.event.inputs.build_assets != 'false' }}
     # macos-14 is selected for the Apple Silicon host needed to build the
     # arm64 leg natively; Rosetta provides the x86_64 leg for Universal2.
     runs-on: macos-14
@@ -237,6 +262,7 @@ jobs:
 
   build-windows:
     name: Build Windows artifacts
+    if: ${{ github.event_name == 'push' || github.event.inputs.build_assets != 'false' }}
     runs-on: windows-latest
     permissions:
       contents: read
@@ -310,6 +336,7 @@ jobs:
     name: Publish to PyPI
     runs-on: ubuntu-latest
     needs: [build-python]
+    if: ${{ always() && needs.build-python.result == 'success' }}
     permissions:
       contents: read
     steps:
@@ -319,7 +346,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Report recovery PyPI policy
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_pypi != 'true' }}
+        run: |
+          echo "INFO: PyPI publish disabled for recovery run"
+
       - name: Verify PyPI namespace ownership
+        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
         run: |
           set -e
           name=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["name"])')
@@ -338,12 +371,14 @@ jobs:
           echo "$lookup"
 
       - name: Download Python distributions
+        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
         uses: actions/download-artifact@v4
         with:
           name: python-dist
           path: dist
 
       - name: Normalize and verify PyPI distributions
+        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
         run: |
           set -euo pipefail
           echo "Downloaded Python distribution artifact layout:"
@@ -365,6 +400,7 @@ jobs:
           python3 -m twine check dist/*
 
       - name: Publish to PyPI
+        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
         # Pinned from pypa/gh-action-pypi-publish release/v1 on 2026-05-10.
         uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
         with:
@@ -380,9 +416,24 @@ jobs:
       - build-freebsd
       - build-macos
       - build-windows
+    if: ${{ always() && (github.event_name == 'push' || github.event.inputs.publish_github_release != 'false') && needs.build-python.result == 'success' && needs.build-linux.result == 'success' && needs.build-freebsd.result == 'success' && needs.build-macos.result == 'success' && needs.build-windows.result == 'success' }}
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Read release metadata
+        id: release_meta
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -395,11 +446,13 @@ jobs:
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.ref_name }}
+          tag_name: ${{ steps.release_meta.outputs.tag }}
           draft: false
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          prerelease: ${{ contains(steps.release_meta.outputs.tag, '-') }}
+          overwrite_files: true
+          fail_on_unmatched_files: true
           body: |
-            ECLI release artifacts for ${{ github.ref_name }}.
+            ECLI release artifacts for ${{ steps.release_meta.outputs.tag }}.
 
             This release includes a CycloneDX SBOM for the Python distribution:
             `ecli-editor-<version>.cdx.json`, plus a SHA256 sidecar.

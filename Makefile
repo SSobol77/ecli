@@ -381,7 +381,7 @@ package-rpm: clean validate-runtime-imports
 .PHONY: package-rpm-docker
 package-rpm-docker: clean validate-runtime-imports
 	docker build -f docker/build-linux-rpm.Dockerfile -t ecli-rpm:alma9 .
-	docker run --rm -v "$$(pwd):/app" -w /app ecli-rpm:alma9
+	docker run --rm -e PYTHON=python3.11 -v "$$(pwd):/app" -w /app ecli-rpm:alma9
 	$(MAKE) package-rpm-assert
 
 # --- Assertion helper: verify expected artifact names/locations ---------------

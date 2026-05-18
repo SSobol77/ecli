@@ -85,9 +85,14 @@ find_python() {
 PYTHON_BIN="$(find_python)"
 
 VERSION="$("$PYTHON_BIN" - <<'PY'
-import tomllib
-with open("pyproject.toml", "rb") as f:
-    print(tomllib.load(f)["project"]["version"])
+import re
+from pathlib import Path
+
+text = Path("pyproject.toml").read_text(encoding="utf-8")
+match = re.search(r'(?m)^[ \t]*version[ \t]*=[ \t]*"([^"]+)"[ \t]*$', text)
+if not match:
+    raise SystemExit("ERR: cannot read [project].version from pyproject.toml")
+print(match.group(1))
 PY
 )"
 EXPECTED_VERSION_OUTPUT="ecli ${VERSION}"
@@ -362,6 +367,13 @@ find_launcher() {
   find "$root" -maxdepth 5 -type f \( -name ecli -o -name ecli.exe \) -perm -111 -print | head -n 1
 }
 
+report_launcher_missing() {
+  local root="$1"
+  echo "Runtime launcher is missing or not executable under $root" >&2
+  echo "Extracted artifact payload:" >&2
+  find "$root" -maxdepth 6 \( -type f -o -type l \) -print 2>/dev/null | sort | sed 's/^/  /' >&2 || true
+}
+
 scan_logs() {
   local home="$1"
   local log_file="$home/.config/ecli/logs/editor.log"
@@ -480,7 +492,7 @@ fi
 
 if [ "$MODE" = "native" ] || can_execute_artifact "$ARTIFACT"; then
   if [ -z "$binary" ] || [ ! -x "$binary" ]; then
-    echo "Runtime launcher is missing or not executable under $root" >&2
+    report_launcher_missing "$root"
     exit 5
   fi
   run_native_smoke "$binary"

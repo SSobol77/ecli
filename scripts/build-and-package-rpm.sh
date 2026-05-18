@@ -38,6 +38,8 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${PROJECT_ROOT}"
 export PROJECT_ROOT
+PYTHON="${PYTHON:-python3.11}"
+export PYTHON
 
 # ------------------------------------------------------------------------------
 # Project metadata
@@ -62,7 +64,7 @@ RPM_DEPENDS="${RPM_DEPENDS:-ncurses-libs;libyaml}"
 # Read version from pyproject.toml (works on Py 3.10/3.11)
 # ------------------------------------------------------------------------------
 read_version() {
-  python3.11 - <<'PY'
+  "$PYTHON" - <<'PY'
 import os
 try:
     import tomllib
@@ -85,7 +87,7 @@ export VERSION
 echo "==> Version: ${VERSION}"
 
 echo "==> Checking production runtime imports"
-python3 scripts/check_runtime_imports.py
+"$PYTHON" scripts/check_runtime_imports.py
 
 # ------------------------------------------------------------------------------
 # Paths
@@ -122,6 +124,7 @@ need() {
 # ------------------------------------------------------------------------------
 echo "==> Checking build tools"
 need python3.11
+need "${PYTHON}"
 need pyinstaller
 need fpm
 need rpmbuild    # provided by rpm-build
@@ -287,7 +290,7 @@ echo "✅ DONE"
 echo "RPM (actual): ${ACTUAL_RPM}"
 echo "RPM (normalized): ${NORMALIZED_RPM}"
 [[ -f "${NORMALIZED_RPM}.sha256" ]] && echo "SHA256: ${NORMALIZED_RPM}.sha256"
-scripts/verify_runtime.sh "${NORMALIZED_RPM}"
+PYTHON="$PYTHON" scripts/verify_runtime.sh "${NORMALIZED_RPM}"
 
 # Optional quick metadata check (does not fail the build)
 if command -v rpm >/dev/null 2>&1; then
