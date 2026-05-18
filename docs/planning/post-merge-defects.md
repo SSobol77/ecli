@@ -129,3 +129,118 @@ import, without invoking the CLI binary. The CLI `--version`/`--help` work is
 tracked separately as a Phase 1 follow-up.
 
 No repository changes required for Gate 2 sign-off.
+
+## Defect PMV-003: FreeBSD 14.3 Release Leg Aborted at Pseudo-TTY Smoke
+
+Timestamp: 2026-05-19T00:00:00+02:00
+
+### Context
+
+ECLI v0.2.2 release pipeline `Release` workflow run `26064484430`, job
+`76632103340` (`Build FreeBSD package`). The Linux / macOS / Windows / Python
+legs all passed. PyPI 0.2.2 was published successfully (immutable). The
+GitHub Release for `v0.2.2` could not be published because
+`publish-github-release` had `needs.build-freebsd.result == 'success'` in its
+`if:` condition.
+
+### Symptom
+
+The `Build in FreeBSD 14.3 VM` step ended with:
+
+```text
+##[error]The process '/usr/bin/ssh' failed with exit code 1
+```
+
+Last in-VM lines before the SSH wrapper died:
+
+```text
+Bare ECLI pseudo-TTY startup exited unexpectedly with status 1
+script: illegal option -- c
+usage: script [-aeFfkpqrw] [-t time] [file [command ...]]
+```
+
+Captured log: `logs/freebsd-0.2.2-fail.log` (local; `logs/*` is gitignored).
+Reproduce remotely with:
+
+```sh
+gh run view --job 76632103340 --log > logs/freebsd-0.2.2-fail.log
+```
+
+### Root Cause Classification
+
+**RC-OTHER** — portability defect in `scripts/verify_runtime.sh`.
+
+The `run_native_smoke()` helper invoked `script -q -c "..." /dev/null` to run
+the packaged binary inside a bounded pseudo-TTY. The `-c CMD` flag is a
+GNU/util-linux extension; FreeBSD's BSD `script(1)` is positional
+(`script [opts] [file [command ...]]`). On FreeBSD 14.3, `script -c` returns
+exit 1 with `script: illegal option -- c`. Under `set -euo pipefail` this
+exit propagated all the way up through `build-and-package-freebsd.sh`, which
+in turn terminated the SSH session inside the vmactions VM wrapper, surfacing
+as the opaque ssh exit-1.
+
+### Evidence
+
+Quoted from the failing job log (`logs/freebsd-0.2.2-fail.log:1165-1167`):
+
+```text
+script: illegal option -- c
+usage: script [-aeFfkpqrw] [-t time] [file [command ...]]
+       script -p [-deq] [-T fmt] [file]
+```
+
+The `pkg create` step at log line 1153 completed and emitted the payload
+listing — proof that `install_system_dependencies`,
+`install_python_dependencies`, PyInstaller, staging, and `pkg create` were
+all green. The failure was downstream, in the runtime verification step.
+
+Implicated source lines:
+
+- `scripts/verify_runtime.sh:418` (pre-fix): `timeout 3s script -q -c "..." /dev/null`
+- `scripts/verify_runtime.sh:425` (pre-fix): `echo "Bare ECLI pseudo-TTY startup exited unexpectedly..."`
+
+### Fix Summary
+
+1. `scripts/verify_runtime.sh`: detect `script(1)` flavor via `script --help`
+   and select GNU (`-c CMD FILE`) vs BSD (`FILE COMMAND...`) syntax at
+   runtime. Environment variables are now pushed in via `env HOME=... TERM=...`
+   for both flavors so behavior is identical across Linux, FreeBSD, and macOS.
+2. `scripts/build-and-package-freebsd.sh`: added `STEP=` instrumentation, an
+   `on_error` EXIT trap that dumps the failing step, dmesg tail, `sysctl`
+   memory, and `df -h`, a `pkg update -f` retry loop, observable pip output,
+   a low-memory guard before PyInstaller, and PyInstaller / Python version
+   echo at the top of `build_binary`.
+3. `.github/workflows/release.yml`:
+   - Pinned `vmactions/freebsd-vm` to commit SHA `d1e6581...` (v1.4.5).
+   - Increased VM resources to `mem: 6144`, `cpu: 4`.
+   - Tee'd the in-VM stdout to `freebsd-build.log` and added an
+     `if: failure()` upload step (`freebsd-build-log-<run_id>`) so future
+     SSH disconnects cannot lose the in-VM trace.
+   - Marked `build-freebsd` as `continue-on-error: true` and removed it from
+     the success criteria of `publish-github-release`. FreeBSD now lives in
+     `needs:` for ordering only.
+   - The publisher injects a `freebsd_note` line into the release body when
+     `needs.build-freebsd.result != 'success'`, explicitly stating that the
+     `.pkg` is attached out-of-band.
+4. `.github/workflows/freebsd-pkg.yml`: mirrored vmactions SHA pin, added
+   build-log capture on failure, raised resources, and added a
+   workflow_dispatch input `release_tag` that uploads the freshly built
+   `.pkg` + `.sha256` to that GitHub Release via
+   `gh release upload --clobber`.
+
+### Follow-Up Actions
+
+- Re-run `Release` workflow (`gh workflow run release.yml --ref main \
+   -f build_assets=true -f publish_pypi=false -f publish_github_release=true`)
+  to publish v0.2.2 GitHub Release with non-FreeBSD assets.
+- If FreeBSD leg lands green in that rerun, the `.pkg` is included
+  automatically. If it fails again, dispatch `FreeBSD 14 .pkg` with
+  `release_tag=v0.2.2` to attach the `.pkg` out-of-band.
+- Track migration of FreeBSD leg from `vmactions/freebsd-vm` (qemu-on-Linux)
+  to native Cirrus CI as a stretch reliability improvement; see
+  `docs/release/build-matrix.md`.
+
+### Owner
+
+Release engineering — Siergej Sobolewski.
+

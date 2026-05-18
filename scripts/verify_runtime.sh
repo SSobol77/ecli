@@ -413,10 +413,23 @@ run_native_smoke() {
     return 1
   fi
 
+  # script(1) flavors diverge across BSD and GNU/util-linux. GNU script accepts
+  # `-c CMD FILE`; FreeBSD/macOS script is positional: `script [opts] [file [cmd...]]`.
+  # Detect the flavor at runtime so the pseudo-TTY smoke works on Linux, FreeBSD,
+  # and Darwin without splitting code paths per OS.
   if command -v timeout >/dev/null 2>&1 && command -v script >/dev/null 2>&1; then
+    HOME_ENV="$home"
+    TERM_ENV="${TERM:-xterm-256color}"
     set +e
-    timeout 3s script -q -c "HOME='$home' TERM='${TERM:-xterm-256color}' '$binary'" /dev/null \
-      >"$tmpdir/tty.stdout" 2>"$tmpdir/tty.stderr"
+    if script --help 2>&1 | grep -q -- '-c, --command'; then
+      timeout 3s env "HOME=$HOME_ENV" "TERM=$TERM_ENV" \
+        script -q -c "'$binary'" /dev/null \
+        >"$tmpdir/tty.stdout" 2>"$tmpdir/tty.stderr"
+    else
+      timeout 3s env "HOME=$HOME_ENV" "TERM=$TERM_ENV" \
+        script -q /dev/null "$binary" \
+        >"$tmpdir/tty.stdout" 2>"$tmpdir/tty.stderr"
+    fi
     tty_rc=$?
     set -e
     case "$tty_rc" in

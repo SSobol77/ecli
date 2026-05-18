@@ -15,6 +15,11 @@ name: FreeBSD 14 .pkg
 
 "on":
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional release tag (e.g. v0.2.2). When set, the built .pkg is attached to that GitHub Release out-of-band via 'gh release upload --clobber'."
+        required: false
+        default: ""
   push:
     branches: [ "main" ]
     paths:
@@ -28,7 +33,7 @@ name: FreeBSD 14 .pkg
       - "pyproject.toml"
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build-freebsd-pkg:
@@ -42,21 +47,32 @@ jobs:
           fetch-depth: 0
 
       - name: Build in FreeBSD 14.3 VM
-        uses: vmactions/freebsd-vm@v1
+        # Pinned to vmactions/freebsd-vm v1.4.5 by commit SHA; mirrors
+        # release.yml so both workflows share the same vmactions revision.
+        uses: vmactions/freebsd-vm@d1e65811565151536c0c894fff74f06351ed26e6  # v1.4.5
         with:
           release: "14.3"
           usesh: true
-          mem: 4096
-          cpu: 2
+          mem: 6144
+          cpu: 4
           sync: rsync
           copyback: true
           prepare: |
             set -eux
             env ASSUME_ALWAYS_YES=yes pkg update -f
-            env ASSUME_ALWAYS_YES=yes pkg install -y bash
+            env ASSUME_ALWAYS_YES=yes pkg install -y bash rust pkgconf
           run: |
             set -eux
-            sh ./scripts/build-and-package-freebsd.sh
+            sh ./scripts/build-and-package-freebsd.sh 2>&1 | tee freebsd-build.log
+
+      - name: Upload FreeBSD build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: freebsd-build-log-${{ github.run_id }}
+          path: freebsd-build.log
+          if-no-files-found: warn
+          retention-days: 14
 
       - name: Find built .pkg and checksum
         id: find_pkg
@@ -98,3 +114,24 @@ jobs:
             ${{ steps.find_pkg.outputs.pkg_path }}
             ${{ steps.find_pkg.outputs.checksum_path }}
           if-no-files-found: error
+
+      - name: Attach FreeBSD .pkg to GitHub Release (out-of-band)
+        # When the standalone workflow is dispatched with `release_tag` set,
+        # the freshly built .pkg + .sha256 are uploaded to that release with
+        # --clobber. This is the post-hoc attach path when the Release workflow
+        # publishes without FreeBSD due to a vmactions flake.
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          PKG_PATH: ${{ steps.find_pkg.outputs.pkg_path }}
+          SHA_PATH: ${{ steps.find_pkg.outputs.checksum_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "::error::Release $RELEASE_TAG does not exist; cannot attach FreeBSD .pkg out-of-band"
+            exit 1
+          fi
+          gh release upload "$RELEASE_TAG" "$PKG_PATH" "$SHA_PATH" --clobber
+          echo "Attached $PKG_PATH and $SHA_PATH to $RELEASE_TAG"

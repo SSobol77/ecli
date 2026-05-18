@@ -121,6 +121,9 @@
 
 
 set -eu
+# Best-effort: `set -o pipefail` is supported on FreeBSD sh 14.x but absent on
+# strictly older /bin/sh; keep it optional rather than relying on Bash.
+set -o pipefail 2>/dev/null || true
 
 PYTHON="${PYTHON:-python3.11}"
 export PYTHON
@@ -130,6 +133,24 @@ print_header() { printf "\033[1;36m==> %s\033[0m\n" "$*"; }
 print_step()   { printf "\033[32m  -> %s\033[0m\n" "$*" >&2; }
 print_warn()   { printf "\033[33mWARN:\033[0m %s\n" "$*" >&2; }
 print_error()  { printf "\033[31mERROR:\033[0m %s\n" "$*" >&2; }
+
+# -------- Failure instrumentation ---------------------------------------------
+# STEP names the phase currently executing. When the script aborts under
+# `set -eu`, the EXIT trap prints which phase failed plus VM diagnostics so the
+# vmactions SSH wrapper cannot mask the in-VM trace.
+STEP=""
+on_error() {
+  rc=$?
+  print_error "FAILED at step: ${STEP:-<unknown>} (exit ${rc})"
+  print_error "Last 50 lines of dmesg (if accessible):"
+  dmesg 2>/dev/null | tail -50 || true
+  print_error "Memory state:"
+  (sysctl hw.physmem hw.usermem vm.stats.vm.v_free_count 2>/dev/null) || true
+  print_error "Disk state:"
+  df -h . 2>/dev/null || true
+  exit "$rc"
+}
+trap on_error EXIT
 
 # -------- Paths & meta --------------------------------------------------------
 PROJECT_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -169,8 +190,19 @@ install_system_dependencies() {
     libyaml
   "
 
-  # Non-interactive pkg mode
-  env ASSUME_ALWAYS_YES=yes pkg update -f || true
+  # Non-interactive pkg mode. Retry `pkg update -f` on transient FreeBSD mirror
+  # failures instead of silently swallowing them; pkg(8) returns non-zero on
+  # repo signature or fetch errors, which previously hid the real cause behind
+  # the trailing `|| true`.
+  i=1
+  while [ "$i" -le 3 ]; do
+    if env ASSUME_ALWAYS_YES=yes pkg update -f; then
+      break
+    fi
+    print_warn "pkg update attempt $i failed, retrying..."
+    sleep $((i * 5))
+    i=$((i + 1))
+  done
   if ! env ASSUME_ALWAYS_YES=yes pkg install -y $packages; then
     print_error "Failed to install system packages"
     return 1
@@ -193,11 +225,12 @@ install_python_dependencies() {
   # aiohttp stack, TUI bits, etc. (exact list requested)
   pip_packages="aiohttp aiosignal yarl multidict frozenlist python-dotenv toml chardet pyperclip wcwidth pygments tato PyYAML"
 
-  # Upgrade pip tooling lightly (safe)
-  python3.11 -m pip install --upgrade pip wheel setuptools >/dev/null 2>&1 || true
+  # Upgrade pip tooling lightly (safe). Pip output is allowed through to CI;
+  # silencing it previously hid wheel-build / Rust-compilation failures.
+  python3.11 -m pip install --upgrade pip wheel setuptools || true
 
-  if ! python3.11 -m pip install $pip_packages; then
-    print_error "Failed to install Python dependencies"
+  if ! python3.11 -m pip install --no-input --progress-bar off $pip_packages; then
+    print_error "pip install failed"
     return 1
   fi
 }
@@ -222,6 +255,16 @@ PY
 build_binary() {
   print_step "Cleaning previous artifacts (build/, dist/)..."
   rm -rf build/ dist/
+
+  # Surface toolchain and free-memory state up front so an OOM at PyInstaller
+  # link time is attributable to the VM action rather than the script.
+  python3.11 --version >&2 || true
+  pyinstaller --version >&2 || true
+  free_mb=$(( $(sysctl -n hw.usermem 2>/dev/null || echo 0) / 1048576 ))
+  print_step "Available userspace memory: ${free_mb} MiB"
+  if [ "$free_mb" -lt 1800 ]; then
+    print_warn "Low memory before PyInstaller; build may OOM"
+  fi
 
   print_step "Building one-file binary with PyInstaller..."
   if [ -f "packaging/pyinstaller/ecli.spec" ]; then
@@ -407,20 +450,31 @@ EOF
 }
 
 # ============================== MAIN ==========================================
+STEP="install_system_dependencies"
 install_system_dependencies
+
+STEP="install_python_dependencies"
 install_python_dependencies
 
+STEP="read_version"
 VERSION="$(read_version)"
 print_step "Version detected: $VERSION"
 
+STEP="check_runtime_imports"
 print_step "Checking production runtime imports..."
 python3.11 scripts/check_runtime_imports.py
 
+STEP="build_binary"
 EXECUTABLE="$(build_binary)"
 print_step "Executable: $EXECUTABLE"
 
+STEP="stage_files"
 STAGING_ROOT="$(stage_files "$EXECUTABLE" "$VERSION")"
+
+STEP="make_pkg"
 PKG_PATH="$(make_pkg "$STAGING_ROOT" "$VERSION")"
+
+STEP="verify_runtime"
 PYTHON="$PYTHON" ./scripts/verify_runtime.sh "$PKG_PATH"
 
 print_header "DONE"
@@ -428,3 +482,7 @@ print_step "Package:   $PKG_PATH"
 print_step "Checksum:  ${PKG_PATH}.sha256"
 # Show meta if available
 pkg info -F "$PKG_PATH" || true
+
+# Clear the EXIT trap so successful completion is not reported as a failure.
+trap - EXIT
+exit 0

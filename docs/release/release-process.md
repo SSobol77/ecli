@@ -129,6 +129,47 @@ The SBOM and its SHA256 sidecar are uploaded as workflow artifacts and attached
 to the GitHub Release. PyPI does not accept arbitrary release attachments, so the
 SBOM is not uploaded to PyPI in Phase 1.
 
+## FreeBSD Leg Is Best-Effort
+
+The FreeBSD 14.x `.pkg` build runs inside `vmactions/freebsd-vm` on the
+GitHub-hosted Linux runner (qemu-on-Linux). This path has historically
+exhibited single-platform flakes that are not reproducible on the build
+artifact itself. To keep a single-platform flake from blocking publication
+of the Linux / macOS / Windows / Python release assets, the pipeline is
+configured as follows:
+
+- `build-freebsd` in `release.yml` runs with `continue-on-error: true`.
+- `publish-github-release` keeps `build-freebsd` in `needs:` for ordering
+  only. Its `if:` condition requires Linux / macOS / Windows / Python to be
+  green but **does not require** FreeBSD success.
+- If the FreeBSD leg succeeds, the `.pkg` flows into the release through the
+  normal `actions/download-artifact` + `softprops/action-gh-release` path.
+- If the FreeBSD leg fails or is skipped, the publisher injects a deferral
+  note into the release body and the `.pkg` is attached out-of-band by
+  dispatching the standalone `FreeBSD 14 .pkg` workflow with the
+  `release_tag` input set to the published tag.
+- All vmactions invocations are pinned by commit SHA (currently v1.4.5). In
+  both workflows, the in-VM stdout is tee'd to `freebsd-build.log` which is
+  uploaded as a workflow artifact named `freebsd-build-log-<run_id>` on
+  failure, so a vmactions SSH disconnect cannot lose the in-VM trace.
+
+### Out-of-Band FreeBSD Attach
+
+```sh
+# After the Release workflow publishes without FreeBSD, fix any FreeBSD-side
+# regression, then attach the .pkg post-hoc:
+gh workflow run freebsd-pkg.yml --ref main -f release_tag=v<version>
+```
+
+The standalone workflow builds the `.pkg` in a fresh vmactions VM, verifies
+its checksum, and then runs:
+
+```sh
+gh release upload "v<version>" "<built.pkg>" "<built.pkg>.sha256" --clobber
+```
+
+This path requires `permissions: contents: write` on that workflow.
+
 ## Future Hardening
 
 Protected GitHub environments are recommended once the project has at least two
