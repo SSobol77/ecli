@@ -65,7 +65,26 @@ case "$MODE" in
   *) echo "Invalid mode: $MODE" >&2; exit 2 ;;
 esac
 
-VERSION="$(python3 - <<'PY'
+find_python() {
+  if [ -n "${PYTHON:-}" ] && command -v "$PYTHON" >/dev/null 2>&1; then
+    printf '%s\n' "$PYTHON"
+    return 0
+  fi
+
+  for candidate in python3 python3.12 python3.11 python3.10 python; do
+    if command -v "$candidate" >/dev/null 2>&1; then
+      printf '%s\n' "$candidate"
+      return 0
+    fi
+  done
+
+  echo "ERR: Python interpreter not found for runtime verification" >&2
+  return 1
+}
+
+PYTHON_BIN="$(find_python)"
+
+VERSION="$("$PYTHON_BIN" - <<'PY'
 import tomllib
 with open("pyproject.toml", "rb") as f:
     print(tomllib.load(f)["project"]["version"])

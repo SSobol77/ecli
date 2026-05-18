@@ -24,8 +24,30 @@ MAIN_SCRIPT="main.py"
 SPEC_FILE="packaging/pyinstaller/ecli.spec"
 
 echo "==> Checking prerequisites"
-command -v python3 >/dev/null
-command -v pyinstaller >/dev/null
+require_tool() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "ERR: missing required tool: $1" >&2
+    return 1
+  fi
+}
+
+require_python_module() {
+  if ! python3 - "$1" <<'PY'
+import importlib.util
+import sys
+
+module = sys.argv[1]
+raise SystemExit(0 if importlib.util.find_spec(module) is not None else 1)
+PY
+  then
+    echo "ERR: missing required Python module: $1" >&2
+    return 1
+  fi
+}
+
+require_tool python3
+require_tool pyinstaller
+require_python_module PyInstaller
 python3 scripts/check_runtime_imports.py
 
 echo "==> Cleaning previous artifacts"

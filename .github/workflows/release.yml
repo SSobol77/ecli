@@ -91,11 +91,13 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Install host package inspection tools
+      - name: Install Linux package build dependencies
         run: |
           set -euo pipefail
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends rpm cpio
+          python3 -m pip install --upgrade pip
+          python3 -m pip install -e ".[dev]"
 
       - name: Build Linux archive
         run: make package-tar-linux
@@ -173,7 +175,7 @@ jobs:
             cargo --version
           run: |
             set -eux
-            sh ./scripts/build-and-package-freebsd.sh
+            PYTHON=python3.11 sh ./scripts/build-and-package-freebsd.sh
 
       - name: Verify FreeBSD artifact
         shell: bash
@@ -340,6 +342,27 @@ jobs:
         with:
           name: python-dist
           path: dist
+
+      - name: Normalize and verify PyPI distributions
+        run: |
+          set -euo pipefail
+          echo "Downloaded Python distribution artifact layout:"
+          find dist -maxdepth 3 -type f -print | sort
+          mkdir -p dist-flat
+          find dist -maxdepth 3 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -exec cp {} dist-flat/ \;
+          rm -rf dist
+          mkdir -p dist
+          shopt -s nullglob
+          dists=(dist-flat/*)
+          if (( ${#dists[@]} == 0 )); then
+            echo "::error::No wheel or sdist files found in downloaded python-dist artifact."
+            exit 1
+          fi
+          mv "${dists[@]}" dist/
+          echo "Flattened PyPI distribution layout:"
+          find dist -maxdepth 1 -type f -print | sort
+          python3 -m pip install --upgrade twine
+          python3 -m twine check dist/*
 
       - name: Publish to PyPI
         # Pinned from pypa/gh-action-pypi-publish release/v1 on 2026-05-10.

@@ -122,6 +122,9 @@
 
 set -eu
 
+PYTHON="${PYTHON:-python3.11}"
+export PYTHON
+
 # -------- Pretty printing ------------------------------------------------------
 print_header() { printf "\033[1;36m==> %s\033[0m\n" "$*"; }
 print_step()   { printf "\033[32m  -> %s\033[0m\n" "$*" >&2; }
@@ -409,7 +412,7 @@ print_step "Executable: $EXECUTABLE"
 
 STAGING_ROOT="$(stage_files "$EXECUTABLE" "$VERSION")"
 PKG_PATH="$(make_pkg "$STAGING_ROOT" "$VERSION")"
-./scripts/verify_runtime.sh "$PKG_PATH"
+PYTHON="$PYTHON" ./scripts/verify_runtime.sh "$PKG_PATH"
 
 print_header "DONE"
 print_step "Package:   $PKG_PATH"
