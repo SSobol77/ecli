@@ -725,3 +725,5 @@ For planned features and current development status, see [Roadmap](https://githu
   Made with ❤️ by the ECLI community<br/>
   <a href="https://github.com/SSobol77/ecli">⭐ Star us on GitHub!</a>
 </p>
+
+<- freebsd-pkg.yml: same VM pin, workflow_dispatch release_tag input test -->
