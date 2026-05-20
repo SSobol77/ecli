@@ -1,19 +1,55 @@
-# SPDX-License-Identifier: Apache-2.0
-#
-# Project: Ecli
-# File: .coderabbit.yaml
-# Website: https://www.ecli.io
-# Repository: https://github.com/SSobol77/ecli
-# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
-#
-# Copyright (c) 2026 Siergej Sobolewski
-#
-# Licensed under the Apache License, Version 2.0.
-# See the LICENSE file in the project root for full license text.
+language: en
 
 reviews:
-  commit_status: false
-  fail_commit_status: false
+  profile: assertive
+  request_changes_workflow: true
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: true
+
   auto_review:
-    enabled: false
-    description_keyword: "@coderabbitai review"
+    enabled: true
+    drafts: false
+
+  path_filters:
+    - "!releases/**"
+    - "!dist/**"
+    - "!build/**"
+    - "!**/__pycache__/**"
+    - "!**/*.pyc"
+    - "!**/*.pkg"
+    - "!**/*.deb"
+    - "!**/*.rpm"
+    - "!**/*.AppImage"
+    - "!**/*.log"
+    - "!editor.log"
+    - "!editorlog.txt"
+    - "!progress.log"
+    - "!docs/**/*.pdf"
+    - "!img/**"
+    - "!packaging/linux/appimage/AppDirpackaging/**"
+    - "!uv.lock"
+    - "!thirdparty.lock"
+
+  tools:
+    ruff:
+      enabled: true
+    shellcheck:
+      enabled: true
+    hadolint:
+      enabled: true
+    yamllint:
+      enabled: true
+    markdownlint:
+      enabled: true
+    actionlint:
+      enabled: true
+    gitleaks:
+      enabled: true
+
+chat:
+  auto_reply: false
+
+knowledge_base:
+  opt_out: false
