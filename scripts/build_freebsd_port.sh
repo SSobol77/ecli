@@ -120,7 +120,7 @@ MAINTAINER=     Siergej Sobolewski <s.sobolewski@hotmail.com>
 COMMENT=        Terminal DevOps editor with AI and Git integration
 WWW=            https://ecli.io
 
-LICENSE=        APACHE20
+LICENSE=        GPLv2
 LICENSE_FILE=   ${WRKSRC}/LICENSE
 
 ONLY_FOR_ARCHS= amd64
