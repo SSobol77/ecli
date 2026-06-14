@@ -12,242 +12,586 @@ Copyright (c) 2026 Siergej Sobolewski
 Licensed under the Apache License, Version 2.0.
 See the LICENSE file in the project root for full license text.
 -->
-# ECLI Gate 2 Phase 0 Audit Report
 
-Author: Siergej Sobolewski
+# ECLI Pre-Release Audit Report
 
-Date: 2026-05-09
-Repository: `/home/ssb/Code/Ecli/ecli`
-Remote under review: `https://github.com/SSobol77/ecli`
+Audit mode: read-only source/git audit. Source files were not edited. The only intended audit outputs are this report and `audit-evidence/`.
 
-## Scope
+## 1. Summary
 
-This report covers Step 0 only. No release, packaging, workflow, or runtime
-code was changed. The audit read the authoritative documents in the requested
-order, then inspected the Makefile, packaging scripts, workflows, version
-metadata, and existing contract validator artifacts.
+Severity counts:
 
-Authoritative order applied:
+| severity | count |
+|---|---:|
+| P0 | 3 |
+| P1 | 6 |
+| P2 | 3 |
 
-1. `AGENTS.md`
-2. `docs/release/artifact-contract.md`
-3. `docs/release/artifact-verification.md`
-4. `docs/planning/engineering-plan.md`
-5. `docs/planning/execution-sequencing.md`
-6. `Makefile`
-7. `pyproject.toml`
-8. `scripts/build-and-package-*.{sh,ps1}`
+The three suspected P0 blocks are confirmed or constrained as follows:
 
-## Blocking Observations
+- P0-A config.toml parsing/validation: confirmed schema/runtime-loader drift. The shipped `config.toml` parses, all 162 syntax regexes compile, and the typed service reports zero diagnostics, but that is the defect: the typed schema does not validate most shipped runtime sections used by the legacy runtime loader.
+- P0-B undo/redo runtime safety in `src/ecli/core/History.py`: confirmed runtime defect. Redo of selection-preserving block operations references attributes on `History` instead of `editor`, throws `AttributeError`, and leaves redo state inconsistent.
+- P0-C `ecli.spec` / artifact-contract / release-pipeline drift: confirmed release drift risk. Runtime import tests pass, but PyInstaller uses `main.py` while package metadata declares `ecli.__main__:main`, several package descriptors hard-code `0.2.2`, and the AppImage packaging script mutates a tracked YAML file with `sed -i`.
 
-The requested implementation cannot safely proceed past Step 0 without
-maintainer decisions because several open questions directly change the plan.
+Static gates baseline:
 
-1. `docs/release/artifact-contract.md` currently defines the legacy artifact
-   naming contract at `docs/release/artifact-contract.md:21-25`. The prompt
-   requests replacing that contract with `ecli_<v>_<os>_<arch>.<ext>`. Per the
-   priority order, this is an intentional contract change and needs explicit
-   maintainer approval before PR #1.
-2. The PyPI project name `ecli` is already owned by another account. Local
-   verification with `python3 -m pip index versions ecli` returned published
-   versions `0.0.23`, `0.0.20`, and `0.0.12`; PyPI JSON metadata reports owner
-   `ihgazni` and homepage `https://github.com/ihgazni2/ecli`. This is a
-   blocker for issue #30 unless the maintainer owns that PyPI project or chooses
-   a different distribution name.
-3. GitHub API checks showed zero releases and zero tags for
-   `SSobol77/ecli` at audit time, so no legacy GitHub release artifact was found.
-   This is evidence for Open Question Q1, but Q1 still requires maintainer
-   confirmation because downstream artifacts may exist outside GitHub releases.
-4. `src/ecli/__init__.py` is empty, so Q3 is answered as "NO" in the local tree.
-   The later PR scope must add the specified `importlib.metadata` version export.
-5. Q4 cannot be verified locally from repository files. GitHub protected
-   environments are repository settings, not source files. Maintainer input is
-   required.
+- `uv run ruff check . --output-format=concise`: fail, 7 errors.
+- `uv run mypy src/ecli tests`: fail, 263 errors in 31 files.
+- `uv run pytest -ra -q`: pass, 262 tests.
 
-## Confirmed Defects
+## 2. Environment & Toolchain
 
-### B-series Critical Bugs
+Evidence: `audit-evidence/00-env.txt`, `audit-evidence/01-buildmap.txt`.
 
-| ID | Status | Evidence | Impact |
-| --- | --- | --- | --- |
-| B1 | Confirmed | `Makefile:420` uses `test -f "*.snap" && mv *.snap ... || true`. | The quoted glob never expands and `|| true` masks packaging failure. |
-| B2 | Partially confirmed | Literal `\n` appears in `gh release create --notes` for DEB at `Makefile:252-254`, RPM at `Makefile:326-328`, and FreeBSD at `Makefile:581-583`. AppImage `Makefile:387-388`, macOS `Makefile:647-648`, and Windows `Makefile:708-709` currently use single-line notes and do not contain literal `\n`. | Affected release notes render literal backslash-n instead of Markdown paragraphs. |
-| B3 | Confirmed | Direct tag creation and push occur in release targets: `Makefile:244-246`, `Makefile:318-320`, `Makefile:383-384`, `Makefile:573-575`, `Makefile:643-644`, `Makefile:704-705`. | Concurrent publish jobs can race on tag creation and push. |
-| B4 | Confirmed | `Makefile:457` runs `python -m pip install --user -q . ... || true` inside `package-tar-linux`. | Packaging has a hidden user-environment side effect. |
-| B5 | Confirmed | `Makefile:210` defines `package-deb-docker:` without `clean`; `Makefile:287` defines `package-rpm-docker:` without `clean`. | Docker package targets can consume stale intermediates. |
+Environment snapshot:
 
-### N-series Naming and Checksum Defects
+- `uv --version`: `uv 0.11.17`.
+- Bare `python --version`: failed, `python: command not found`.
+- Initial `uv run ruff --version`: materialized CPython 3.11.15 and reported `ruff 0.15.15`.
+- Initial `uv run mypy --version`: failed before dev sync, `Failed to spawn: mypy`.
+- Initial `uv run pytest --version`: `pytest 8.3.5`.
+- Bare `pyinstaller --version`: failed, `pyinstaller: command not found`.
+- `git rev-parse HEAD`: `ab08b130e8f1280c94525e0e3f1562c75ab1e47f`.
+- Initial `git status --porcelain`: no output.
 
-| ID | Status | Evidence | Impact |
-| --- | --- | --- | --- |
-| N1 | Confirmed | Current contract uses legacy names at `docs/release/artifact-contract.md:21-25`; Makefile uses `_amd64` at `Makefile:199-202`, `Makefile:276-279`, `Makefile:495-498`, `win_x64` at `Makefile:676-679`, and `Linux_<arch>` at `Makefile:351-354` and `Makefile:451`. | Artifact names are inconsistent across platforms and conflict with the requested hardened schema. |
-| N2 | Confirmed | `package-pypi` builds wheel and sdist at `Makefile:157-160`; `package-pypi-assert` checks only `dist/ecli-*.tar.gz` and `dist/ecli-*.whl` at `Makefile:169-174`. | PyPI artifacts have no `.sha256` sidecars. |
-| N3 | Confirmed | Assert targets check file existence only: PyPI `Makefile:169-174`, DEB `Makefile:221-225`, RPM `Makefile:295-299`, AppImage `Makefile:369-373`, Snap `Makefile:424-426`, FreeBSD `Makefile:538-542`, macOS `Makefile:628-632`, Windows `Makefile:689-693`. | Stale or tampered checksum sidecars pass release assertions. |
+`uv sync --extra dev` was run under the audit allowance to materialize declared dev tooling. Post-sync tool versions:
 
-### D-series DRY and Release Flow Defects
+- `uv run ruff --version`: `ruff 0.15.12`.
+- `uv run mypy --version`: `mypy 2.0.0`.
+- `uv run pytest --version`: `pytest 9.0.3`.
+- `uv run pyinstaller --version`: `6.20.0`.
 
-| ID | Status | Evidence | Impact |
-| --- | --- | --- | --- |
-| DRY | Confirmed | Version extraction via `awk -F'"'` is repeated at `Makefile:26`, `Makefile:199`, `Makefile:276`, `Makefile:495`, `Makefile:615`, `Makefile:676`. | Version source is duplicated and more likely to drift. |
-| D1 | Confirmed | `package-all` depends on mutually exclusive host targets at `Makefile:719-725`. | A single host cannot build Linux, FreeBSD, macOS, and Windows packages reliably. |
-| D2 | Confirmed | `publish-all` unconditionally depends on all release targets and PyPI at `Makefile:747-752`. | Publish orchestration tries to upload artifacts that may not exist on the host. |
-| D3 | Confirmed | `MACOS_ARCH ?= $(shell uname -m)` is defined at `Makefile:616`; no `.macos.env` include was found. | The Makefile predicts artifact architecture instead of consuming build evidence. |
-| D5 | Confirmed | `clean` deletes `releases/` at `Makefile:137`. | Routine cleanup can destroy release outputs. |
-| D6 | Confirmed | `package-snap:` at `Makefile:414` has no `clean` prerequisite. | Snap packaging is inconsistent with peer package targets. |
+Canonical commands and release targets from Makefile evidence:
 
-### Missing Gate 2 Deliverables
+- Development/test: `uv run ruff check . --output-format=concise`, `uv run mypy src/ecli tests`, `uv run pytest -ra -q`.
+- Makefile help advertises package targets for `.deb`, `.rpm`, AppImage, Snap, FreeBSD `.pkg`, macOS `.dmg`, Windows `.exe`, PyPI wheel/sdist, and archive builds.
+- Publishing targets are present: `publish-pypi`, `publish-all`, and per-artifact release targets such as `release-deb`, `release-rpm`, `release-appimage`.
+- Gate targets include `validate-runtime-imports`, `validate-version-consistency`, `validate-gate2`, and per-platform artifact contract validation targets.
 
-The Makefile does not currently define the requested Gate 2 validation targets:
+## 3. Static Gates Baseline
 
-- `validate-pypi-contract`
-- `validate-windows-contract`
-- `validate-macos-contract`
-- `validate-deb-contract`
-- `validate-rpm-contract`
-- `validate-appimage-contract`
-- `validate-freebsd-contract`
-- `validate-version-consistency`
-- `validate-gate2`
+Evidence: `audit-evidence/10-ruff.txt`, `audit-evidence/11-mypy.txt`, `audit-evidence/12-pytest.txt`.
 
-An untracked validator exists at `scripts/validate_artifact_contract.py`, but it
-is not wired into `Makefile` targets and has contract mismatches documented below.
+Ruff:
 
-## Defects Already Fixed or Not Reproduced
+- Command: `uv run ruff check . --output-format=concise`.
+- Result: fail, exit code 1.
+- Count: 7 errors, 5 fixable.
+- Failing file: `packaging/pyinstaller/rthooks/force_imports.py`.
+- Error classes: `I001`, `F401`, `Q000`, `E722`.
 
-| Item | Result | Evidence |
-| --- | --- | --- |
-| GitHub releases already published with legacy names | Not reproduced from GitHub API | API checks for `SSobol77/ecli` returned zero releases and zero tags during this audit. Maintainer confirmation is still required for Q1. |
-| Q2 pyproject dependency source | Already present | `pyproject.toml` contains `[project.dependencies]` and `[project.optional-dependencies] dev`; PR #3 can move `install` away from `requirements.txt` if approved. |
-| Q3 `__version__` export | Not present | `src/ecli/__init__.py` is empty. The required change is still needed. |
+Mypy:
 
-## New Defects Discovered
+- Command: `uv run mypy src/ecli tests`.
+- Result: fail, exit code 1.
+- Count: 263 errors in 31 files.
+- Highest error concentrations: `src/ecli/ui/panels.py` 53, `src/ecli/core/Ecli.py` 40, `tests/services/test_plan_validation.py` 19, `tests/ui/test_input_routing.py` 17, `src/ecli/ui/KeyBinder.py` 16, `src/ecli/core/History.py` 12.
 
-### Critical
+Pytest:
 
-1. **PyPI distribution-name ownership blocker**
-   - Evidence: `python3 -m pip index versions ecli` reports existing releases;
-     PyPI JSON metadata reports the owner as `ihgazni`.
-   - Impact: PR #4 must not ship a real `ecli` PyPI publish workflow unless the
-     maintainer confirms ownership/control or changes the distribution name.
+- Command: `uv run pytest -ra -q`.
+- Result: pass, exit code 0.
+- Count: 262 passed in 3.37 seconds.
+- Slow tests: no pytest slow-test report was emitted by this command; no per-test timing evidence was captured.
 
-2. **AppImage script and Makefile artifact paths do not agree**
-   - Evidence: `scripts/package_appimage.sh:38` emits
-     `dist/ECLI-${VERSION}-x86_64.AppImage`, while `Makefile:351-354` expects
-     `releases/<version>/ecli_<version>_Linux_<arch>.AppImage`.
-   - Impact: `make package-appimage` can fail even if the AppImage script
-     itself produces an artifact.
+### AUD-011: P1 static quality gates are not release-clean
 
-### High
+Affected files:
 
-1. **Current artifact contract contradicts requested canonicalization**
-   - Evidence: `docs/release/artifact-contract.md:21-25` defines legacy names.
-   - Impact: PR #1 is a contract migration, not only an implementation cleanup.
+- `packaging/pyinstaller/rthooks/force_imports.py:20`
+- `src/ecli/ui/panels.py`
+- `src/ecli/core/Ecli.py`
+- `src/ecli/core/History.py`
 
-2. **Checksum sidecar format is inconsistent across platforms**
-   - Evidence: `scripts/build-and-package-deb.sh:184-187` writes a coreutils
-     `hash filename` sidecar; `scripts/build-and-package-freebsd.sh:371-374`,
-     `scripts/build-and-package-macos.sh:162-164`, and
-     `scripts/build-and-package-windows.ps1:118` write bare hashes.
-   - Impact: A single validator cannot enforce one sidecar contract without
-     either normalizing sidecar generation or accepting multiple formats.
+Evidence:
 
-3. **Untracked manifest conflicts with current and requested artifact names**
-   - Evidence: `releases/manifest.toml` contains legacy `_amd64`, `win_x64`, and
-     an AppImage pattern `ecli_<ver>_amd64.AppImage` that matches neither the
-     Makefile nor the requested schema.
-   - Impact: If this manifest becomes authoritative, validators will reject
-     artifacts or silently validate the wrong target.
+- `audit-evidence/10-ruff.txt`
+- `audit-evidence/11-mypy.txt`
 
-4. **Validator exit-code contract conflicts with acceptance criteria**
-   - Evidence: `scripts/validate_artifact_contract.py` defines checksum failures
-     as exit `3` and version mismatch as exit `4`; the prompt requires missing
-     sidecar exit `3` and tampered hash exit `4`.
-   - Impact: CI tests written to the requested acceptance criteria will fail
-     unless the validator contract is adjusted.
+Observed facts:
 
-### Medium
+- Ruff fails on `packaging/pyinstaller/rthooks/force_imports.py` with 7 errors.
+- Mypy fails with 263 errors in 31 files.
+- The highest mypy concentrations are in UI panels, core editor, key binding, and history code.
 
-1. **Release contract documentation is stale about RPM implementation**
-   - Evidence: `docs/release/artifact-contract.md:39-41` says no `ecli.spec`
-     exists, but `ecli.spec` exists in the repository.
-   - Impact: The contract no longer accurately represents the packaging state.
+Impact:
 
-2. **License metadata conflicts**
-   - Evidence: `pyproject.toml:61` declares `Apache-2.0`; the repository
-     legacy license metadata disagreed with the Apache-2.0 project license.
-   - Impact: Package metadata and repository licensing are inconsistent. This
-     is release-significant but outside the requested PR scope unless the
-     maintainer explicitly expands scope.
+The release branch lacks a clean static quality baseline. The `History.py` P0 defect is visible to mypy, but the current error volume prevents mypy from functioning as a high-signal release gate.
 
-3. **`install` target references a missing requirements file**
-   - Evidence: `Makefile:128` runs `uv pip install --system -r requirements.txt`;
-     no `requirements.txt` exists in the repository root.
-   - Impact: `make install` is currently broken. This aligns with the requested
-     PR #3 migration to `pyproject.toml`.
+Recommended fix direction:
 
-### Low
+Either remediate the current static debt or create an explicit, reviewed baseline so new errors fail CI. The P0 `History.py` errors should not remain hidden inside aggregate mypy debt.
 
-1. **Non-English comments exist in macOS packaging script**
-   - Evidence: `scripts/build-and-package-macos.sh` contains non-English
-     comments around the DMG creation flow.
-   - Impact: This conflicts with the requested English-only artifact constraint
-     if the file is modified later.
+## 4. P0 Findings
 
-## Open Questions Requiring Maintainer Decision
+### AUD-001: P0 config.toml is not validated against the typed service schema used for Phase 1 configuration
 
-### Q1. Legacy release compatibility
+Affected files:
 
-Local GitHub evidence shows no existing tags or releases for `SSobol77/ecli`,
-but this does not prove that no preview artifact was distributed elsewhere.
+- `config.toml:17`
+- `config.toml:372`
+- `src/ecli/services/config_service.py:81`
+- `src/ecli/services/models/config.py:583`
+- `src/ecli/utils/utils.py:219`
+- `src/ecli/core/Ecli.py:1679`
 
-Decision required:
+Evidence:
 
-- If legacy artifacts were published to downstream users, defer the naming
-  migration to a later milestone and document legacy naming as known debt.
-- If not, approve PR #1 to change the artifact contract and all emitters.
+- `audit-evidence/20-config.txt`
+- `audit-evidence/50-ci.txt`
 
-### Q2. pyproject dependency authority
+Observed facts:
 
-Local answer: YES. `pyproject.toml` defines project dependencies and the dev
-optional dependency group.
+- `config.toml` parses successfully.
+- Corrected validation command reports `typed_service_has_errors=False diagnostics=0`.
+- The shipped top-level keys are `ai`, `colors`, `comments`, `editor`, `file_icons`, `fonts`, `keybindings`, `linter`, `logging`, `settings`, `supported_formats`, `syntax_highlighting`, `theme`.
+- The typed service expected top-level set is `ai`, `editor`, `git`, `keybindings`, `lsp`, `safety`, `schema`, `ui`.
+- Extra shipped keys relative to typed schema: `colors`, `comments`, `file_icons`, `fonts`, `linter`, `logging`, `settings`, `supported_formats`, `syntax_highlighting`, `theme`.
+- Missing shipped keys relative to typed schema: `git`, `lsp`, `safety`, `schema`, `ui`.
+- All shipped `[[syntax_highlighting.<lang>.patterns]]` entries compiled: `pattern_count=162 compile_failures=0 slow_probe_over_10ms=0`.
 
-Decision required:
+Impact:
 
-- Confirm that PR #3 may replace the `requirements.txt` install path with
-  `uv pip install --system -e ".[dev]"`.
+The typed service gives a clean diagnostic result while most runtime-relevant shipped configuration sections are outside its schema. The application entry path imports `load_config()` from `src/ecli/utils/utils.py`, which creates/loads `~/.config/ecli/config.toml` and merges into `DEFAULT_CONFIG`; the editor syntax path reads `self.config["syntax_highlighting"]` directly. Therefore a release gate that only exercises `ConfigService.load()` cannot prove the runtime config consumed by `Ecli` is schema-valid.
 
-### Q3. `src/ecli.__version__`
+Recommended fix direction:
 
-Local answer: NO. `src/ecli/__init__.py` is empty.
+Make one configuration contract authoritative. Either move runtime startup to `ConfigService` and extend the typed schema to include current runtime sections, or explicitly split legacy UI/editor config from Phase 1 service config with separate validation and tests. Add a test that loads the shipped `config.toml` through the same path used by `src/ecli/__main__.py` and compiles every syntax pattern.
 
-Decision required:
+### AUD-002: P0 History redo crashes for selection-preserving block operations
 
-- Confirm that PR #3 or PR #4 should add the specified
-  `importlib.metadata.version("ecli")` based `__version__` export.
+Affected file:
 
-### Q4. GitHub protected environments
+- `src/ecli/core/History.py:478`
 
-Local repository files cannot prove whether GitHub Environments such as `pypi`
-or `production` are configured.
+Evidence:
 
-Decision required:
+- `audit-evidence/21-history.txt`
+- `audit-evidence/11-mypy.txt`
 
-- If environments exist, provide their exact names for workflow binding.
-- If not, approve documenting the recommendation without binding workflows.
+Observed facts:
 
-### Q5. PyPI project name ownership
+- `History.redo()` restores `selection_after` via `self.editor.is_selecting, self.editor.selection_start, self.editor.selection_end = selection_state_after_op`.
+- Immediately after, it checks `if self.is_selecting and self.selection_end:` on the `History` object, not the editor.
+- Minimal trace against the real `History` class logs: `AttributeError: 'History' object has no attribute 'is_selecting'`.
+- The redo attempt returns with `stacks_after_redo_attempt 0 1`, meaning the action remains on the redo stack and is not restored to main history.
+- Mypy independently reports `src/ecli/core/History.py:478: error: "History" has no attribute "is_selecting"` and `"selection_end"`.
 
-Local answer: the public PyPI name `ecli` is already owned by another account.
+Impact:
 
-Decision required:
+Redo of block indent/unindent/comment/uncomment actions that store `selection_after` can fail at runtime after partially applying text changes. This violates undo/redo atomicity and can leave text, modified state, and stack state inconsistent.
 
-- If the maintainer controls that PyPI project, confirm the account/control
-  model before PR #4.
-- If not, choose a different distribution name or block issue #30 Phase 0.
+Recommended fix direction:
 
-## Recommended Stop Point
+Correct the attribute references to the editor object and make redo transactional: validate all replay preconditions before mutating text, apply the mutation, restore cursor/selection, and move stack state only after successful completion. Add direct unit tests for `History` redo of block operations with active selection.
 
-Stop here before implementation. The next action should be maintainer review of
-the open decisions above, especially Q1 and Q5. Proceeding without those answers
-would risk changing a published artifact contract or shipping a CI path for a
-PyPI project name not controlled by this repository owner.
+### AUD-003: P0 release artifact contract has drift-prone entry/version surfaces
+
+Affected files:
+
+- `packaging/pyinstaller/ecli.spec:25`
+- `pyproject.toml:97`
+- `main.py:15`
+- `scripts/package_appimage.sh:79`
+- `packaging/linux/appimage/appimage-builder.yml:24`
+- `packaging/arch/PKGBUILD:10`
+- `packaging/windows/nsis/ecli.nsi:18`
+- `packaging/nix/package.nix:12`
+
+Evidence:
+
+- `audit-evidence/22-spec-drift.txt`
+- `audit-evidence/50-ci.txt`
+
+Observed facts:
+
+- PyInstaller spec uses `entry_point = project_root / "main.py"`.
+- Package metadata declares console script `ecli = "ecli.__main__:main"`.
+- `main.py` delegates to packaged `ecli.__main__`, so this is not an observed startup failure.
+- Existing runtime import contract tests pass: `10 passed in 0.80s`.
+- Bare `python scripts/check_runtime_imports.py` fails because bare `python` is absent; `uv run python scripts/check_runtime_imports.py` emits no failure.
+- Hard-coded version surfaces exist in Nix, NSIS, Arch, and AppImage metadata.
+- `scripts/package_appimage.sh:79` runs `sed -i` against `packaging/linux/appimage/appimage-builder.yml`, which is a tracked packaging file.
+
+Impact:
+
+Runtime import tests are currently green, but release reproducibility is weaker than the artifact contract implies. Multiple packaging descriptors can drift from `pyproject.toml`, and the AppImage path mutates a tracked source file during packaging. This creates a release-blocking risk for a pre-release stabilization branch because artifact state can depend on prior local build history.
+
+Recommended fix direction:
+
+Make `pyproject.toml` the single version source and render platform descriptors into build directories rather than mutating tracked inputs. Align PyInstaller entry evidence with the installed console entry point or add a contract test proving `main.py` delegation remains intentional. Extend `validate-version-consistency` to cover Nix, NSIS, Arch, AppImage YAML, man-page generation outputs, and release docs.
+
+## 5. Rendering / Curses Instability Findings
+
+### AUD-004: P1 curses access is not confined to `src/ecli/ui/`
+
+Affected files:
+
+- `src/ecli/core/Ecli.py:550`
+- `src/ecli/core/Ecli.py:7805`
+- `src/ecli/core/Ecli.py:7820`
+- `src/ecli/core/Ecli.py:7880`
+
+Evidence:
+
+- `audit-evidence/30-curses.txt`
+- `audit-evidence/11-mypy.txt`
+
+Observed facts:
+
+- Curses references appear in `src/ecli/ui/TerminalAppMode.py`, `src/ecli/ui/DrawScreen.py`, `src/ecli/ui/PanelManager.py`, `src/ecli/ui/KeyBinder.py`, `src/ecli/ui/panels.py`, and also `src/ecli/core/Ecli.py`.
+- Mypy reports curses API typing defects in `src/ecli/core/Ecli.py` and `src/ecli/ui/TerminalAppMode.py`, including incompatible `curses.meta` and `curses.putp` calls.
+
+Impact:
+
+Core editor logic owns terminal-mode side effects, reducing fault containment. Curses errors in setup/resize/key handling can bypass the intended UI boundary and complicate deterministic testing.
+
+Recommended fix direction:
+
+Move terminal mode, resize, and raw curses primitives behind a UI/terminal adapter with explicit invariants: no direct curses calls from core, all calls return structured status, and resize/key events are replayable in tests.
+
+### AUD-005: P1 rendering geometry mixes `len()` and terminal cells despite a `wcwidth` dependency
+
+Affected files:
+
+- `src/ecli/ui/DrawScreen.py`
+- `src/ecli/ui/panels.py`
+- `src/ecli/core/Ecli.py`
+
+Evidence:
+
+- `audit-evidence/30-curses.txt`
+- `pyproject.toml:46`
+
+Observed facts:
+
+- The project depends on `wcwidth>=0.2.13`.
+- Curses inventory shows many column, cursor, width, and status-bar operations using `len()` and fixed slicing around `cursor_x`, window width, `addstr`, `addnstr`, and `chgat`.
+- The audit did not observe a completed cell-width abstraction across editor text, panels, status line, and selection highlighting.
+
+Impact:
+
+Unicode wide characters, emoji, combining marks, and ambiguous-width glyphs can desynchronize logical cursor positions from terminal cells. In a curses editor this can manifest as selection corruption, off-by-one drawing, or `curses.error` near the right edge.
+
+Recommended fix direction:
+
+Introduce a terminal-cell geometry layer based on `wcwidth`/`wcswidth` and make cursor, selection, clipping, and status-bar rendering consume that interface. Add fixtures containing wide glyphs, combining marks, and emoji.
+
+### AUD-006: P2 resize handling exists but is not proven by tests
+
+Affected files:
+
+- `src/ecli/ui/KeyBinder.py:756`
+- `src/ecli/core/Ecli.py` resize handling references in `audit-evidence/30-curses.txt`
+
+Evidence:
+
+- `audit-evidence/30-curses.txt`
+
+Observed facts:
+
+- `curses.KEY_RESIZE` is routed to `self.editor.handle_resize`.
+- The grep inventory did not show a dedicated SIGWINCH test or terminal-resize simulation in the captured evidence.
+
+Impact:
+
+Resize behavior may work manually, but no automated evidence proves deterministic state clamping, redraw invalidation, and panel recreation after terminal size changes.
+
+Recommended fix direction:
+
+Add headless/fake-window resize tests that verify `last_window_size`, cursor clamping, scroll clamping, panel windows, and redraw invalidation.
+
+## 6. Logging Findings for Log-Analyst
+
+### AUD-007: P1 AI provider logging can expose secrets or prompt/response content
+
+Affected files:
+
+- `src/ecli/integrations/AI.py:313`
+- `src/ecli/integrations/AI.py:327`
+- `src/ecli/integrations/AI.py:537`
+- `src/ecli/integrations/AI.py:577`
+- `src/ecli/integrations/AI.py:710`
+
+Evidence:
+
+- `audit-evidence/40-logging.txt`
+
+Observed facts:
+
+- Logging setup writes to `~/.config/ecli/logs/editor.log`.
+- Format includes timestamp, level, logger name, message, source filename, and line number.
+- Rotation: `editor.log` max 2 MiB, backup count 5.
+- `config.toml` requests `[logging] file_level = "DEBUG"`, `console_level = "WARNING"`, `log_to_console = false`, `separate_error_log = false`.
+- Runtime console logging is forced disabled in code via `log_to_console_enabled = False`.
+- Gemini debug logging includes the full request URL, whose template includes `?key={api_key}`.
+- Several provider error paths log raw `response_text`; Hugging Face debug logs `data_raw`.
+
+Impact:
+
+At DEBUG level, AI request URLs, provider responses, or model outputs may reach disk logs. Provider error payloads can include prompt echoes, request metadata, or authentication diagnostics. This is a secret and prompt-content leakage risk.
+
+Recommended fix direction:
+
+Centralize AI log redaction before logger calls. Never log URLs containing credentials. Treat provider response bodies as sensitive unless explicitly summarized. Add tests with sentinel API keys and prompt strings proving they do not appear in captured logs.
+
+### AUD-008: P2 live headless logging run was blocked by the audit write boundary
+
+Affected files:
+
+- `src/ecli/utils/logging_config.py:182`
+- `src/ecli/utils/utils.py:193`
+
+Evidence:
+
+- `audit-evidence/40-logging.txt`
+
+Observed facts:
+
+- `setup_logging()` creates `~/.config/ecli/logs/editor.log`.
+- `load_config()` may create `~/.config/ecli/config.toml` and `~/.config/ecli/.env`.
+- The user constrained writes to `audit-report.md` and `audit-evidence/`.
+
+Impact:
+
+This audit did not execute a live curses/headless ECLI session, so live ERROR/CRITICAL, traceback formatting, asyncio warning, and curses-error behavior are not fully proven.
+
+Recommended fix direction:
+
+Run a follow-up log-analyst pass in an isolated temporary `HOME` and collect logs as evidence. That run should include AI-disabled startup, resize/key smoke, and forced error paths.
+
+## 7. CI / Test Baseline Gaps
+
+### AUD-009: P1 CI does not gate mypy and has weak direct coverage for the P0 history/config invariants
+
+Affected files:
+
+- `.github/workflows/ci.yml:73`
+- `.github/workflows/ci.yml:89`
+- `tests/core/test_open_preserves_indentation.py:72`
+- `tests/characterization/test_existing_keybindings.py:26`
+- `tests/services/test_config_service.py`
+- `tests/services/test_config_migration.py`
+
+Evidence:
+
+- `audit-evidence/50-ci.txt`
+- `audit-evidence/21-history.txt`
+- `audit-evidence/11-mypy.txt`
+
+Observed facts:
+
+- CI runs ruff lint, ruff format check, pytest with coverage, and Gate 2 contract validation.
+- CI evidence did not show a mypy job.
+- Existing tests reference `FakeHistory` in characterization/open-preservation tests rather than exercising the real `History` undo/redo implementation.
+- Config service tests exist, but the audit evidence did not show a test that loads the shipped `config.toml` through the legacy runtime `load_config()` path and validates the current runtime-only sections.
+
+Impact:
+
+The exact `History.py` defect is statically visible to mypy but not gated by CI. The config bifurcation remains invisible if tests only cover the typed service model.
+
+Recommended fix direction:
+
+Add a CI mypy gate once the current error debt is triaged or baselined. Add focused tests for `History` redo selection replay and shipped config/runtime-loader validation.
+
+### AUD-010: P2 FreeBSD packaging is isolated and pinned, but release workflow still carries out-of-band attachment logic
+
+Affected files:
+
+- `.github/workflows/freebsd-pkg.yml:50`
+- `.github/workflows/freebsd-pkg.yml:118`
+- `.github/workflows/release.yml:184`
+- `.github/workflows/release.yml:466`
+
+Evidence:
+
+- `audit-evidence/50-ci.txt`
+
+Observed facts:
+
+- Standalone FreeBSD workflow is pinned to `vmactions/freebsd-vm@d1e65811565151536c0c894fff74f06351ed26e6` with comment `v1.4.5`.
+- Release workflow also has a FreeBSD build leg and later release-note logic indicating FreeBSD may be attached out-of-band.
+
+Impact:
+
+The pin is good, but the release process has two FreeBSD surfaces and an explicit out-of-band path. That increases operational ambiguity for final release evidence.
+
+Recommended fix direction:
+
+Define one authoritative FreeBSD release path: either release workflow artifact inclusion or standalone out-of-band attachment, with a single checksum/contract record.
+
+## 8. Lint/Type-Debt Backlog
+
+Ruff extend-exclude backlog from `pyproject.toml:152`:
+
+- `src/ecli/core/Ecli.py`
+- `src/ecli/core/History.py`
+- `src/ecli/integrations/AI.py`
+- `src/ecli/integrations/GitBridge.py`
+- `src/ecli/integrations/LinterBridge.py`
+- `src/ecli/integrations/__init__.py`
+- `src/ecli/ui/DrawScreen.py`
+- `src/ecli/ui/KeyBinder.py`
+- `src/ecli/ui/PanelManager.py`
+- `src/ecli/ui/TerminalAppMode.py`
+- `src/ecli/ui/__init__.py`
+- `src/ecli/ui/panels.py`
+- `src/ecli/utils/__init__.py`
+- `src/ecli/utils/logging_config.py`
+- `src/ecli/utils/utils.py`
+
+Mypy error map, derived from `audit-evidence/11-mypy.txt`:
+
+| module | errors |
+|---|---:|
+| `src/ecli/ui/panels.py` | 53 |
+| `src/ecli/core/Ecli.py` | 40 |
+| `tests/services/test_plan_validation.py` | 19 |
+| `tests/ui/test_input_routing.py` | 17 |
+| `src/ecli/ui/KeyBinder.py` | 16 |
+| `src/ecli/core/History.py` | 12 |
+| `src/ecli/integrations/LinterBridge.py` | 11 |
+| `tests/services/test_privileged_action_service.py` | 10 |
+| `tests/services/test_audit_log_service.py` | 9 |
+| `tests/ui/test_service_panels.py` | 9 |
+| `tests/characterization/test_existing_tui_panels.py` | 9 |
+| all remaining files | 58 |
+
+## 9. Findings Table
+
+| ID | severity | area | file:line | evidence |
+|---|---|---|---|---|
+| AUD-001 | P0 | config/runtime validation | `src/ecli/utils/utils.py:219`, `src/ecli/services/config_service.py:81`, `src/ecli/core/Ecli.py:1679`, `config.toml:372` | `audit-evidence/20-config.txt` |
+| AUD-002 | P0 | undo/redo runtime safety | `src/ecli/core/History.py:478` | `audit-evidence/21-history.txt`, `audit-evidence/11-mypy.txt` |
+| AUD-003 | P0 | release/artifact drift | `packaging/pyinstaller/ecli.spec:25`, `pyproject.toml:97`, `scripts/package_appimage.sh:79` | `audit-evidence/22-spec-drift.txt`, `audit-evidence/50-ci.txt` |
+| AUD-004 | P1 | curses containment | `src/ecli/core/Ecli.py:550`, `src/ecli/core/Ecli.py:7805` | `audit-evidence/30-curses.txt`, `audit-evidence/11-mypy.txt` |
+| AUD-005 | P1 | rendering geometry | `src/ecli/ui/DrawScreen.py`, `src/ecli/ui/panels.py`, `src/ecli/core/Ecli.py` | `audit-evidence/30-curses.txt` |
+| AUD-006 | P2 | resize verification | `src/ecli/ui/KeyBinder.py:756` | `audit-evidence/30-curses.txt` |
+| AUD-007 | P1 | logging/secret risk | `src/ecli/integrations/AI.py:313`, `src/ecli/integrations/AI.py:577` | `audit-evidence/40-logging.txt` |
+| AUD-008 | P2 | logging validation blocked | `src/ecli/utils/logging_config.py:182`, `src/ecli/utils/utils.py:193` | `audit-evidence/40-logging.txt` |
+| AUD-009 | P1 | CI/test coverage | `.github/workflows/ci.yml:73`, `tests/core/test_open_preserves_indentation.py:72` | `audit-evidence/50-ci.txt`, `audit-evidence/21-history.txt` |
+| AUD-010 | P2 | FreeBSD release path | `.github/workflows/freebsd-pkg.yml:50`, `.github/workflows/release.yml:466` | `audit-evidence/50-ci.txt` |
+| AUD-011 | P1 | static quality gate | `packaging/pyinstaller/rthooks/force_imports.py:20`, `src/ecli/ui/panels.py` | `audit-evidence/10-ruff.txt`, `audit-evidence/11-mypy.txt` |
+
+## 10. Out of Scope / UNVERIFIED
+
+- Live curses/headless ECLI execution: UNVERIFIED. Blocked because normal startup may create `~/.config/ecli/config.toml`, `~/.config/ecli/.env`, and `~/.config/ecli/logs/editor.log`, while the audit allowed writes only to `audit-report.md` and `audit-evidence/`.
+- Windows NSIS execution: UNVERIFIED. Environment is Debian/Linux and user explicitly prohibited Windows-only steps.
+- macOS DMG validation: UNVERIFIED. Environment is Debian/Linux.
+- FreeBSD package build execution: UNVERIFIED. The audit read workflows/scripts but did not run a FreeBSD VM build.
+- PyPI/GitHub publishing: out of scope and not attempted.
+- Catastrophic regex behavior beyond bounded probes: partially verified only. The audit compiled all 162 patterns and ran short probes; it did not run formal ReDoS analysis.
+- Existing repo logs under `logs/`: inspected only as static files with redaction. They are not proof of current live runtime behavior.
+
+## Appendix A: Exact Commands Run
+
+Environment:
+
+```sh
+uv --version
+python --version
+uv run ruff --version
+uv run mypy --version
+uv run pytest --version
+pyinstaller --version
+git rev-parse HEAD
+git status --porcelain
+uv sync --extra dev
+uv run ruff --version
+uv run mypy --version
+uv run pytest --version
+uv run pyinstaller --version
+```
+
+Build map:
+
+```sh
+sed -n '1,260p' pyproject.toml
+sed -n '1,520p' Makefile
+test -f Taskfile.yml && sed -n '1,260p' Taskfile.yml || true
+find scripts -maxdepth 1 -type f -print | sort
+find .github/workflows -maxdepth 1 -type f -print | sort
+sed -n '1,220p' .github/workflows/freebsd-pkg.yml
+make help
+make sysinfo
+awk '/^[[:alnum:]_.-]+:/ {print $1}' Makefile | sed 's/:$//' | sort -u
+```
+
+Static gates:
+
+```sh
+uv run ruff check . --output-format=concise
+uv run mypy src/ecli tests
+uv run pytest -ra -q
+```
+
+Config audit:
+
+```sh
+nl -ba config.toml | sed -n '1,760p'
+nl -ba src/ecli/services/config_service.py | sed -n '57,229p'
+nl -ba src/ecli/services/models/config.py | sed -n '77,690p'
+nl -ba src/ecli/utils/utils.py | sed -n '65,237p'
+nl -ba src/ecli/core/Ecli.py | sed -n '1673,1699p'
+uv run python - <<'PY'
+# validation of config.toml patterns and typed service
+PY
+uv run python - <<'PY'
+# corrected validation of config.toml patterns and typed service
+PY
+```
+
+History audit:
+
+```sh
+nl -ba src/ecli/core/History.py | sed -n '76,545p'
+nl -ba src/ecli/utils/text_buffer.py | sed -n '39,104p'
+rg -n "undo|redo|History|history" tests/core tests/characterization tests/ui
+uv run pytest tests/core -q
+uv run python - <<'PY'
+# minimal History runtime traces
+PY
+```
+
+Packaging drift:
+
+```sh
+nl -ba packaging/pyinstaller/ecli.spec | sed -n '1,180p'
+nl -ba packaging/pyinstaller/rthooks/force_imports.py | sed -n '1,120p'
+nl -ba pyproject.toml | sed -n '17,120p'
+nl -ba main.py | sed -n '1,120p'
+uv run pytest tests/packaging/test_runtime_import_contract.py -q
+python scripts/check_runtime_imports.py
+uv run python scripts/check_runtime_imports.py
+rg -n "0\.2\.2|version|ecli.__main__:main|ecli.png|hiddenimports|datas|ecli-editor|ecli_editor" pyproject.toml packaging scripts .github README.md CHANGELOG.md docs/release docs/contributor docs/INSTALL.md
+```
+
+Curses/rendering:
+
+```sh
+rg -n "curses|stdscr|\.refresh\(|noutrefresh|doupdate|addstr|addnstr" src/ecli
+rg -n "curses|stdscr|\.refresh\(|noutrefresh|doupdate|addstr|addnstr" src/ecli | cut -d: -f1 | sort -u
+rg -n "\blen\([^\n]*(cursor|col|column|x|width|w|screen|line)|wcwidth|wcswidth|SIGWINCH|resize|KEY_RESIZE|resizeterm|is_term_resized|getmaxyx|scroll_left|cursor_x" src/ecli
+nl -ba src/ecli/core/Ecli.py | sed -n '540,560p;7790,7890p'
+nl -ba src/ecli/ui/DrawScreen.py | sed -n '1,220p;430,520p;930,1030p'
+nl -ba src/ecli/ui/panels.py | sed -n '250,460p;1430,1510p;2528,2820p'
+```
+
+Logging:
+
+```sh
+nl -ba src/ecli/utils/logging_config.py | sed -n '116,322p'
+nl -ba config.toml | sed -n '17,22p'
+nl -ba src/ecli/integrations/AI.py | sed -n '192,248p;297,327p;507,578p;672,710p'
+nl -ba src/ecli/core/AsyncEngine.py | sed -n '147,253p;264,281p'
+find logs -maxdepth 2 -type f -print | sort
+rg -n "ERROR|CRITICAL|Traceback|unawaited|Task exception|curses" logs src/ecli | redacted excerpt
+```
+
+CI/test baseline:
+
+```sh
+find .github/workflows -maxdepth 1 -type f -print | sort
+nl -ba .github/workflows/*.yml | sed -n '1,260p'
+rg -n "config|ConfigService|syntax_highlighting|History|undo|redo|runtime_import|pyinstaller|artifact|freebsd|coderabbit|CodeRabbit" tests .github docs/quality docs/release pyproject.toml
+```
