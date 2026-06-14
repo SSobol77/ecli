@@ -130,26 +130,73 @@ class Report:
     inserted: list[str] = field(default_factory=list)
     relicensed: list[str] = field(default_factory=list)
     missing_header: list[str] = field(default_factory=list)
-    bad_spdx: list[tuple[str, str]] = field(default_factory=list)        # (path, value)
-    apache_residue: list[tuple[str, int, str]] = field(default_factory=list)  # (path, line, text)
+    bad_spdx: list[tuple[str, str]] = field(default_factory=list)  # (path, value)
+    apache_residue: list[tuple[str, int, str]] = field(
+        default_factory=list
+    )  # (path, line, text)
     skipped: list[str] = field(default_factory=list)
     exceptions: list[tuple[str, str]] = field(default_factory=list)
 
 
 _SKIP_DIRS = {
-    ".git", ".hg", ".svn", ".venv", "venv", "__pycache__", ".mypy_cache",
-    ".pytest_cache", ".ruff_cache", "node_modules", "dist", "build", "releases",
-    ".tox", "AppDir", "_coverage", "audit-evidence", "logs",
+    ".git",
+    ".hg",
+    ".svn",
+    ".venv",
+    "venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "node_modules",
+    "dist",
+    "build",
+    "releases",
+    ".tox",
+    "AppDir",
+    "_coverage",
+    "audit-evidence",
+    "logs",
     "ecli_github_backlog_bundle_v4_19_clean",
 }
 _SKIP_SUFFIXES = {
-    ".pyc", ".pyo", ".log", ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".ico",
-    ".svg", ".so", ".o", ".a", ".bin", ".whl", ".tar", ".gz", ".xz", ".zip",
-    ".deb", ".rpm", ".pkg", ".sha256", ".lock", ".typed",
+    ".pyc",
+    ".pyo",
+    ".log",
+    ".pdf",
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".gif",
+    ".ico",
+    ".svg",
+    ".so",
+    ".o",
+    ".a",
+    ".bin",
+    ".whl",
+    ".tar",
+    ".gz",
+    ".xz",
+    ".zip",
+    ".deb",
+    ".rpm",
+    ".pkg",
+    ".sha256",
+    ".lock",
+    ".typed",
 }
 _SKIP_NAMES = {
-    "LICENSE", "LICENCE", "COPYING", "COPYING.txt", "uv.lock", "thirdparty.lock",
-    "py.typed", "editor.log", "editorlog.txt", "progress.log",
+    "LICENSE",
+    "LICENCE",
+    "COPYING",
+    "COPYING.txt",
+    "uv.lock",
+    "thirdparty.lock",
+    "py.typed",
+    "editor.log",
+    "editorlog.txt",
+    "progress.log",
 }
 
 
@@ -157,14 +204,18 @@ def _spdx_value(head: list[str]) -> str | None:
     for line in head[:_HEAD_SCAN_LINES]:
         i = line.find(SPDX_LINE_TOKEN)
         if i != -1:
-            return line[i + len(SPDX_LINE_TOKEN):].strip()
+            return line[i + len(SPDX_LINE_TOKEN) :].strip()
     return None
 
 
 # -- leading-line preservation predicates ----------------------------------- #
 def _p_python(lines: list[str]) -> int:
     keep = 1 if lines and lines[0].startswith("#!") else 0
-    if keep < len(lines) and "coding:" in lines[keep] and lines[keep].lstrip().startswith("#"):
+    if (
+        keep < len(lines)
+        and "coding:" in lines[keep]
+        and lines[keep].lstrip().startswith("#")
+    ):
         keep += 1
     return keep
 
@@ -321,7 +372,12 @@ def walk(root: Path):
             # Out-of-scope text (e.g. .gitignore, .json, .txt): ignore unless it
             # already carries an SPDX line we must validate.
             try:
-                if _spdx_value(p.read_text(encoding="utf-8", errors="ignore").splitlines()) is None:
+                if (
+                    _spdx_value(
+                        p.read_text(encoding="utf-8", errors="ignore").splitlines()
+                    )
+                    is None
+                ):
                     continue
             except OSError:
                 continue
@@ -350,7 +406,11 @@ def main(argv: list[str] | None = None) -> int:
     if a.report:
         Path(a.report).write_text(md, encoding="utf-8")
 
-    failed = bool(report.missing_header) or bool(report.bad_spdx) or bool(report.apache_residue)
+    failed = (
+        bool(report.missing_header)
+        or bool(report.bad_spdx)
+        or bool(report.apache_residue)
+    )
     # In apply mode, post-write state is re-derivable by re-running --check; we
     # still return non-zero if anything could not be auto-resolved (residue).
     if a.apply:

@@ -157,14 +157,38 @@ ruff_cache/
 .re-commit-config.yaml
 sonar-project.properties
 
-# Local AI agent instruction packs
-AGENTS.md
-CLAUDE.md
-CODEX.md
+# ==========================
+# AI agent contracts
+# ==========================
+# Agent contract files are repository release-contract surfaces.
+# They are intentionally tracked so CI and clean checkouts can validate them.
+!AGENTS.md
+!CLAUDE.md
+!CODEX.md
+
+!.claude/
+!.claude/*.md
+!.claude/agents/
+!.claude/agents/*.md
+!.claude/commands/
+!.claude/commands/*.md
+!.claude/hooks/
+!.claude/hooks/*.sh
+!.claude/settings.json
+
+!.codex/
+!.codex/*.md
+!.codex/prompts/
+!.codex/prompts/*.md
+!.codex/roles/
+!.codex/roles/*.md
+!.codex/runbooks/
+!.codex/runbooks/*.md
+
+# Local AI agent private state
 CURSOR.md
-.claude/
-.codex/
 .cursor/
+.claude/settings.local.json
 
 # Lock files (regenerate with uv)
 uv.lock
@@ -237,3 +261,7 @@ ecli_github_backlog_bundle_v4_19_clean/*.md
 *.txt
 *.pdf
 *.docx
+
+# AppImage generated staging directories
+packaging/**/AppDir/
+packaging/**/AppDirpackaging/

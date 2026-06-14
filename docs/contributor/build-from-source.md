@@ -95,6 +95,12 @@ Visual Studio Build Tools are only required if native dependencies or build tool
 
 - Output naming and location are governed by `docs/release/artifact-contract.md`.
 
+- The full set of buildable artifacts is the `Canonical 21-Item Platform &
+  Packaging Artifact Matrix` in `docs/release/artifact-contract.md`. The table
+  above lists the local build entrypoints; the canonical matrix additionally maps
+  each artifact to its required `tests/packaging/` test, Claude command, Codex
+  prompt, and GitHub workflow.
+
 - Verification commands are governed by `docs/release/artifact-verification.md`.
 
 ## Validation Required

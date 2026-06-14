@@ -15,6 +15,18 @@ See the LICENSE file in the project root for full license text.
 # Release Checklist
 
 - [ ] Version in `pyproject.toml` is correct.
+- [ ] `docs/release/artifact-contract.md` lists all 21 entries in the
+      `Canonical 21-Item Platform & Packaging Artifact Matrix`, and every active
+      platform/package surface in the `Platform & Packaging Release Contract
+      Matrix`.
+- [ ] Each of the 21 canonical entries has a `tests/packaging/` test file, a
+      Claude command mapping, a Codex prompt mapping, and (where relevant) a
+      mapped GitHub workflow; `uv run pytest -q tests/packaging` passes.
+- [ ] Every active platform/package surface is represented in docs, Codex and
+      Claude agent contracts, build/release runbooks, and validation tests or
+      contract checks.
+- [ ] Empty, stale, decorative, or unused packaging files have been removed from
+      active workflows/scripts or wired into the matrix.
 - [ ] Artifact contract names are configured and validated.
 - [ ] `make validate-gate2` passes before any publish step.
 - [ ] Required packaging scripts exist and are executable.

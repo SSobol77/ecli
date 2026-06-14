@@ -23,15 +23,52 @@ See the LICENSE file in the project root for full license text.
 
 ## Packaging Targets (Current Tooling)
 
-- Linux: DEB, RPM, AppImage
+- PyPI: wheel and source distribution
+- Linux: PyInstaller executable, release tarball, DEB, RPM, openSUSE/SUSE RPM,
+  Arch package, Slackware package, AppImage
 - FreeBSD: `.pkg`
-- macOS: `.dmg`
-- Windows: NSIS `.exe`
+- macOS: `.app` / `.dmg`
+- Windows: portable `.exe` and NSIS installer `.exe`
+- Nix / NixOS: flake package and app
+- Docker build helpers: Debian and RPM build containers
+
+## Canonical 21-Item Artifact Coverage
+
+The normative artifact list is the `Canonical 21-Item Platform & Packaging
+Artifact Matrix` in `docs/release/artifact-contract.md`. Every entry below must
+remain covered by tests under `tests/packaging/`, by `.claude/commands/`, by
+`.codex/prompts/`, and (where relevant) by a GitHub workflow:
+
+1. PyPI wheel
+2. PyPI source distribution
+3. Linux generic PyInstaller executable
+4. Linux release tarball
+5. Debian / Ubuntu `.deb`
+6. generic RPM `.rpm`
+7. openSUSE / SUSE RPM
+8. Arch Linux `PKGBUILD`
+9. Slackware `.txz`
+10. AppImage
+11. FreeBSD `.pkg`
+12. FreeBSD ports/chroot build path
+13. macOS `.app`
+14. macOS `.dmg`
+15. Windows portable `.exe`
+16. Windows NSIS installer `.exe`
+17. Nix flake
+18. Nix/NixOS package expression
+19. Docker DEB build helper
+20. Docker RPM build helper
+21. GitHub Actions release/workflow contract map
 
 ## Support Stance
 
 - Current state indicates cross-platform packaging intent.
 - Support quality is bounded by CI/workflow coverage and artifact contract compliance.
+- The normative release-contract surface list lives in
+  `docs/release/artifact-contract.md`. A platform/package surface is not
+  release-ready unless it is represented in product/release docs, agent
+  contracts, runbooks, and validation tests or contract checks.
 
 ### Support Status Definitions
 

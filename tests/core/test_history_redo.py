@@ -45,9 +45,7 @@ class MinimalEditor:
         self.cursor_y = max(0, min(self.cursor_y, len(self.text) - 1))
         self.cursor_x = max(0, min(self.cursor_x, len(self.text[self.cursor_y])))
 
-    def _clamp_scroll_and_check_change(
-        self, previous_scroll: tuple[int, int]
-    ) -> bool:
+    def _clamp_scroll_and_check_change(self, previous_scroll: tuple[int, int]) -> bool:
         return (self.scroll_top, self.scroll_left) != previous_scroll
 
 
