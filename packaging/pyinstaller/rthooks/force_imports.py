@@ -68,8 +68,12 @@ except ImportError:
 
 # Locale setup
 try:
-    import locale
+    import locale as _locale
+except ImportError:
+    _locale = None
 
-    locale.setlocale(locale.LC_ALL, "")
-except locale.Error:
-    pass
+if _locale is not None:
+    try:
+        _locale.setlocale(_locale.LC_ALL, "")
+    except _locale.Error:
+        pass

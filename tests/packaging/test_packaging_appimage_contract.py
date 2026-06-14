@@ -47,6 +47,7 @@ def test_appimage_script_uses_canonical_naming(
     script = read_repo_text("scripts/package_appimage.sh")
     assert_tokens_present(script, ["ecli_${VERSION}_linux_${ARCH}.AppImage"])
 
+
 def test_appimage_generated_staging_paths_are_not_release_contract_surfaces(
     read_repo_text: RepoReader,
 ) -> None:
@@ -67,4 +68,6 @@ def test_appimage_generated_staging_paths_are_not_release_contract_surfaces(
     for relative_path in checked_files:
         text = read_repo_text(relative_path)
         for token in forbidden_tokens:
-            assert token not in text, f"{relative_path} must not contract generated staging path {token}"
+            assert token not in text, (
+                f"{relative_path} must not contract generated staging path {token}"
+            )
