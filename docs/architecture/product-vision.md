@@ -1,15 +1,15 @@
 <!--
-SPDX-License-Identifier: Apache-2.0
+SPDX-License-Identifier: GPL-2.0-only
 
 Project: ECLI
 File: docs/architecture/product-vision.md
 Website: https://www.ecli.io
 Author: Siergej Sobolewski
-License: Apache License, Version 2.0
+License: GNU General Public License version 2 only
 
 Copyright (c) 2026 Siergej Sobolewski
 
-Licensed under the Apache License, Version 2.0.
+Licensed under the GNU General Public License version 2 only.
 See the LICENSE file in the project root for full license text.
 -->
 
@@ -20,7 +20,7 @@ See the LICENSE file in the project root for full license text.
 **Version:** 1.0
 **Date:** 2026-05-15
 **Status:** Strategic Architecture Direction
-**License:** Apache-2.0
+**License:** GPL-2.0-only
 
 ---
 

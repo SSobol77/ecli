@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # Project: Ecli
 # File: scripts/verify-artifact.sh
@@ -9,7 +9,7 @@
 #
 # Copyright (c) 2026 Siergej Sobolewski
 #
-# Licensed under the Apache License, Version 2.0.
+# Licensed under the GNU General Public License version 2 only.
 # See the LICENSE file in the project root for full license text.
 
 # Verify an artifact against its basename-only SHA256 sidecar.

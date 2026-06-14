@@ -1,5 +1,5 @@
 <!--
-SPDX-License-Identifier: Apache-2.0
+SPDX-License-Identifier: GPL-2.0-only
 
 Project: Ecli
 File: docs/planning/gate2-phase0-report.md
@@ -9,7 +9,7 @@ PyPI: https://pypi.org/project/ecli-editor/0.0.1/
 
 Copyright (c) 2026 Siergej Sobolewski
 
-Licensed under the Apache License, Version 2.0.
+Licensed under the GNU General Public License version 2 only.
 See the LICENSE file in the project root for full license text.
 -->
 # Gate 2 Phase 0 Report
@@ -598,8 +598,8 @@ project.
 
 ## Known Debt
 
-- License drift remains out of scope: `pyproject.toml` uses Apache-2.0 metadata
-  while legacy license metadata disagreed with the Apache-2.0 project license. Issue #33 was not open/visible at
+- License drift remains out of scope: `pyproject.toml` uses GPL-2.0-only metadata
+  while legacy license metadata disagreed with the GPL-2.0-only project license. Issue #33 was not open/visible at
   report time.
 - PyPI namespace `ecli-editor` reserved on 2026-05-09 with placeholder version
   0.0.1. Verified at https://pypi.org/project/ecli-editor/0.0.1/. Maintainer

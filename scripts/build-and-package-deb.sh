@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # Project: Ecli
 # File: scripts/build-and-package-deb.sh
@@ -9,7 +9,7 @@
 #
 # Copyright (c) 2026 Siergej Sobolewski
 #
-# Licensed under the Apache License, Version 2.0.
+# Licensed under the GNU General Public License version 2 only.
 # See the LICENSE file in the project root for full license text.
 
 # ==============================================================================
@@ -48,7 +48,7 @@ cd "${PROJECT_ROOT}"
 PACKAGE_NAME="ecli"
 MAINTAINER="Siergej Sobolewski <s.sobolewski@hotmail.com>"
 HOMEPAGE="https://ecli.io"
-LICENSE="Apache-2.0"
+LICENSE="GPL-2.0-only"
 CATEGORY="editors"
 PYTHON_BIN="${PYTHON:-python3}"
 

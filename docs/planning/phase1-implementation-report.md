@@ -1,5 +1,5 @@
 <!--
-SPDX-License-Identifier: Apache-2.0
+SPDX-License-Identifier: GPL-2.0-only
 
 Project: Ecli
 File: docs/planning/phase1-implementation-report.md
@@ -9,7 +9,7 @@ PyPI: https://pypi.org/project/ecli-editor/0.0.1/
 
 Copyright (c) 2026 Siergej Sobolewski
 
-Licensed under the Apache License, Version 2.0.
+Licensed under the GNU General Public License version 2 only.
 See the LICENSE file in the project root for full license text.
 -->
 # Gate 2 Phase 1 Implementation Report
@@ -21,7 +21,7 @@ Base state: `main` at `cc30717`.
 Phase 1 is complete for workstreams A, B, and C. Workstream D was deferred by
 maintainer decision; the Phase 0 FreeBSD package flow remains functional but is
 not Gate 2 polished. PR #17 was accepted as an out-of-band hygiene addition to
-close long-standing Apache-2.0 metadata drift before v0.1.0 release operations.
+close long-standing GPL-2.0-only metadata drift before v0.1.0 release operations.
 
 No real PyPI publish, production tag push, or production GitHub Release was
 performed during Phase 1 implementation.
@@ -33,7 +33,7 @@ performed during Phase 1 implementation.
 | A - macOS Universal2 ad-hoc signed DMG | [#14](https://github.com/SSobol77/ecli/pull/14) | `46868b0` | 20 | +903 / -1340 | Passed: PyPI Contract Validate, Windows Contract Validate, macOS Contract Validate, SonarCloud | Complete |
 | B - PyPI token publish + CycloneDX SBOM | [#15](https://github.com/SSobol77/ecli/pull/15) | `73b4914` | 6 | +567 / -6 | Passed: CI, PyPI Contract Validate, Windows Contract Validate, macOS Contract Validate, SonarCloud | Complete |
 | C - Windows portable EXE + NSIS installer | [#16](https://github.com/SSobol77/ecli/pull/16) | `68ec4b6` | 15 | +754 / -423 | Passed: PyPI Contract Validate, Windows Contract Validate, macOS Contract Validate, SonarCloud | Complete |
-| Out-of-band - Apache-2.0 license normalization | [#17](https://github.com/SSobol77/ecli/pull/17) | `cc30717` | 135 | +1677 / -411 | Passed: CI, PyPI Contract Validate, Windows Contract Validate, macOS Contract Validate, SonarCloud | Complete |
+| Out-of-band - GPL-2.0-only license normalization | [#17](https://github.com/SSobol77/ecli/pull/17) | `cc30717` | 135 | +1677 / -411 | Passed: CI, PyPI Contract Validate, Windows Contract Validate, macOS Contract Validate, SonarCloud | Complete |
 
 Line deltas and file counts are from merged PR metadata.
 
@@ -115,9 +115,9 @@ Status: deferred.
 
 Status: complete.
 
-- [x] Apache-2.0 SPDX headers normalized across project-owned source, script,
+- [x] GPL-2.0-only SPDX headers normalized across project-owned source, script,
   documentation, and config files.
-- [x] Project-owned MIT metadata was replaced with Apache-2.0.
+- [x] Project-owned MIT metadata was replaced with GPL-2.0-only.
 - [x] Generated/cache/binary artifacts were not given fake headers.
 - [x] `.gitignore` was tightened for release outputs, runtime logs, and
   generated AppImage staging content.
@@ -130,7 +130,7 @@ Status: complete.
 - [x] Windows portable EXE + NSIS installer build, both unsigned.
 - [x] User documentation (macOS, Windows) explains first-launch warnings
   honestly.
-- [x] License headers are Apache-2.0 across all source files.
+- [x] License headers are GPL-2.0-only across all source files.
 - [x] All Phase 0 contracts (naming, sidecars, exit codes) honored.
 - [x] No real PyPI publish or production release performed.
 

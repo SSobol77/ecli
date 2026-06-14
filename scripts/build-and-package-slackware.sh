@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # Project: Ecli
 # File: scripts/build-and-package-slackware.sh
@@ -9,7 +9,7 @@
 #
 # Copyright (c) 2026 Siergej Sobolewski
 #
-# Licensed under the Apache License, Version 2.0.
+# Licensed under the GNU General Public License version 2 only.
 # See the LICENSE file in the project root for full license text.
 
 # Build a traditional Slackware .txz package from the PyInstaller binary.
@@ -89,7 +89,7 @@ ${PACKAGE_NAME}:
 ${PACKAGE_NAME}: Homepage: https://www.ecli.io
 ${PACKAGE_NAME}: Repository: https://github.com/SSobol77/ecli
 ${PACKAGE_NAME}:
-${PACKAGE_NAME}: License: Apache-2.0
+${PACKAGE_NAME}: License: GPL-2.0-only
 ${PACKAGE_NAME}:
 EOF
 

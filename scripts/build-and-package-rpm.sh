@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # Project: Ecli
 # File: scripts/build-and-package-rpm.sh
@@ -9,7 +9,7 @@
 #
 # Copyright (c) 2026 Siergej Sobolewski
 #
-# Licensed under the Apache License, Version 2.0.
+# Licensed under the GNU General Public License version 2 only.
 # See the LICENSE file in the project root for full license text.
 
 # ==============================================================================
@@ -47,7 +47,7 @@ export PYTHON
 PACKAGE_NAME="${PACKAGE_NAME:-ecli}"
 MAINTAINER="${MAINTAINER:-Siergej Sobolewski <s.sobolewski@hotmail.com>}"
 HOMEPAGE="${HOMEPAGE:-https://ecli.io}"
-LICENSE="${LICENSE:-Apache-2.0}"
+LICENSE="${LICENSE:-GPL-2.0-only}"
 CATEGORY="${CATEGORY:-editors}"  # shows as "Group" in some RPM tools
 
 # CPU arch label used in the normalized filename.

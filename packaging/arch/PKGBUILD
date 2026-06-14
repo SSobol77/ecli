@@ -1,4 +1,4 @@
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # Project: Ecli
 # File: packaging/arch/PKGBUILD
@@ -12,7 +12,7 @@ pkgrel=1
 pkgdesc="Terminal-first engineering operations workbench"
 arch=("x86_64" "aarch64")
 url="https://www.ecli.io"
-license=("Apache-2.0")
+license=("GPL-2.0-only")
 depends=("glibc" "ncurses" "libyaml")
 optdepends=("xclip: clipboard integration" "xsel: clipboard integration")
 makedepends=(

@@ -1,5 +1,5 @@
 <!--
-SPDX-License-Identifier: Apache-2.0
+SPDX-License-Identifier: GPL-2.0-only
 
 Project: Ecli
 File: README.md
@@ -9,7 +9,7 @@ PyPI: https://pypi.org/project/ecli-editor/0.0.1/
 
 Copyright (c) 2026 Siergej Sobolewski
 
-Licensed under the Apache License, Version 2.0.
+Licensed under the GNU General Public License version 2 only.
 See the LICENSE file in the project root for full license text.
 -->
 <p align="center">
@@ -683,7 +683,9 @@ See [Supported Platforms](https://github.com/SSobol77/ecli/blob/main/docs/produc
 
 ## 📝 License
 
-ECLI is licensed under the [Apache License 2.0](https://github.com/SSobol77/ecli/blob/main/LICENSE). See the LICENSE file for details.
+ECLI is licensed under the GNU General Public License version 2 only (`GPL-2.0-only`).
+
+See the [LICENSE](https://github.com/SSobol77/ecli/blob/main/LICENSE) file for the full license text.
 
 ---
 

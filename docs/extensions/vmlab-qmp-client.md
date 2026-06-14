@@ -1,16 +1,16 @@
 <!--
-SPDX-License-Identifier: Apache-2.0
+SPDX-License-Identifier: GPL-2.0-only
 
 Project: ECLI
 File: docs/extensions/vmlab-qmp-client.md
 Website: https://www.ecli.io
 Repository: https://github.com/SSobol77/ecli
 Author: Siergej Sobolewski
-License: Apache License, Version 2.0
+License: GNU General Public License version 2 only
 
 Copyright (c) 2026 Siergej Sobolewski
 
-Licensed under the Apache License, Version 2.0.
+Licensed under the GNU General Public License version 2 only.
 See the LICENSE file in the project root for full license text.
 -->
 

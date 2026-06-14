@@ -1,5 +1,5 @@
 <!--
-SPDX-License-Identifier: Apache-2.0
+SPDX-License-Identifier: GPL-2.0-only
 
 Project: Ecli
 File: docs/planning/risk-register.md
@@ -9,7 +9,7 @@ PyPI: https://pypi.org/project/ecli-editor/0.0.1/
 
 Copyright (c) 2026 Siergej Sobolewski
 
-Licensed under the Apache License, Version 2.0.
+Licensed under the GNU General Public License version 2 only.
 See the LICENSE file in the project root for full license text.
 -->
 # Risk Register
@@ -27,7 +27,7 @@ See the LICENSE file in the project root for full license text.
 | Unsigned Windows binary user friction | High | Medium | Medium | user install reports, SmartScreen prompts | document SmartScreen path; add Azure Trusted Signing or EV certificate in a later release | Release maintainers | New Phase 1 residual |
 | macOS non-notarized first launch friction | High | Medium | Medium | user install reports, Gatekeeper prompts | document Gatekeeper workaround; add Developer ID signing, hardened runtime, notarization, and stapling in a later release | Release maintainers | New Phase 1 residual |
 | FreeBSD package polish deferred | Medium | Medium | Medium | FreeBSD release validation, package metadata audit | keep canonical Phase 0 FreeBSD package flow functional; schedule manifest polish and canonical naming audit in Workstream D | Release maintainers | Deferred |
-| License metadata drift | Low | Medium | Low | SPDX/header scan, package metadata review | PR #17 normalized Apache-2.0 headers and project-owned license metadata | Release maintainers | Mitigated in Phase 1 |
+| License metadata drift | Low | Medium | Low | SPDX/header scan, package metadata review | PR #17 normalized GPL-2.0-only headers and project-owned license metadata | Release maintainers | Mitigated in Phase 1 |
 | `vmactions/freebsd-vm` flake risk on Release pipeline | Medium | Medium | Medium | release workflow FreeBSD leg failure, SSH-wrapper exit-1 with no inner trace | pinned vmactions to commit SHA (v1.4.5), tee in-VM stdout + upload on failure, raised VM to 6 GiB / 4 vCPU, `build-freebsd` marked `continue-on-error: true` and decoupled from `publish-github-release` success criteria, out-of-band `.pkg` attach via standalone workflow `release_tag` input | Release maintainers | Mitigated 2026-05-19 |
 | Node 20 deprecation on GitHub Actions runners (2026-09-16) | High | Medium | Medium | GitHub Actions deprecation notice in workflow logs | track migration of `actions/checkout@v4` and similar Node 20 actions to Node 24-compatible versions before 2026-09-16 | Release maintainers | Open |
 

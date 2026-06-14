@@ -1,5 +1,5 @@
 #!/bin/sh
-# SPDX-License-Identifier: Apache-2.0
+# SPDX-License-Identifier: GPL-2.0-only
 #
 # Project: Ecli
 # File: scripts/build-and-package-freebsd.sh
@@ -9,7 +9,7 @@
 #
 # Copyright (c) 2026 Siergej Sobolewski
 #
-# Licensed under the Apache License, Version 2.0.
+# Licensed under the GNU General Public License version 2 only.
 # See the LICENSE file in the project root for full license text.
 
 # ==============================================================================
@@ -113,7 +113,7 @@
 #
 # COPYRIGHT / LICENSE
 #   - Maintainer: Siergej Sobolewski <s.sobolewski@hotmail.com>
-#   - License: Apache-2.0 (package ships LICENSE if present)
+#   - License: GPL-2.0-only (package ships LICENSE if present)
 #
 # LAST UPDATED
 #   2025-10-02 — Strict artifact naming; expanded dependencies and usage.
@@ -159,7 +159,7 @@ cd "$PROJECT_ROOT"
 PACKAGE_NAME="ecli"
 MAINTAINER="Siergej Sobolewski <s.sobolewski@hotmail.com>"
 HOMEPAGE="https://ecli.io"
-LICENSE="Apache-2.0"
+LICENSE="GPL-2.0-only"
 COMMENT="Terminal DevOps editor with AI and Git integration"
 CATEGORY="editors"  # FreeBSD manifest 'categories'
 

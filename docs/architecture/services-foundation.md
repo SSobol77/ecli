@@ -1,16 +1,16 @@
 <!--
-SPDX-License-Identifier: Apache-2.0
+SPDX-License-Identifier: GPL-2.0-only
 
 Project: ECLI
 File: docs/architecture/services-foundation.md
 Website: https://www.ecli.io
 Repository: https://github.com/SSobol77/ecli
 Author: Siergej Sobolewski
-License: Apache License, Version 2.0
+License: GNU General Public License version 2 only
 
 Copyright (c) 2026 Siergej Sobolewski
 
-Licensed under the Apache License, Version 2.0.
+Licensed under the GNU General Public License version 2 only.
 See the LICENSE file in the project root for full license text.
 -->
 
@@ -243,15 +243,15 @@ This strategy fits ECLI because:
 
 ## 5.1 Repository Hygiene Prerequisites
 
-Before Phase 1 implementation begins, repository-owned files must have consistent Apache-2.0 license metadata.
+Before Phase 1 implementation begins, repository-owned files must have consistent GPL-2.0-only license metadata.
 
 Required baseline:
 
-* `pyproject.toml` declares Apache-2.0 consistently;
-* project-owned Python files include Apache-2.0 SPDX metadata where applicable;
-* shell scripts preserve shebangs and include Apache-2.0 SPDX metadata;
+* `pyproject.toml` declares GPL-2.0-only consistently;
+* project-owned Python files include GPL-2.0-only SPDX metadata where applicable;
+* shell scripts preserve shebangs and include GPL-2.0-only SPDX metadata;
 * documentation files use the approved project header format where applicable;
-* packaging scripts must not declare conflicting `MIT` metadata if the project license is Apache-2.0;
+* packaging scripts must not declare conflicting `MIT` metadata if the project license is GPL-2.0-only;
 * generated, cache, binary, and third-party vendored artifacts are excluded unless explicitly project-owned.
 
 This prerequisite must be completed before new Phase 1 service code is introduced.
