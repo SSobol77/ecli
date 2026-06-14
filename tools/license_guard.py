@@ -43,9 +43,11 @@ from __future__ import annotations
 
 import argparse
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
+
 
 # --------------------------------------------------------------------------- #
 # Canonical GPL-2.0-only metadata (Option A: short, SPDX-centric).
@@ -66,42 +68,64 @@ _HEAD_SCAN_LINES = 20
 # Head-region relicense rewrites (old -> new), applied only in the first
 # _HEAD_SCAN_LINES lines, only under --apply.
 _HEAD_REWRITES: tuple[tuple[re.Pattern[str], str], ...] = (
-    (re.compile(r"SPDX-License-Identifier:\s*Apache-2\.0"),
-     f"SPDX-License-Identifier: {SPDX_ID}"),
-    (re.compile(r"Licensed under the Apache License,\s*Version 2\.0\."),
-     NOTE_LINE),
-    (re.compile(r"License:\s*Apache License,\s*Version 2\.0"),
-     "License: GNU General Public License version 2 only"),
+    (
+        re.compile(r"SPDX-License-Identifier:\s*Apache-2\.0"),
+        f"SPDX-License-Identifier: {SPDX_ID}",
+    ),
+    (
+        re.compile(r"Licensed under the Apache License,\s*Version 2\.0\."),
+        NOTE_LINE,
+    ),
+    (
+        re.compile(r"License:\s*Apache License,\s*Version 2\.0"),
+        "License: GNU General Public License version 2 only",
+    ),
 )
 
 # Invalid / contradictory SPDX forms that must fail the gate.
 _INVALID_SPDX = {
-    "Apache-2.0", "Apache 2.0", "Apache",
-    "GPL-2-only", "GPL2", "GPLv2", "GPL-2.0", "GPL-2.0-or-later", "GPL-2.0+",
+    "Apache-2.0",
+    "Apache 2.0",
+    "Apache",
+    "GPL-2-only",
+    "GPL2",
+    "GPLv2",
+    "GPL-2.0",
+    "GPL-2.0-or-later",
+    "GPL-2.0+",
 }
 
 # Residual Apache license tokens (header or body or metadata) to surface.
-_APACHE_TOKEN = re.compile(r"Apache(?:[-\s]2\.0|\s+License|\s+Software License)?",
-                           re.IGNORECASE)
+_APACHE_TOKEN = re.compile(
+    r"Apache(?:[-\s]2\.0|\s+License|\s+Software License)?",
+    re.IGNORECASE,
+)
 _APACHE_RESIDUE_ALLOWLIST = {
     ".claude/PIPELINE.md",
     "tools/license_guard.py",
 }
 
+
 class Style(Enum):
+    """Supported comment styles for generated headers."""
+
     HASH = "hash"
     HTML = "html"
 
 
 @dataclass(frozen=True)
 class Handler:
+    """Header rendering and leading-line preservation policy for one file type."""
+
     name: str
     style: Style
-    preserve_leading: "callable[[list[str]], int]"
+    preserve_leading: Callable[[list[str]], int]
 
 
 @dataclass
 class Report:
+    """Accumulated license guard findings."""
+
     ok: list[str] = field(default_factory=list)
     inserted: list[str] = field(default_factory=list)
     relicensed: list[str] = field(default_factory=list)
@@ -170,34 +194,45 @@ def _p_yaml(lines: list[str]) -> int:
 
 
 def resolve_handler(path: Path) -> Handler | None:
+    """Return the header handler for a project-owned file path."""
     name, suf = path.name, path.suffix.lower()
+    handler: Handler | None = None
     if name == "Dockerfile" or suf == ".dockerfile" or name.endswith(".Dockerfile"):
-        return Handler("dockerfile", Style.HASH, _p_docker)
-    if name == "Makefile" or suf == ".mk":
-        return Handler("make", Style.HASH, _p_none)
-    if suf in (".py", ".spec"):
-        return Handler("python", Style.HASH, _p_python)
-    if suf in (".sh", ".bash"):
-        return Handler("bash", Style.HASH, _p_shebang)
-    if suf == ".ps1":
-        return Handler("powershell", Style.HASH, _p_none)
-    if suf == ".md":
-        return Handler("markdown", Style.HTML, _p_md)
-    if suf in (".yml", ".yaml"):
-        return Handler("yaml", Style.HASH, _p_yaml)
-    if suf in (".toml", ".cfg", ".ini", ".properties", ".nix"):
-        return Handler("conf", Style.HASH, _p_none)
-    if suf == ".desktop":
-        return Handler("desktop", Style.HASH, _p_none)
-    return None
+        handler = Handler("dockerfile", Style.HASH, _p_docker)
+    elif name == "Makefile" or suf == ".mk":
+        handler = Handler("make", Style.HASH, _p_none)
+    elif suf in (".py", ".spec"):
+        handler = Handler("python", Style.HASH, _p_python)
+    elif suf in (".sh", ".bash"):
+        handler = Handler("bash", Style.HASH, _p_shebang)
+    elif suf == ".ps1":
+        handler = Handler("powershell", Style.HASH, _p_none)
+    elif suf == ".md":
+        handler = Handler("markdown", Style.HTML, _p_md)
+    elif suf in (".yml", ".yaml"):
+        handler = Handler("yaml", Style.HASH, _p_yaml)
+    elif suf in (".toml", ".cfg", ".ini", ".properties", ".nix"):
+        handler = Handler("conf", Style.HASH, _p_none)
+    elif suf == ".desktop":
+        handler = Handler("desktop", Style.HASH, _p_none)
+    return handler
 
 
 def render_header(style: Style, rel: str) -> str:
+    """Render the canonical GPL-2.0-only header for one relative path."""
     body = [
-        f"{SPDX_LINE_TOKEN} {SPDX_ID}", "",
-        f"Project: {_PROJECT}", f"File: {rel}", f"Website: {_WEBSITE}",
-        f"Repository: {_REPO}", f"PyPI: {_PYPI}", "",
-        _COPYRIGHT, "", NOTE_LINE, SEE_LINE,
+        f"{SPDX_LINE_TOKEN} {SPDX_ID}",
+        "",
+        f"Project: {_PROJECT}",
+        f"File: {rel}",
+        f"Website: {_WEBSITE}",
+        f"Repository: {_REPO}",
+        f"PyPI: {_PYPI}",
+        "",
+        _COPYRIGHT,
+        "",
+        NOTE_LINE,
+        SEE_LINE,
     ]
     if style is Style.HTML:
         return "<!--\n" + "\n".join(body) + "\n-->\n"
@@ -212,7 +247,9 @@ def _scan_apache(rel: str, lines: list[str], report: Report) -> None:
         if _APACHE_TOKEN.search(line):
             report.apache_residue.append((rel, n, line.strip()[:120]))
 
+
 def process(path: Path, root: Path, apply: bool, report: Report) -> None:
+    """Validate, and optionally update, the license header for one file."""
     rel = str(path.relative_to(root))
     try:
         text = path.read_text(encoding="utf-8")
@@ -272,7 +309,9 @@ def process(path: Path, root: Path, apply: bool, report: Report) -> None:
     report.missing_header.append(rel)
     _scan_apache(rel, lines, report)
 
+
 def walk(root: Path):
+    """Yield project-owned files that are in scope for license validation."""
     for p in sorted(root.rglob("*")):
         if p.is_dir() or any(part in _SKIP_DIRS for part in p.parts):
             continue
@@ -290,10 +329,14 @@ def walk(root: Path):
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Run the license guard CLI."""
     ap = argparse.ArgumentParser(description="ECLI GPL-2.0-only license guard.")
     ap.add_argument("--root", default=".")
-    ap.add_argument("--apply", action="store_true",
-                    help="Insert missing GPL-2.0-only headers and relicense Apache head lines.")
+    ap.add_argument(
+        "--apply",
+        action="store_true",
+        help="Insert missing GPL-2.0-only headers and relicense Apache head lines.",
+    )
     ap.add_argument("--report", default=None)
     a = ap.parse_args(argv)
 
@@ -316,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _fmt(r: Report, applied: bool, root: Path) -> str:
+    """Format a Markdown license guard report."""
     out = [
         "# ECLI GPL-2.0-only license guard",
         "",
@@ -334,11 +378,17 @@ def _fmt(r: Report, applied: bool, root: Path) -> str:
     if r.missing_header:
         out += ["## Missing header", *[f"- `{p}`" for p in r.missing_header], ""]
     if r.bad_spdx:
-        out += ["## Wrong SPDX (must be GPL-2.0-only)",
-                *[f"- `{p}` -> `{v}`" for p, v in r.bad_spdx], ""]
+        out += [
+            "## Wrong SPDX (must be GPL-2.0-only)",
+            *[f"- `{p}` -> `{v}`" for p, v in r.bad_spdx],
+            "",
+        ]
     if r.apache_residue:
-        out += ["## Residual Apache tokens (edit manually; do not auto-rewrite metadata/UI)",
-                *[f"- `{p}:{n}`  {t}" for p, n, t in r.apache_residue], ""]
+        out += [
+            "## Residual Apache tokens (edit manually; do not auto-rewrite metadata/UI)",
+            *[f"- `{p}:{n}`  {t}" for p, n, t in r.apache_residue],
+            "",
+        ]
     if r.exceptions:
         out += ["## Unhandled", *[f"- `{p}` ({why})" for p, why in r.exceptions], ""]
     return "\n".join(out)

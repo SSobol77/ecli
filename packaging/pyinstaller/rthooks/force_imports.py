@@ -17,9 +17,8 @@
 - Optional imports: attempted, but ignored if missing.
 """
 
-import sys
-import os
 from importlib import import_module
+
 
 # Hard requirements for startup (imported at top-level by your code)
 MANDATORY = [
@@ -57,11 +56,12 @@ for name in OPTIONAL:
 # Curses setup for FreeBSD
 try:
     import curses
+
     # Ensure terminfo is found
-    if hasattr(curses, 'setupterm'):
+    if hasattr(curses, "setupterm"):
         try:
             curses.setupterm()
-        except:
+        except (curses.error, OSError):
             pass
 except ImportError:
     pass
@@ -69,6 +69,7 @@ except ImportError:
 # Locale setup
 try:
     import locale
-    locale.setlocale(locale.LC_ALL, '')
-except:
+
+    locale.setlocale(locale.LC_ALL, "")
+except locale.Error:
     pass
