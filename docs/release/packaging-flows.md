@@ -14,6 +14,15 @@ See the LICENSE file in the project root for full license text.
 -->
 # Packaging Flows
 
+The active platform/package set is contract-bound by
+`docs/release/artifact-contract.md` under the `Canonical 21-Item Platform &
+Packaging Artifact Matrix` (summarized by the `Platform & Packaging Release
+Contract Matrix`). That canonical matrix has exactly 21 entries. Release
+readiness is blocked if any active packaging surface is absent from docs, agent
+contracts, build/release runbooks, or validation tests under
+`tests/packaging/`. Empty, stale, decorative, or unused packaging files are
+forbidden.
+
 ## Linux
 
 - DEB flow: `scripts/build-and-package-deb.sh`

@@ -475,7 +475,7 @@ class History:
                     if selection_state_after_op and isinstance(selection_state_after_op, tuple) and len(
                             selection_state_after_op) == 3:
                         self.editor.is_selecting, self.editor.selection_start, self.editor.selection_end = selection_state_after_op
-                        if self.is_selecting and self.selection_end:
+                        if self.editor.is_selecting and self.editor.selection_end:
                             self.editor.cursor_y, self.editor.cursor_x = self.editor.selection_end
                     elif cursor_state_no_sel_after_op and isinstance(cursor_state_no_sel_after_op, tuple):
                         self.editor.is_selecting = False

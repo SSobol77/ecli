@@ -22,7 +22,13 @@ See the LICENSE file in the project root for full license text.
 | `ruff format --check src` | formatting gate | verified in CI pattern | Yes | Yes |
 | `python main.py` | runtime sanity | repository-observed entrypoint | Yes | Yes |
 | `pytest` | tests baseline check | partial/validation-required if tests absent | Optional | Yes |
+| `uv run pytest -q tests/packaging` | canonical 21-item packaging release-contract matrix guard | repository-local static check | Optional | Yes |
 | platform packaging script | artifact build | environment-dependent | No | Yes (release/packaging roles) |
+
+The packaging guard enforces the `Canonical 21-Item Platform & Packaging
+Artifact Matrix` in `docs/release/artifact-contract.md`: every one of the 21
+entries must keep a `tests/packaging/` test file, a Claude command mapping, a
+Codex prompt mapping, and (where relevant) a mapped GitHub workflow.
 
 ## Minimum Validation Path (Contributor)
 
@@ -34,8 +40,9 @@ See the LICENSE file in the project root for full license text.
 
 1. minimum path
 2. test path (`pytest`) if test baseline exists
-3. packaging path for affected artifact(s)
-4. artifact contract and checksum verification
+3. packaging release-contract matrix guard
+4. packaging path for affected artifact(s)
+5. artifact contract and checksum verification
 
 ## Drift Handling Rule
 

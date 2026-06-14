@@ -16,6 +16,16 @@ See the LICENSE file in the project root for full license text.
 
 ## Platform Matrix (Current Observed)
 
+The normative platform/package list is the `Canonical 21-Item Platform &
+Packaging Artifact Matrix` (summarized by the `Platform & Packaging Release
+Contract Matrix`) in `docs/release/artifact-contract.md`. That canonical matrix
+has exactly 21 entries, each mapped to repository source files, an expected
+artifact, a related GitHub workflow, a required `tests/packaging/` test file, a
+required Claude command, and a required Codex prompt. This file summarizes
+build-environment notes only; adding a packaging script, workflow, Docker helper,
+Nix descriptor, or platform document without adding it to the normative matrix is
+release contract drift.
+
 - Linux: DEB/RPM/openSUSE RPM/Arch/Slackware/AppImage scripts and workflows
 
 - NixOS/Nix: local flake/package expression
@@ -44,6 +54,25 @@ See the LICENSE file in the project root for full license text.
 - Windows installer path requires Python 3.11+, Git, PowerShell 7, and NSIS (`makensis`). Visual Studio Build Tools are required only when native dependencies or build tooling need local compilation.
 
 - macOS DMG path relies on `hdiutil` and Python tooling.
+
+## GitHub Actions Workflow Contract Map
+
+The workflow map is normative in `docs/release/artifact-contract.md`. Build
+readiness depends on these CI/release surfaces remaining mapped:
+
+- `.github/workflows/ci.yml`: global quality gate and root `main.py`
+  compatibility contract.
+- `.github/workflows/freebsd-pkg.yml`: FreeBSD `.pkg` package path, including
+  port/chroot package expectations.
+- `.github/workflows/macos-dmg.yml`: macOS `.app` / `.dmg` package path.
+- `.github/workflows/macos-validate.yml`: macOS package validation.
+- `.github/workflows/project-automation.yml`: repository automation,
+  non-packaging; it must not be treated as a release artifact workflow.
+- `.github/workflows/pypi-validate.yml`: PyPI wheel/sdist validation.
+- `.github/workflows/release.yml`: aggregate release artifact matrix.
+- `.github/workflows/windows-installer.yml`: Windows portable EXE and NSIS
+  installer path.
+- `.github/workflows/windows-validate.yml`: Windows package validation.
 
 ## Validation State
 

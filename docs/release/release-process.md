@@ -33,6 +33,34 @@ See the LICENSE file in the project root for full license text.
 - `make validate-gate2` is the required pre-publish validation gate.
 - Missing required artifacts must block release.
 - Workflow references to non-existent files must be resolved as release blockers.
+- Every active package/platform surface must appear in the `Canonical 21-Item
+  Platform & Packaging Artifact Matrix` (summarized by the `Platform & Packaging
+  Release Contract Matrix`), agent contracts, build/release runbooks, and
+  repository-local validation tests under `tests/packaging/`. The canonical
+  matrix has exactly 21 entries; coverage in tests, Claude commands, Codex
+  prompts, and workflows must never be smaller than that matrix.
+- Empty, stale, decorative, or unused packaging files are release blockers until
+  they are either wired into the contract matrix or explicitly removed from
+  active workflows/scripts.
+
+## GitHub Actions Workflow Contract Map
+
+Release readiness treats `.github/workflows/` as an explicit CI/release contract
+surface. Every workflow must be documented here and in
+`docs/release/artifact-contract.md`; adding an unmapped workflow is release
+contract drift.
+
+| Workflow | Release role |
+|---|---|
+| `.github/workflows/ci.yml` | Global quality gate, `validate-gate2`, and root `main.py` compatibility contract. |
+| `.github/workflows/freebsd-pkg.yml` | FreeBSD `.pkg` / port / chroot package path and out-of-band attach workflow. |
+| `.github/workflows/macos-dmg.yml` | macOS `.app` / `.dmg` package path. |
+| `.github/workflows/macos-validate.yml` | macOS package validation. |
+| `.github/workflows/project-automation.yml` | Repository automation, non-packaging; not a release artifact workflow. |
+| `.github/workflows/pypi-validate.yml` | PyPI wheel and source distribution validation. |
+| `.github/workflows/release.yml` | Aggregate release artifact matrix and publication orchestration. |
+| `.github/workflows/windows-installer.yml` | Windows portable EXE and NSIS installer package path. |
+| `.github/workflows/windows-validate.yml` | Windows package validation. |
 
 ## Release Tooling Prerequisites
 

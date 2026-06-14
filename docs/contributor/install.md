@@ -315,6 +315,7 @@ pytest
 ## Traceability
 
 - Artifact names and paths: `docs/release/artifact-contract.md`
+  (`Canonical 21-Item Platform & Packaging Artifact Matrix`)
 
 - Verification commands: `docs/release/artifact-verification.md`
 
