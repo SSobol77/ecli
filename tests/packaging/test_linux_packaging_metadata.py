@@ -15,8 +15,6 @@
 
 from __future__ import annotations
 
-import os
-import subprocess
 from pathlib import Path
 
 
@@ -28,59 +26,46 @@ def test_linux_packaging_support_files_exist() -> None:
         "packaging/arch/PKGBUILD",
         "packaging/nix/package.nix",
         "flake.nix",
-        "scripts/build-and-package-arch.sh",
-        "scripts/build-and-package-opensuse-rpm.sh",
-        "scripts/build-and-package-slackware.sh",
+        "scripts/build_and_package_arch.py",
+        "scripts/build_and_package_opensuse_rpm.py",
+        "scripts/build_and_package_slackware.py",
     ]
 
     for relative_path in required_paths:
         assert (ROOT / relative_path).is_file(), relative_path
 
 
-def test_packaging_shell_files_parse_with_bash() -> None:
-    shell_files = [
-        "packaging/arch/PKGBUILD",
-        "scripts/build-and-package-arch.sh",
-        "scripts/build-and-package-opensuse-rpm.sh",
-        "scripts/build-and-package-slackware.sh",
-    ]
-
-    for relative_path in shell_files:
-        subprocess.run(
-            ["bash", "-n", str(ROOT / relative_path)],
-            check=True,
-            cwd=ROOT,
-        )
-
-
-def test_new_packaging_scripts_are_executable() -> None:
+def test_new_packaging_python_entrypoints_are_canonical() -> None:
     scripts = [
-        "scripts/build-and-package-arch.sh",
-        "scripts/build-and-package-opensuse-rpm.sh",
-        "scripts/build-and-package-slackware.sh",
+        "scripts/build_and_package_arch.py",
+        "scripts/build_and_package_opensuse_rpm.py",
+        "scripts/build_and_package_slackware.py",
     ]
 
     for relative_path in scripts:
-        assert os.access(ROOT / relative_path, os.X_OK), relative_path
+        script = (ROOT / relative_path).read_text(encoding="utf-8")
+        assert script.startswith("#!/usr/bin/env python3"), relative_path
+        assert "def main(" in script, relative_path
 
 
 def test_packaging_metadata_documents_expected_artifact_names() -> None:
     arch_pkgbuild = (ROOT / "packaging/arch/PKGBUILD").read_text(encoding="utf-8")
-    arch_script = (ROOT / "scripts/build-and-package-arch.sh").read_text(
+    # Canonical implementations are the Python entrypoints.
+    arch_script = (ROOT / "scripts/build_and_package_arch.py").read_text(
         encoding="utf-8"
     )
-    slackware_script = (ROOT / "scripts/build-and-package-slackware.sh").read_text(
+    slackware_script = (ROOT / "scripts/build_and_package_slackware.py").read_text(
         encoding="utf-8"
     )
-    opensuse_script = (ROOT / "scripts/build-and-package-opensuse-rpm.sh").read_text(
+    opensuse_script = (ROOT / "scripts/build_and_package_opensuse_rpm.py").read_text(
         encoding="utf-8"
     )
     flake = (ROOT / "flake.nix").read_text(encoding="utf-8")
 
     assert "pkgname=ecli-editor" in arch_pkgbuild
-    assert "ecli_${VERSION}_arch_${ARCH}.pkg.tar.zst" in arch_script
-    assert "${PACKAGE_NAME}_${VERSION}_slackware_${ARCH}.txz" in slackware_script
-    assert 'RPM_PLATFORM_LABEL="${RPM_PLATFORM_LABEL:-opensuse}"' in opensuse_script
+    assert "ecli_{version}_arch_{arch}.pkg.tar.zst" in arch_script
+    assert "{PACKAGE_NAME}_{version}_slackware_{arch}.txz" in slackware_script
+    assert '"RPM_PLATFORM_LABEL", "opensuse"' in opensuse_script
     assert 'systems = [ "x86_64-linux" "aarch64-linux" ];' in flake
 
 

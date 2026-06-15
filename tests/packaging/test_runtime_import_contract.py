@@ -185,16 +185,17 @@ def test_global_help_and_version_do_not_start_curses_or_log_critical(
 
 
 def test_runtime_validator_enforces_current_release_directory() -> None:
-    script = (REPO_ROOT / "scripts" / "verify_runtime.sh").read_text(encoding="utf-8")
+    # Canonical implementation is the Python entrypoint.
+    script = (REPO_ROOT / "scripts" / "verify_runtime.py").read_text(encoding="utf-8")
 
-    assert "releases/${VERSION}" in script
+    assert "releases/{version}" in script
     assert "Artifact is outside current project version directory" in script
 
 
 def test_runtime_validator_checks_exact_version_and_startup_logs() -> None:
-    script = (REPO_ROOT / "scripts" / "verify_runtime.sh").read_text(encoding="utf-8")
+    script = (REPO_ROOT / "scripts" / "verify_runtime.py").read_text(encoding="utf-8")
 
-    assert 'EXPECTED_VERSION_OUTPUT="ecli ${VERSION}"' in script
+    assert 'f"ecli {version}"' in script
     assert "ModuleNotFoundError" in script
     assert "No module named 'unittest'" in script
     assert "Failed to import a critical application component" in script

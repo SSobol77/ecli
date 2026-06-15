@@ -44,5 +44,6 @@ def test_rpm_script_uses_normalized_naming(
     read_repo_text: RepoReader,
     assert_tokens_present: TokenAssertion,
 ) -> None:
-    script = read_repo_text("scripts/build-and-package-rpm.sh")
-    assert_tokens_present(script, ["NORMALIZED_ARCH", "RPM_PLATFORM_LABEL", ".rpm"])
+    # Canonical implementation is the Python entrypoint.
+    script = read_repo_text("scripts/build_and_package_rpm.py")
+    assert_tokens_present(script, ["normalized_arch", "platform_label", ".rpm"])

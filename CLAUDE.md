@@ -726,6 +726,38 @@ docs, agent command contracts, build/release runbooks, and validation tests or
 contract checks. Empty, stale, decorative, or unused packaging files are
 forbidden unless removed from active workflows/scripts.
 
+Active build, packaging, verification, and release-helper scripts under
+`scripts/` have been migrated to standard-library Python without changing the
+release contract (artifact names, locations, checksum format, exit-code
+contracts). The migration is **complete**: no active shell wrapper remains under
+`scripts/`. Canonical Python implementations include
+`scripts/verify_artifact.py`, `scripts/sign_checksums.py`,
+`scripts/check_log_invariant.py`, `scripts/verify_runtime.py`,
+`scripts/build_pyinstaller_linux.py`, `scripts/build_and_package_deb.py`,
+`scripts/build_and_package_rpm.py`, `scripts/build_and_package_opensuse_rpm.py`,
+`scripts/build_and_package_arch.py`, `scripts/build_and_package_slackware.py`,
+`scripts/package_appimage.py`, `scripts/build_and_package_macos.py`,
+`scripts/build_and_package_freebsd.py`, `scripts/build_freebsd_pkg.py`,
+`scripts/build_freebsd_port.py`, `scripts/build_docker.py`, and
+`scripts/publish_pypi.py`. The `Makefile`, GitHub Actions workflows, and
+`.cirrus.yml` call the Python entrypoints directly.
+`scripts/build-and-package-windows.ps1` is a separate Windows-native packaging
+surface and is not part of this migration. `.claude/hooks/block-mutations.sh` is
+a Claude hook, `tools/freebsd-chroot-build.sh` is a separate FreeBSD chroot
+helper, and the removed FreeBSD package-renaming shell helper was removed as
+unused tracked tooling.
+The migration contract is defined in `docs/release/artifact-contract.md` under
+`Shell-to-Python Script Migration` and enforced by
+`tests/packaging/test_scripts_python_migration_contract.py`. Release readiness is
+blocked if active shell logic is reintroduced under `scripts/`. Migrated scripts
+must never publish, upload, sign with external keys, tag, push, or trigger
+workflows.
+
+The root `Makefile` is the primary command surface. Use `make help`,
+`make help-full`, `make list-targets`, `make doctor`, and `make sysinfo` for
+discovery. Maintainer-owned release/upload Make targets are guarded and must not
+be run by agents.
+
 ## 15. Runtime policy
 
 Automated runtime checks must use isolated `HOME`.

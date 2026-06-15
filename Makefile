@@ -12,14 +12,29 @@
 # See the LICENSE file in the project root for full license text.
 
 # =============================================================================
-# Makefile for ECLI — Multi-Platform Build System
+# ECLI Makefile
 # =============================================================================
-# Supports: Debian/Ubuntu, Fedora/RHEL/Rocky, FreeBSD, macOS, Windows, Python (PyPI)
-# AppImage (Linux), Snap (Linux), and various archive formats
+# Developer, validation, packaging, and release command surface for ECLI.
+#
+# Canonical implementations:
+#   - Active build/packaging/verification logic under scripts/ is Python.
+#   - Do not call deleted shell wrappers from this Makefile.
+#   - scripts/build-and-package-windows.ps1 remains Windows-native PowerShell.
+#   - tools/freebsd-chroot-build.sh remains a separate FreeBSD chroot helper.
+#
+# Active package/release matrix:
+#   PyPI wheel/sdist, Linux PyInstaller/tar/DEB/RPM/openSUSE/Arch/Slackware/
+#   AppImage, FreeBSD pkg/ports/chroot, macOS app/DMG, Windows portable/NSIS,
+#   Nix flake/package, Docker DEB/RPM helpers, and GitHub Actions contract map.
+#
+# Safety:
+#   Release, publish, tag, upload, and GitHub-write targets are maintainer-owned.
+#   They are guarded and must not be used as default local developer commands.
 # =============================================================================
 
 PYTHON ?= python3
 UV ?= uv
+VERSION ?= $(PACKAGE_VERSION)
 OS := $(shell uname -s)
 ARCH := $(shell uname -m)
 
@@ -36,20 +51,27 @@ endif
 
 PACKAGE_VERSION := $(shell $(PYTHON) -c 'import pathlib, tomllib; print(tomllib.loads(pathlib.Path("pyproject.toml").read_text())["project"]["version"])' 2>/dev/null || awk -F'"' '/^[[:space:]]*version[[:space:]]*=/ {print $$2; exit}' pyproject.toml 2>/dev/null || echo 0.0.0)
 
-# Release directory
 RELEASE_DIR := releases/$(PACKAGE_VERSION)
+DIST_DIR ?= dist
+BUILD_DIR ?= build
+LOG_DIR ?= logs
 LINUX_ARCH ?= $(ARCH_NORMALIZED)
 FREEBSD_ARCH ?= $(ARCH_NORMALIZED)
 MACOS_ARCH ?= universal2
 WIN_ARCH ?= x86_64
+RELEASE_CONFIRM_ENV ?= ECLI_ALLOW_RELEASE
 
 -include $(RELEASE_DIR)/.linux.env
 -include $(RELEASE_DIR)/.freebsd.env
 -include $(RELEASE_DIR)/.macos.env
 -include $(RELEASE_DIR)/.win.env
 
+# =============================================================================
+# 13. Internal helpers
+# =============================================================================
+
 define verify_sha256
-	@scripts/verify-artifact.sh "$(1)"
+	@$(PYTHON) scripts/verify_artifact.py "$(1)"
 endef
 
 define validate_if_present
@@ -67,103 +89,172 @@ define assert_current_release_file
 	esac
 endef
 
+# =============================================================================
+# 0. Project metadata and tool configuration
+# =============================================================================
+
 .DEFAULT_GOAL := help
 
-# ---- FreeBSD .pkg (via vmactions/freebsd-vm) -------------------------------
 FREEBSD_VM_IMAGE := ghcr.io/vmactions/freebsd-vm
-# tag order (can be changed if desired)
 FREEBSD_VM_TAGS ?= 14.2 14.1 14.0 14 latest
 
 
 # =============================================================================
-# Help & Documentation
+# 1. Help and discovery
 # =============================================================================
 .PHONY: help
 help:
 	@echo ""
-	@echo "╔═══════════════════════════════════════════════════════════════════════╗"
-	@echo "║                 ECLI Multi-Platform Build System                      ║"
-	@echo "║                    Version: $(PACKAGE_VERSION)                                  ║"
-	@echo "╚═══════════════════════════════════════════════════════════════════════╝"
+	@echo "ECLI command surface"
+	@echo "Version: $(PACKAGE_VERSION) | Host: $(OS)/$(ARCH_NORMALIZED) | Release dir: $(RELEASE_DIR)"
+	@echo "Canonical scripts: scripts/*.py (Windows: scripts/build-and-package-windows.ps1)"
 	@echo ""
-	@echo "QUICK START:"
-	@echo "  make install                - Install dependencies"
-	@echo "  make run                    - Run from source"
-	@echo "  make clean                  - Clean intermediate build artifacts"
-	@echo "  make distclean              - Clean intermediates and release outputs"
+	@echo "Quick start"
+	@echo "  make install                  Install development dependencies"
+	@echo "  make run                      Run ECLI from source"
+	@echo "  make validate                 Fast local validation"
+	@echo "  make doctor                   Check local tool availability"
+	@echo "  make help-full                Show complete target map"
 	@echo ""
-	@echo "LINUX PACKAGES:"
-	@echo "  make package-deb            - Build Debian/Ubuntu .deb (local)"
-	@echo "  make package-deb-docker     - Build .deb in container (recommended)"
-	@echo "  make package-rpm            - Build Fedora/RHEL .rpm (local)"
-	@echo "  make package-rpm-docker     - Build .rpm in container (recommended)"
-	@echo "  make package-appimage       - Build AppImage (cross-distro Linux)"
-	@echo "  make package-snap           - Build Snap (Snapcraft; optional)"
-	@echo "  make package-tar-linux      - Build tar.gz archive (Linux)"
+	@echo "Common local commands"
+	@echo "  make validate-fast            Runtime imports + Ruff"
+	@echo "  make validate-full            Full local validation"
+	@echo "  make validate-packaging       Packaging contract tests"
+	@echo "  make show-artifacts           Inspect built artifacts"
+	@echo "  make clean                    Remove local build/cache outputs"
 	@echo ""
-	@echo "UNIX PACKAGES:"
-	@echo "  make package-freebsd        - Build FreeBSD .pkg (native)"
-	@echo "  make package-freebsd-ci     - Trigger CI build in FreeBSD VM"
-	@echo "  make package-freebsd-chroot - Build in chroot (FreeBSD host)"
-	@echo "  make package-freebsd-port   - Build via FreeBSD Ports"
+	@echo "Package groups"
+	@echo "  make package-pypi             Build wheel + sdist"
+	@echo "  make package-linux            Build Linux package set"
+	@echo "  make package-freebsd          Build native FreeBSD .pkg"
+	@echo "  make package-macos            Build macOS .app/.dmg"
+	@echo "  make package-windows          Build Windows portable/NSIS artifacts"
+	@echo "  make package-nix              Build Nix flake package"
 	@echo ""
-	@echo "DESKTOP PACKAGES:"
-	@echo "  make package-macos          - Build macOS .dmg (native)"
-	@echo "  make package-windows        - Build Windows EXE artifacts (native, PowerShell)"
+	@echo "Maintainer-owned release/publish targets"
+	@echo "  make publish-pypi             Guarded PyPI publish helper"
+	@echo "  make publish-all              Guarded aggregate publisher"
+	@echo "  make release-<platform>       Guarded GitHub release upload targets"
 	@echo ""
-	@echo "PYTHON PACKAGES:"
-	@echo "  make package-pypi           - Build wheel + sdist (for PyPI)"
-	@echo "  make publish-pypi           - Publish to PyPI (requires credentials)"
+	@echo "Discovery"
+	@echo "  make list-targets             Print all public targets"
+	@echo "  make sysinfo                  Print configured host/build variables"
+	@echo "  make print-PACKAGE_VERSION    Print one Make variable"
 	@echo ""
-	@echo "MULTI & META TARGETS:"
-	@echo "  make package-all-host       - Build packages supported by this host OS"
-	@echo "  make package-all            - Alias for package-all-host"
-	@echo "  make package-linux          - Build all Linux packages (deb, rpm, appimage)"
-	@echo "  make package-docker         - Build containers only (deb, rpm)"
-	@echo "  make publish-all            - Publish all artifacts to GitHub Release"
-	@echo "  make validate-gate2         - Validate built Gate 2 release contracts"
-	@echo ""
-	@echo "ARTIFACT MANAGEMENT:"
-	@echo "  make show-artifacts         - List all built packages"
-	@echo "  make show-deb-artifacts     - List Debian artifacts"
-	@echo "  make show-rpm-artifacts     - List RPM artifacts"
-	@echo "  make show-appimage-artifacts- List AppImage artifacts"
-	@echo "  make show-python-artifacts  - List Python package artifacts"
-	@echo "  make show-freebsd-artifacts - List FreeBSD artifacts"
-	@echo "  make show-macos-artifacts   - List macOS artifacts"
-	@echo "  make show-windows-artifacts - List Windows artifacts"
-	@echo ""
-	@echo "SYSTEM INFO:"
-	@echo "  make sysinfo                - Display build system info"
-	@echo ""
+	@echo "Use 'make help-full' for every supported package, validation, artifact, and cleanup target."
 
+.PHONY: help-full
+help-full: help
+	@echo ""
+	@echo "Validation"
+	@echo "  make validate                 Safe local validation"
+	@echo "  make validate-fast            Ruff + runtime imports"
+	@echo "  make validate-full            Ruff, mypy, full pytest, runtime imports"
+	@echo "  make validate-packaging       Packaging contract suite"
+	@echo "  make validate-release-contract Release/package matrix contract checks"
+	@echo "  make validate-version-consistency"
+	@echo "  make validate-runtime-imports"
+	@echo "  make validate-pypi-contract"
+	@echo "  make validate-tar-linux-contract"
+	@echo "  make validate-deb-contract"
+	@echo "  make validate-rpm-contract"
+	@echo "  make validate-appimage-contract"
+	@echo "  make validate-freebsd-contract"
+	@echo "  make validate-macos-contract"
+	@echo "  make validate-windows-contract"
+	@echo "  make validate-gate2"
+	@echo ""
+	@echo "Python / PyPI"
+	@echo "  make package-pypi             Build wheel + sdist"
+	@echo "  make publish-pypi             Maintainer-owned PyPI publish guard"
+	@echo ""
+	@echo "Linux packages"
+	@echo "  make package-tar-linux        Linux PyInstaller tar.gz"
+	@echo "  make package-deb              Local DEB build"
+	@echo "  make package-deb-docker       Containerized DEB build"
+	@echo "  make package-rpm              Local generic RPM build"
+	@echo "  make package-rpm-docker       Containerized RPM build"
+	@echo "  make package-opensuse-rpm     openSUSE/SUSE RPM build"
+	@echo "  make package-arch             Arch PKGBUILD package"
+	@echo "  make package-slackware        Slackware TXZ package"
+	@echo "  make package-appimage         AppImage build"
+	@echo "  make package-docker           Docker DEB/RPM helpers"
+	@echo "  make package-linux            Linux package group"
+	@echo ""
+	@echo "FreeBSD packages"
+	@echo "  make package-freebsd          Native/VM FreeBSD .pkg"
+	@echo "  make package-freebsd-ci       Print CI dispatch guidance"
+	@echo "  make package-freebsd-chroot   FreeBSD chroot helper (root, FreeBSD host)"
+	@echo "  make package-freebsd-port     FreeBSD ports skeleton path"
+	@echo ""
+	@echo "Desktop and Nix"
+	@echo "  make package-macos            macOS .app/.dmg (macOS + hdiutil)"
+	@echo "  make package-windows          Windows portable/NSIS (PowerShell + NSIS)"
+	@echo "  make package-nix              Nix flake package"
+	@echo "  make package-desktop          macOS + Windows group"
+	@echo ""
+	@echo "Artifact inspection"
+	@echo "  make show-artifacts show-python-artifacts show-deb-artifacts show-rpm-artifacts"
+	@echo "  make show-appimage-artifacts show-freebsd-artifacts show-macos-artifacts"
+	@echo "  make show-windows-artifacts show-nix-artifacts show-tar-artifacts"
+	@echo ""
+	@echo "Cleanup"
+	@echo "  make clean clean-build clean-cache clean-release distclean"
+	@echo ""
+	@echo "Release/publish targets are maintainer-owned and require $(RELEASE_CONFIRM_ENV)=1:"
+	@echo "  make release-deb release-rpm release-appimage release-freebsd"
+	@echo "  make release-macos release-windows publish-all"
+
+.PHONY: list list-targets
+list: list-targets
+
+list-targets:
+	@$(PYTHON) -c 'import pathlib,re; targets=[]; [targets.append(m.group(1)) for line in pathlib.Path("Makefile").read_text(encoding="utf-8").splitlines() for m in [re.match(r"^([A-Za-z0-9_.-]+):(?:\s|$$)", line)] if m and not m.group(1).startswith(("_", "."))]; print("\n".join(sorted(dict.fromkeys(targets))))'
 
 
 # =============================================================================
-# System Information
+# 2. Developer workflow
 # =============================================================================
 .PHONY: sysinfo
 sysinfo:
-	@echo "╔═══════════════════════════════════════════════════════════════════════╗"
-	@echo "║                    SYSTEM INFORMATION                                 ║"
-	@echo "╚═══════════════════════════════════════════════════════════════════════╝"
+	@echo "ECLI system information"
 	@echo "OS:               $(OS)"
 	@echo "Architecture:     $(ARCH) (normalized: $(ARCH_NORMALIZED))"
 	@echo "Python Version:   $$($(PYTHON) --version 2>&1)"
+	@echo "uv:               $$($(UV) --version 2>/dev/null || echo 'not found')"
 	@echo "ECLI Version:     $(PACKAGE_VERSION)"
 	@echo "Release Dir:      $(RELEASE_DIR)"
+	@echo "Dist Dir:         $(DIST_DIR)"
+	@echo "Build Dir:        $(BUILD_DIR)"
+	@echo "Log Dir:          $(LOG_DIR)"
+	@echo "Linux Arch:       $(LINUX_ARCH)"
+	@echo "FreeBSD Arch:     $(FREEBSD_ARCH)"
+	@echo "macOS Arch:       $(MACOS_ARCH)"
+	@echo "Windows Arch:     $(WIN_ARCH)"
 	@echo ""
-	@echo "Available Tools:"
-	@command -v docker >/dev/null 2>&1 && echo "  ✓ Docker" || echo "  ✗ Docker (needed for package-deb-docker, package-rpm-docker)"
-	@command -v gh >/dev/null 2>&1 && echo "  ✓ GitHub CLI (gh)" || echo "  ✗ GitHub CLI (needed for release targets)"
-	@command -v pwsh >/dev/null 2>&1 && echo "  ✓ PowerShell 7+" || echo "  ✗ PowerShell 7+ (needed for Windows builds)"
-	@command -v appimagetool >/dev/null 2>&1 && echo "  ✓ AppImageKit" || echo "  ✗ AppImageKit (needed for AppImage builds)"
-	@command -v snapcraft >/dev/null 2>&1 && echo "  ✓ Snapcraft" || echo "  ✗ Snapcraft (needed for Snap builds)"
-	@echo ""
+	@$(MAKE) --no-print-directory doctor
 
-# =============================================================================
-# Development & QA
-# =============================================================================
+.PHONY: doctor
+doctor:
+	@echo "Local tool availability (inspection only; no builds are run)"
+	@command -v $(PYTHON) >/dev/null 2>&1 && echo "  OK  $(PYTHON)" || echo "  MISS $(PYTHON) (required)"
+	@command -v $(UV) >/dev/null 2>&1 && echo "  OK  $(UV)" || echo "  MISS $(UV) (recommended)"
+	@command -v docker >/dev/null 2>&1 && echo "  OK  docker (DEB/RPM container helpers)" || echo "  MISS docker (package-deb-docker, package-rpm-docker)"
+	@command -v fpm >/dev/null 2>&1 && echo "  OK  fpm (local DEB/RPM)" || echo "  MISS fpm (local package-deb/package-rpm)"
+	@command -v appimage-builder >/dev/null 2>&1 && echo "  OK  appimage-builder" || echo "  MISS appimage-builder (package-appimage)"
+	@command -v appimagetool >/dev/null 2>&1 && echo "  OK  appimagetool" || echo "  MISS appimagetool (package-appimage runtime toolchain)"
+	@command -v makepkg >/dev/null 2>&1 && echo "  OK  makepkg (Arch/Slackware on matching hosts)" || echo "  MISS makepkg (package-arch/package-slackware)"
+	@command -v nix >/dev/null 2>&1 && echo "  OK  nix" || echo "  MISS nix (package-nix)"
+	@command -v hdiutil >/dev/null 2>&1 && echo "  OK  hdiutil (macOS DMG)" || echo "  MISS hdiutil (package-macos; expected off macOS)"
+	@command -v pwsh >/dev/null 2>&1 && echo "  OK  pwsh (Windows packaging)" || echo "  MISS pwsh (package-windows)"
+	@command -v makensis >/dev/null 2>&1 && echo "  OK  makensis (Windows NSIS)" || echo "  MISS makensis (Windows installer)"
+	@command -v gh >/dev/null 2>&1 && echo "  OK  gh (maintainer-owned release targets)" || echo "  MISS gh (release targets only)"
+	@echo "Note: release/publish targets are guarded by $(RELEASE_CONFIRM_ENV)=1."
+
+.PHONY: print-%
+print-%:
+	@printf '%s=%s\n' '$*' '$($*)'
+
 .PHONY: install
 install:
 	@echo "--> Installing dependencies..."
@@ -177,21 +268,38 @@ install:
 run:
 	$(PYTHON) main.py
 
+# =============================================================================
+# 12. Cleanup
+# =============================================================================
+
 .PHONY: clean
-clean:
-	rm -rf build/ dist/ .pytest_cache/ .ruff_cache/ .mypy_cache/ __pycache__
+clean: clean-build clean-cache
+	@echo "--> Local build/cache outputs cleaned."
+
+.PHONY: clean-build
+clean-build:
+	rm -rf "$(BUILD_DIR)/" "$(DIST_DIR)/" __pycache__
 	-find . -type d -name "__pycache__" -exec rm -rf {} +
 	-find . -type f -name "*.pyc" -delete
-	@echo "--> Intermediate build artifacts cleaned."
+	@echo "--> Build outputs cleaned."
 
-.PHONY: distclean
-distclean: clean
+.PHONY: clean-cache
+clean-cache:
+	rm -rf .pytest_cache/ .ruff_cache/ .mypy_cache/
+	@echo "--> Tool caches cleaned."
+
+.PHONY: clean-release
+clean-release:
 	rm -rf releases/
 	@echo "--> Release artifacts cleaned."
 
+.PHONY: distclean
+distclean: clean clean-release
+	@echo "--> Distclean completed."
+
 
 # =============================================================================
-# Packaging (Python / PyPI)
+# 4. Python / PyPI packaging
 # =============================================================================
 # Use:
 # Build distribution packages for PyPI
@@ -251,7 +359,7 @@ show-python-artifacts:
 .PHONY: publish-pypi
 publish-pypi: package-pypi-assert
 	@echo "--> Publishing to PyPI (requires credentials in ~/.pypirc or env)..."
-	sh ./scripts/publish_pypi.sh
+	$(PYTHON) ./scripts/publish_pypi.py
 	@echo "--> Python packages published to PyPI."
 
 .PHONY: _ensure-tag
@@ -276,6 +384,14 @@ _ensure-tag:
 		git show-ref --tags --verify --quiet "refs/tags/$$tag" || (echo "Unable to ensure tag $$tag"; exit 1); \
 	fi
 
+.PHONY: _confirm-release-action
+_confirm-release-action:
+	@test "$${$(RELEASE_CONFIRM_ENV):-}" = "1" || ( \
+		echo "Blocked maintainer-owned release/publish action."; \
+		echo "Set $(RELEASE_CONFIRM_ENV)=1 only when intentionally tagging, uploading, or publishing."; \
+		exit 9; \
+	)
+
 
 
 # Use:
@@ -295,11 +411,13 @@ DEB_SHA_FILE    ?= $(DEB_PKG_FILE).sha256
 
 .PHONY: package-deb
 package-deb: clean validate-runtime-imports
-	./scripts/build-and-package-deb.sh
+	@command -v fpm >/dev/null 2>&1 || (echo "Missing fpm for local DEB build. Use package-deb-docker or install fpm."; exit 5)
+	$(PYTHON) ./scripts/build_and_package_deb.py
 	$(MAKE) package-deb-assert
 
 .PHONY: package-deb-docker
 package-deb-docker: clean validate-runtime-imports
+	@command -v docker >/dev/null 2>&1 || (echo "Missing docker for package-deb-docker."; exit 5)
 	docker build -f docker/build-linux-deb.Dockerfile \
 		--build-arg PYTHON_VERSION=3.11 \
 		--build-arg DEBIAN_RELEASE=bullseye \
@@ -313,7 +431,7 @@ package-deb-assert:
 	@test -n "$(DEB_PKG_VERSION)" || (echo "DEB_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
 	$(call assert_current_release_file,$(DEB_PKG_FILE))
 	$(call verify_sha256,$(DEB_PKG_FILE))
-	@./scripts/verify_runtime.sh "$(DEB_PKG_FILE)"
+	@$(PYTHON) ./scripts/verify_runtime.py "$(DEB_PKG_FILE)"
 	@echo "--> OK: $(DEB_PKG_FILE)"
 	@echo "--> OK: $(DEB_SHA_FILE)"
 
@@ -331,7 +449,7 @@ show-deb-artifacts:
 #   3) Create release if missing (title, notes).
 #   4) Upload .deb and .sha256 to the release (with --clobber).
 .PHONY: release-deb
-release-deb: package-deb-assert
+release-deb: _confirm-release-action package-deb-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required. Install: https://cli.github.com/"; exit 1)
 	@$(MAKE) _ensure-tag VERSION="$(DEB_PKG_VERSION)"
 	@echo "--> Creating GitHub Release if missing..."
@@ -375,11 +493,13 @@ RPM_SHA_FILE    ?= $(RPM_PKG_FILE).sha256
 
 .PHONY: package-rpm
 package-rpm: clean validate-runtime-imports
-	./scripts/build-and-package-rpm.sh
+	@command -v fpm >/dev/null 2>&1 || (echo "Missing fpm for local RPM build. Use package-rpm-docker or install fpm."; exit 5)
+	$(PYTHON) ./scripts/build_and_package_rpm.py
 	$(MAKE) package-rpm-assert
 
 .PHONY: package-rpm-docker
 package-rpm-docker: clean validate-runtime-imports
+	@command -v docker >/dev/null 2>&1 || (echo "Missing docker for package-rpm-docker."; exit 5)
 	docker build -f docker/build-linux-rpm.Dockerfile -t ecli-rpm:alma9 .
 	docker run --rm -e PYTHON=python3.11 -v "$$(pwd):/app" -w /app ecli-rpm:alma9
 	$(MAKE) package-rpm-assert
@@ -390,7 +510,7 @@ package-rpm-assert:
 	@test -n "$(RPM_PKG_VERSION)" || (echo "RPM_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
 	$(call assert_current_release_file,$(RPM_PKG_FILE))
 	$(call verify_sha256,$(RPM_PKG_FILE))
-	@./scripts/verify_runtime.sh "$(RPM_PKG_FILE)"
+	@$(PYTHON) ./scripts/verify_runtime.py "$(RPM_PKG_FILE)"
 	@echo "--> OK: $(RPM_PKG_FILE)"
 	@echo "--> OK: $(RPM_SHA_FILE)"
 
@@ -398,7 +518,49 @@ package-rpm-assert:
 .PHONY: show-rpm-artifacts
 show-rpm-artifacts:
 	@echo "Version: $(RPM_PKG_VERSION)"
-	@ls -l $(RPM_PKG_DIR)/ecli_*_linux_*.rpm* 2>/dev/null || echo "(no artifacts yet)"
+	@ls -l $(RPM_PKG_DIR)/ecli_*_linux_*.rpm* $(RPM_PKG_DIR)/ecli_*_opensuse_*.rpm* 2>/dev/null || echo "(no artifacts yet)"
+
+OPENSUSE_RPM_FILE ?= $(RPM_PKG_DIR)/ecli_$(RPM_PKG_VERSION)_opensuse_$(LINUX_ARCH).rpm
+OPENSUSE_RPM_SHA_FILE ?= $(OPENSUSE_RPM_FILE).sha256
+ARCH_PKG_VERSION ?= $(PACKAGE_VERSION)
+ARCH_PKG_DIR ?= $(RELEASE_DIR)
+ARCH_PKG_FILE ?= $(ARCH_PKG_DIR)/ecli_$(ARCH_PKG_VERSION)_arch_$(LINUX_ARCH).pkg.tar.zst
+ARCH_SHA_FILE ?= $(ARCH_PKG_FILE).sha256
+SLACKWARE_PKG_VERSION ?= $(PACKAGE_VERSION)
+SLACKWARE_PKG_DIR ?= $(RELEASE_DIR)
+SLACKWARE_PKG_FILE ?= $(SLACKWARE_PKG_DIR)/ecli_$(SLACKWARE_PKG_VERSION)_slackware_$(LINUX_ARCH).txz
+SLACKWARE_SHA_FILE ?= $(SLACKWARE_PKG_FILE).sha256
+
+# Build openSUSE/SUSE RPM using the shared canonical Python RPM flow.
+.PHONY: package-opensuse-rpm
+package-opensuse-rpm: clean validate-runtime-imports
+	@command -v fpm >/dev/null 2>&1 || (echo "Missing fpm for local openSUSE RPM build."; exit 5)
+	$(PYTHON) ./scripts/build_and_package_opensuse_rpm.py
+	$(call assert_current_release_file,$(OPENSUSE_RPM_FILE))
+	$(call verify_sha256,$(OPENSUSE_RPM_FILE))
+	@$(PYTHON) ./scripts/verify_runtime.py "$(OPENSUSE_RPM_FILE)"
+	@echo "--> OK: $(OPENSUSE_RPM_FILE)"
+	@echo "--> OK: $(OPENSUSE_RPM_SHA_FILE)"
+
+# Build Arch package through packaging/arch/PKGBUILD and canonical Python helper.
+.PHONY: package-arch
+package-arch: clean validate-runtime-imports
+	@command -v makepkg >/dev/null 2>&1 || (echo "Missing makepkg for Arch package build."; exit 5)
+	$(PYTHON) ./scripts/build_and_package_arch.py
+	$(call assert_current_release_file,$(ARCH_PKG_FILE))
+	$(call verify_sha256,$(ARCH_PKG_FILE))
+	@echo "--> OK: $(ARCH_PKG_FILE)"
+	@echo "--> OK: $(ARCH_SHA_FILE)"
+
+# Build Slackware TXZ package using canonical Python helper.
+.PHONY: package-slackware
+package-slackware: clean validate-runtime-imports
+	@command -v makepkg >/dev/null 2>&1 || (echo "Missing makepkg for Slackware package build."; exit 5)
+	$(PYTHON) ./scripts/build_and_package_slackware.py
+	$(call assert_current_release_file,$(SLACKWARE_PKG_FILE))
+	$(call verify_sha256,$(SLACKWARE_PKG_FILE))
+	@echo "--> OK: $(SLACKWARE_PKG_FILE)"
+	@echo "--> OK: $(SLACKWARE_SHA_FILE)"
 
 # --- Release publisher: upload RPM to GitHub Release --------------------------
 # Requires: GitHub CLI 'gh' (gh auth login) or GH_TOKEN/GITHUB_TOKEN in env.
@@ -408,7 +570,7 @@ show-rpm-artifacts:
 #   3) Create release if missing (title, notes).
 #   4) Upload .rpm and .sha256 to the release (with --clobber).
 .PHONY: release-rpm
-release-rpm: package-rpm-assert
+release-rpm: _confirm-release-action package-rpm-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required. Install: https://cli.github.com/"; exit 1)
 	@$(MAKE) _ensure-tag VERSION="$(RPM_PKG_VERSION)"
 	@echo "--> Creating GitHub Release if missing..."
@@ -432,9 +594,9 @@ release-rpm: package-rpm-assert
 	@echo "--> Release v$(RPM_PKG_VERSION) updated with RPM artifacts."
 
 
-# ---------------------------
-# Packaging (AppImage)
-# ---------------------------
+# =============================================================================
+# 5. Linux packages
+# =============================================================================
 # Use:
 # Build an AppImage (works on any Linux distro)
 #  `make package-appimage`        # Build AppImage
@@ -453,9 +615,10 @@ APPIMAGE_SHA_FILE?= $(APPIMAGE_FILE).sha256
 
 .PHONY: package-appimage
 package-appimage: clean validate-runtime-imports
+	@command -v appimage-builder >/dev/null 2>&1 || (echo "appimage-builder not found. Install appimage-builder for package-appimage."; exit 1)
 	@command -v appimagetool >/dev/null 2>&1 || (echo "appimagetool not found. Install AppImageKit: https://github.com/AppImage/AppImageKit"; exit 1)
 	@echo "--> Building AppImage..."
-	bash ./scripts/package_appimage.sh "$(APPIMAGE_VERSION)" "$(LINUX_ARCH)"
+	$(PYTHON) ./scripts/package_appimage.py "$(APPIMAGE_VERSION)" "$(LINUX_ARCH)"
 	@mkdir -p $(APPIMAGE_PKG_DIR)
 	@test -f "$(APPIMAGE_FILE)" || (echo "AppImage build may have failed"; exit 1)
 	@echo "--> Generating checksum..."
@@ -467,7 +630,7 @@ package-appimage-assert:
 	@test -n "$(APPIMAGE_VERSION)" || (echo "APPIMAGE_VERSION is empty"; exit 1)
 	$(call assert_current_release_file,$(APPIMAGE_FILE))
 	$(call verify_sha256,$(APPIMAGE_FILE))
-	@./scripts/verify_runtime.sh "$(APPIMAGE_FILE)"
+	@$(PYTHON) ./scripts/verify_runtime.py "$(APPIMAGE_FILE)"
 	@echo "--> OK: $(APPIMAGE_FILE)"
 	@echo "--> OK: $(APPIMAGE_SHA_FILE)"
 
@@ -477,7 +640,7 @@ show-appimage-artifacts:
 	@ls -lh $(APPIMAGE_PKG_DIR)/ecli_*_linux_*.AppImage* 2>/dev/null || echo "(no artifacts yet)"
 
 .PHONY: release-appimage
-release-appimage: package-appimage-assert
+release-appimage: _confirm-release-action package-appimage-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required"; exit 1)
 	@$(MAKE) _ensure-tag VERSION="$(APPIMAGE_VERSION)"
 	@tmpfile="$$(mktemp)"; \
@@ -496,9 +659,7 @@ release-appimage: package-appimage-assert
 	@echo "--> Release v$(APPIMAGE_VERSION) updated with AppImage artifacts."
 
 
-# ---------------------------
-# Packaging (Snap)
-# ---------------------------
+# Optional Linux Snap package surface.
 # Use:
 # Build a Snap package
 #  `make package-snap`            # Build snap (requires snapcraft)
@@ -557,9 +718,10 @@ release-snap: package-snap-assert
 	@echo "    Then: snapcraft upload --release=stable $(RELEASE_DIR)/ecli_*.snap"
 
 
-# ---------------------------
-# Packaging (Archives)
-# ---------------------------
+# Linux archive package surface.
+# =============================================================================
+# 6. FreeBSD packages
+# =============================================================================
 # Use:
 # Build tar.gz archive
 #  `make package-tar-linux`       # Build Linux tar.gz
@@ -576,7 +738,7 @@ package-tar-linux: clean validate-runtime-imports
 	@echo "--> Building Linux binary tar.gz archive..."
 	@mkdir -p $(TAR_PKG_DIR)
 	@rm -f "$(TAR_LINUX_FILE)" "$(TAR_SHA_FILE)"
-	./scripts/build_pyinstaller_linux.sh
+	$(PYTHON) ./scripts/build_pyinstaller_linux.py
 	@rm -rf build/package-tar-linux
 	@mkdir -p build/package-tar-linux/ecli-$(TAR_VERSION)
 	@install -m 0755 dist/ecli build/package-tar-linux/ecli-$(TAR_VERSION)/ecli
@@ -592,7 +754,7 @@ package-tar-linux-assert:
 	@test -n "$(TAR_VERSION)" || (echo "TAR_VERSION is empty"; exit 1)
 	$(call assert_current_release_file,$(TAR_LINUX_FILE))
 	$(call verify_sha256,$(TAR_LINUX_FILE))
-	@./scripts/verify_runtime.sh "$(TAR_LINUX_FILE)"
+	@$(PYTHON) ./scripts/verify_runtime.py "$(TAR_LINUX_FILE)"
 	@echo "--> OK: $(TAR_LINUX_FILE)"
 	@echo "--> OK: $(TAR_SHA_FILE)"
 
@@ -644,7 +806,8 @@ package-freebsd-ci:
 # Runs the native packager script (PyInstaller -> stage -> pkg create).
 .PHONY: package-freebsd
 package-freebsd: clean validate-runtime-imports
-	sh ./scripts/build-and-package-freebsd.sh
+	@test "$(OS)" = "FreeBSD" || (echo "package-freebsd requires a FreeBSD host/VM. Use package-freebsd-ci for CI guidance."; exit 5)
+	$(PYTHON) ./scripts/build_and_package_freebsd.py
 	$(MAKE) package-freebsd-assert
 
 # --- "Docker-like" reproducible build via chroot (on FreeBSD host) ------------
@@ -652,15 +815,17 @@ package-freebsd: clean validate-runtime-imports
 # Requires root; keeps the host clean and returns artifacts into ./releases/.
 .PHONY: package-freebsd-chroot
 package-freebsd-chroot: clean validate-runtime-imports
+	@test "$(OS)" = "FreeBSD" || (echo "package-freebsd-chroot requires a FreeBSD host with root/chroot support."; exit 5)
 	sudo tools/freebsd-chroot-build.sh
 	$(MAKE) package-freebsd-assert
 
 # --- Build via FreeBSD Ports (local port skeleton) ----------------------------
-# Uses scripts/build_freebsd_port.sh to create a local port and `make package`.
+# Uses scripts/build_freebsd_port.py to create a local port and `make package`.
 # Produces the same artifact names under releases/<version>/.
 .PHONY: package-freebsd-port
 package-freebsd-port: clean validate-runtime-imports
-	sudo sh ./scripts/build_freebsd_port.sh
+	@test "$(OS)" = "FreeBSD" || (echo "package-freebsd-port requires a FreeBSD ports-capable host."; exit 5)
+	sudo $(PYTHON) ./scripts/build_freebsd_port.py
 	$(MAKE) package-freebsd-assert
 
 # --- Assertion helper: verify expected artifact names/locations ----------------
@@ -669,7 +834,7 @@ package-freebsd-assert:
 	@test -n "$(FREEBSD_PKG_VERSION)" || (echo "FREEBSD_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
 	$(call assert_current_release_file,$(FREEBSD_PKG_FILE))
 	$(call verify_sha256,$(FREEBSD_PKG_FILE))
-	@./scripts/verify_runtime.sh "$(FREEBSD_PKG_FILE)"
+	@$(PYTHON) ./scripts/verify_runtime.py "$(FREEBSD_PKG_FILE)"
 	@echo "--> OK: $(FREEBSD_PKG_FILE)"
 	@echo "--> OK: $(FREEBSD_SHA_FILE)"
 
@@ -699,7 +864,7 @@ package-freebsd-docker:
 #   3) Create release if missing (title, notes).
 #   4) Upload .pkg and .sha256 to the release (with --clobber).
 .PHONY: release-freebsd
-release-freebsd: package-freebsd-assert
+release-freebsd: _confirm-release-action package-freebsd-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required. Install: https://cli.github.com/"; exit 1)
 	@$(MAKE) _ensure-tag VERSION="$(FREEBSD_PKG_VERSION)"
 	@echo "--> Creating GitHub Release if missing..."
@@ -723,9 +888,9 @@ release-freebsd: package-freebsd-assert
 	@echo "--> Release v$(FREEBSD_PKG_VERSION) updated with FreeBSD artifacts."
 
 
-# ---------------------------
-# Packaging (macOS)
-# ---------------------------
+# =============================================================================
+# 7. macOS packages
+# =============================================================================
 # Use:
 # Build (choose one):
 #  - Local on macOS 12+ with Python 3.11:
@@ -754,7 +919,9 @@ MACOS_ASSERT_MODE ?= native
 
 .PHONY: package-macos
 package-macos: clean validate-runtime-imports
-	./scripts/build-and-package-macos.sh
+	@test "$(OS)" = "Darwin" || (echo "package-macos requires macOS with hdiutil."; exit 5)
+	@command -v hdiutil >/dev/null 2>&1 || (echo "Missing hdiutil for macOS DMG build."; exit 5)
+	$(PYTHON) ./scripts/build_and_package_macos.py
 	$(MAKE) package-macos-assert MACOS_ASSERT_MODE=structural
 
 .PHONY: package-macos-assert
@@ -763,7 +930,7 @@ package-macos-assert:
 	$(call assert_current_release_file,$(MACOS_PKG_FILE))
 	$(call verify_sha256,$(MACOS_PKG_FILE))
 ifeq ($(MACOS_ASSERT_MODE),native)
-	@./scripts/verify_runtime.sh "$(MACOS_PKG_FILE)"
+	@$(PYTHON) ./scripts/verify_runtime.py "$(MACOS_PKG_FILE)"
 	@echo "--> OK: macOS native runtime artifact contract"
 else ifeq ($(MACOS_ASSERT_MODE),structural)
 	@test -s "$(MACOS_PKG_FILE)" || (echo "Missing or empty $(MACOS_PKG_FILE)"; exit 2)
@@ -783,7 +950,7 @@ show-macos-artifacts:
 
 # Publish to GitHub Release
 .PHONY: release-macos
-release-macos: package-macos-assert
+release-macos: _confirm-release-action package-macos-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' required"; exit 1)
 	@$(MAKE) _ensure-tag VERSION="$(MACOS_PKG_VERSION)"
 	@tmpfile="$$(mktemp)"; \
@@ -802,9 +969,9 @@ release-macos: package-macos-assert
 	@echo "--> Release v$(MACOS_PKG_VERSION) updated with macOS artifacts."
 
 
-# ---------------------------
-# Packaging (Windows)
-# ---------------------------
+# =============================================================================
+# 8. Windows packages
+# =============================================================================
 # Use:
 # Build (local, PowerShell on Windows 10/11 x64):
 #   `make package-windows`
@@ -841,6 +1008,7 @@ WIN_SHA_FILE    ?= $(WIN_PORTABLE_SHA_FILE)
 # Local Windows build (run in PowerShell on Windows host)
 .PHONY: package-windows
 package-windows: clean validate-runtime-imports
+	@command -v pwsh >/dev/null 2>&1 || (echo "package-windows requires PowerShell 7+ and Windows packaging tools."; exit 5)
 	pwsh -File ./scripts/build-and-package-windows.ps1
 	$(MAKE) package-windows-assert
 
@@ -851,8 +1019,8 @@ package-windows-assert:
 	$(call assert_current_release_file,$(WIN_INSTALLER_FILE))
 	$(call verify_sha256,$(WIN_PORTABLE_FILE))
 	$(call verify_sha256,$(WIN_INSTALLER_FILE))
-	@./scripts/verify_runtime.sh --mode structural "$(WIN_PORTABLE_FILE)"
-	@./scripts/verify_runtime.sh --mode structural "$(WIN_INSTALLER_FILE)"
+	@$(PYTHON) ./scripts/verify_runtime.py --mode structural "$(WIN_PORTABLE_FILE)"
+	@$(PYTHON) ./scripts/verify_runtime.py --mode structural "$(WIN_INSTALLER_FILE)"
 	@echo "--> OK: $(WIN_PORTABLE_FILE)"
 	@echo "--> OK: $(WIN_PORTABLE_SHA_FILE)"
 	@echo "--> OK: $(WIN_INSTALLER_FILE)"
@@ -865,7 +1033,7 @@ show-windows-artifacts:
 
 # Publish to GitHub Release
 .PHONY: release-windows
-release-windows: package-windows-assert
+release-windows: _confirm-release-action package-windows-assert
 	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' required"; exit 1)
 	@$(MAKE) _ensure-tag VERSION="$(WIN_PKG_VERSION)"
 	@tmpfile="$$(mktemp)"; \
@@ -887,7 +1055,30 @@ release-windows: package-windows-assert
 
 
 # =============================================================================
-# Meta Targets - Build Multiple Packages
+# 9. Nix / NixOS packages
+# =============================================================================
+
+.PHONY: package-nix
+package-nix:
+	@command -v nix >/dev/null 2>&1 || (echo "nix not found. Install Nix to build flake/package outputs."; exit 5)
+	@test -f flake.nix || (echo "flake.nix missing"; exit 2)
+	@test -f packaging/nix/package.nix || (echo "packaging/nix/package.nix missing"; exit 2)
+	nix build .
+	@echo "--> Nix build completed. Inspect ./result with make show-nix-artifacts."
+
+.PHONY: show-nix-artifacts
+show-nix-artifacts:
+	@echo "Nix artifacts:"
+	@if [ -L result ] || [ -e result ]; then \
+		ls -lh result; \
+		find result -maxdepth 3 -type f 2>/dev/null | sort | sed 's/^/  /'; \
+	else \
+		echo "  (not built)"; \
+	fi
+
+
+# =============================================================================
+# 10. Release orchestration and package groups
 # =============================================================================
 
 # Build packages supported by the current host OS.
@@ -895,7 +1086,7 @@ release-windows: package-windows-assert
 package-all-host:
 	@case "$(OS)" in \
 		Linux) \
-			$(MAKE) package-deb-docker package-rpm-docker package-appimage package-tar-linux package-pypi; \
+			$(MAKE) package-linux package-pypi; \
 			;; \
 		FreeBSD) \
 			$(MAKE) package-freebsd package-tar-linux package-pypi; \
@@ -928,7 +1119,7 @@ package-docker: package-deb-docker package-rpm-docker
 
 # Build all Linux packages (including AppImage and tar.gz)
 .PHONY: package-linux
-package-linux: package-deb-docker package-rpm-docker package-appimage package-tar-linux
+package-linux: package-deb-docker package-rpm-docker package-opensuse-rpm package-arch package-slackware package-appimage package-tar-linux
 	@echo ""
 	@echo "╔═══════════════════════════════════════════════════════════════════════╗"
 	@echo "║                 ALL LINUX PACKAGES BUILT SUCCESSFULLY                 ║"
@@ -942,7 +1133,7 @@ package-desktop: package-macos package-windows
 
 # Publish artifacts that already exist; skip absent platform artifacts.
 .PHONY: publish-all
-publish-all:
+publish-all: _confirm-release-action
 	@if [ -f "$(DEB_PKG_FILE)" ]; then \
 		$(MAKE) release-deb; \
 	else \
@@ -985,8 +1176,37 @@ publish-all:
 
 
 # =============================================================================
-# Gate 2 Contract Validation
+# 3. Validation and quality gates
 # =============================================================================
+
+.PHONY: validate
+validate: validate-fast
+
+.PHONY: validate-fast
+validate-fast: validate-runtime-imports
+	@$(UV) run ruff format --check .
+	@$(UV) run ruff check . --output-format=concise
+	@echo "--> OK: fast validation"
+
+.PHONY: validate-full
+validate-full: validate-version-consistency validate-runtime-imports
+	@$(UV) run ruff format --check .
+	@$(UV) run ruff check . --output-format=concise
+	@$(UV) run mypy src/ecli tests
+	@$(UV) run pytest -ra -q
+	@echo "--> OK: full validation"
+
+.PHONY: validate-packaging
+validate-packaging:
+	@$(UV) run pytest -q tests/packaging
+	@echo "--> OK: packaging contract tests"
+
+.PHONY: validate-release-contract
+validate-release-contract:
+	@$(UV) run pytest -q tests/packaging/test_packaging_release_contract.py
+	@$(UV) run pytest -q tests/packaging/test_packaging_workflows_contract.py
+	@$(UV) run pytest -q tests/packaging/test_scripts_python_migration_contract.py
+	@echo "--> OK: release contract tests"
 
 .PHONY: validate-version-consistency
 validate-version-consistency:
@@ -1057,7 +1277,7 @@ validate-gate2: validate-version-consistency validate-runtime-imports
 
 
 # =============================================================================
-# Artifact Inspection
+# 11. Artifact inspection
 # =============================================================================
 
 .PHONY: show-artifacts
@@ -1074,7 +1294,13 @@ show-artifacts:
 	@ls -lh $(RELEASE_DIR)/ecli_*_linux_*.deb* 2>/dev/null || echo "  (not built)"
 	@echo ""
 	@echo "Linux (Fedora/RHEL/Rocky):"
-	@ls -lh $(RELEASE_DIR)/ecli_*_linux_*.rpm* 2>/dev/null || echo "  (not built)"
+	@ls -lh $(RELEASE_DIR)/ecli_*_linux_*.rpm* $(RELEASE_DIR)/ecli_*_opensuse_*.rpm* 2>/dev/null || echo "  (not built)"
+	@echo ""
+	@echo "Linux (Arch):"
+	@ls -lh $(RELEASE_DIR)/ecli_*_arch_*.pkg.tar.zst* 2>/dev/null || echo "  (not built)"
+	@echo ""
+	@echo "Linux (Slackware):"
+	@ls -lh $(RELEASE_DIR)/ecli_*_slackware_*.txz* 2>/dev/null || echo "  (not built)"
 	@echo ""
 	@echo "Linux (AppImage):"
 	@ls -lh $(RELEASE_DIR)/ecli_*_linux_*.AppImage* 2>/dev/null || echo "  (not built)"
@@ -1090,6 +1316,8 @@ show-artifacts:
 	@echo ""
 	@echo "Windows:"
 	@ls -lh $(RELEASE_DIR)/ecli_*_win_*.exe* 2>/dev/null || echo "  (not built)"
+	@echo ""
+	@$(MAKE) --no-print-directory show-nix-artifacts
 	@echo ""
 
 # =============================================================================

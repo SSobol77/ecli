@@ -29,14 +29,18 @@ from conftest import (
 # canonical contract document. Active per-artifact build scripts and packaging
 # descriptors are covered here so that nothing exists undocumented.
 PACKAGING_SCRIPT_GLOBS = (
-    "scripts/build-and-package-*.sh",
     "scripts/build-and-package-*.ps1",
-    "scripts/package_*.sh",
-    "scripts/build_pyinstaller_linux.sh",
-    "scripts/build-freebsd-pkg.sh",
-    "scripts/build_freebsd_port.sh",
-    "scripts/build-docker.sh",
-    "scripts/publish_pypi.sh",
+    "scripts/build_and_package_*.py",
+    "scripts/build_pyinstaller_linux.py",
+    "scripts/build_freebsd_pkg.py",
+    "scripts/build_freebsd_port.py",
+    "scripts/build_docker.py",
+    "scripts/package_appimage.py",
+    "scripts/publish_pypi.py",
+    "scripts/sign_checksums.py",
+    "scripts/verify_artifact.py",
+    "scripts/verify_runtime.py",
+    "scripts/check_log_invariant.py",
 )
 
 PACKAGING_DESCRIPTORS = (
@@ -232,6 +236,28 @@ def test_no_packaging_script_or_descriptor_is_undocumented(
         assert relative_path in contract, (
             f"packaging file is undocumented in artifact-contract.md: {relative_path}"
         )
+
+
+def test_no_shell_wrappers_remain_under_scripts(
+    repo_root: Path,
+    read_repo_text: RepoReader,
+) -> None:
+    contract = read_repo_text(CANONICAL_CONTRACT_DOC)
+    script_shell_files = sorted((repo_root / "scripts").glob("*.sh"))
+
+    assert script_shell_files == []
+    assert "Canonical Python implementation" in contract
+
+
+def test_canonical_registry_sources_do_not_use_migrated_shell_wrappers() -> None:
+    migrated_shell_sources = [
+        source
+        for artifact in CANONICAL_ARTIFACTS
+        for source in artifact.sources
+        if source.startswith("scripts/") and source.endswith(".sh")
+    ]
+
+    assert migrated_shell_sources == []
 
 
 # --------------------------------------------------------------------------- #

@@ -21,8 +21,15 @@ See the LICENSE file in the project root for full license text.
 | `ruff check src` | lint baseline | verified in CI pattern | Yes | Yes |
 | `ruff format --check src` | formatting gate | verified in CI pattern | Yes | Yes |
 | `python main.py` | runtime sanity | repository-observed entrypoint | Yes | Yes |
+| `make help` / `make help-full` | Makefile command-surface discovery | repository-local command | Yes | Yes |
+| `make doctor` / `make sysinfo` | host/tool inspection without building packages | repository-local command | Optional | Yes |
+| `make validate` / `make validate-fast` | safe local validation entrypoint | repository-local command | Yes | Yes |
+| `make validate-packaging` / `make validate-release-contract` | packaging/release contract checks | repository-local command | Optional | Yes |
 | `pytest` | tests baseline check | partial/validation-required if tests absent | Optional | Yes |
 | `uv run pytest -q tests/packaging` | canonical 21-item packaging release-contract matrix guard | repository-local static check | Optional | Yes |
+| `uv run pytest -q tests/packaging/test_scripts_python_migration_contract.py` | shell-to-Python script migration contract guard | repository-local static check | Optional | Yes |
+| `python3 scripts/check_log_invariant.py` | development log-location invariant (artifacts only under `logs/`) | read-only git check | Optional | Yes |
+| `python3 scripts/verify_artifact.py <artifact>` | artifact checksum verification (exit codes 0-5) | structural/local check | No | Yes (release/packaging roles) |
 | platform packaging script | artifact build | environment-dependent | No | Yes (release/packaging roles) |
 
 The packaging guard enforces the `Canonical 21-Item Platform & Packaging
@@ -50,6 +57,16 @@ Codex prompt mapping, and (where relevant) a mapped GitHub workflow.
   1. capture error evidence,
   2. record drift in planning/risk docs,
   3. update docs and/or scripts in same governance cycle.
+
+## Script Migration Note
+
+Active shell wrappers under `scripts/` have been removed. Use canonical Python
+entrypoints under `scripts/` for validation and packaging checks.
+`scripts/build-and-package-windows.ps1` remains the separate Windows PowerShell
+packaging surface. `.claude/hooks/block-mutations.sh` is a Claude hook,
+`tools/freebsd-chroot-build.sh` is a FreeBSD chroot helper outside this
+migration, and the unused FreeBSD package-renaming shell helper was removed as
+tracked tooling.
 
 ## Evidence Expectations for Doc-Related Changes
 

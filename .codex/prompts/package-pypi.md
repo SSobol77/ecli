@@ -50,7 +50,7 @@ Read, in order:
 13. README.md
 14. LICENSE
 15. CHANGELOG.md
-16. scripts/publish_pypi.sh
+16. scripts/publish_pypi.py
 
 Claude-specific files under .claude/ and CLAUDE.md are not Codex authority.
 
@@ -62,7 +62,7 @@ Inspect:
 - README.md;
 - LICENSE;
 - CHANGELOG.md;
-- scripts/publish_pypi.sh;
+- scripts/publish_pypi.py (maintainer-owned publish guard; never uploads; supports --dry-run);
 - release docs related to PyPI;
 - source distribution and wheel expectations;
 - Trusted Publisher assumptions if documented.

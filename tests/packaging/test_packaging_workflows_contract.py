@@ -39,7 +39,7 @@ WORKFLOW_CONTRACT = {
         "tokens": [
             "FreeBSD",
             ".pkg",
-            "build-and-package-freebsd.sh",
+            "build_and_package_freebsd.py",
             "gh release upload",
         ],
         "surface_docs": [

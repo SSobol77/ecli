@@ -13,9 +13,11 @@
 
 from __future__ import annotations
 
+import importlib.util
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
+from types import ModuleType
 
 import pytest
 
@@ -72,7 +74,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         platform="PyPI / Python",
         sources=(
             "pyproject.toml",
-            "scripts/publish_pypi.sh",
+            "scripts/publish_pypi.py",
             ".github/workflows/pypi-validate.yml",
         ),
         artifact_token="py3-none-any.whl",
@@ -88,7 +90,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         platform="PyPI / Python",
         sources=(
             "pyproject.toml",
-            "scripts/publish_pypi.sh",
+            "scripts/publish_pypi.py",
             ".github/workflows/pypi-validate.yml",
         ),
         artifact_token="ecli_editor-<version>.tar.gz",
@@ -105,7 +107,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         sources=(
             "packaging/pyinstaller/ecli.spec",
             "packaging/pyinstaller/rthooks/force_imports.py",
-            "scripts/build_pyinstaller_linux.sh",
+            "scripts/build_pyinstaller_linux.py",
             "main.py",
         ),
         artifact_token="dist/ecli",
@@ -120,8 +122,8 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         name="Linux release tarball",
         platform="Linux",
         sources=(
-            "scripts/build_pyinstaller_linux.sh",
-            "scripts/verify_runtime.sh",
+            "scripts/build_pyinstaller_linux.py",
+            "scripts/verify_runtime.py",
             "Makefile",
         ),
         artifact_token="ecli_<version>_linux_<arch>.tar.gz",
@@ -136,7 +138,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         name="Debian / Ubuntu `.deb`",
         platform="Linux (Debian/Ubuntu)",
         sources=(
-            "scripts/build-and-package-deb.sh",
+            "scripts/build_and_package_deb.py",
             "docker/build-linux-deb.Dockerfile",
         ),
         artifact_token="ecli_<version>_linux_<arch>.deb",
@@ -151,7 +153,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         name="generic RPM `.rpm`",
         platform="Linux (RPM family)",
         sources=(
-            "scripts/build-and-package-rpm.sh",
+            "scripts/build_and_package_rpm.py",
             "docker/build-linux-rpm.Dockerfile",
         ),
         artifact_token="ecli_<version>_linux_<arch>.rpm",
@@ -165,7 +167,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         key="opensuse-rpm",
         name="openSUSE / SUSE RPM",
         platform="Linux (openSUSE/SUSE)",
-        sources=("scripts/build-and-package-opensuse-rpm.sh",),
+        sources=("scripts/build_and_package_opensuse_rpm.py",),
         artifact_token="ecli_<version>_opensuse_<arch>.rpm",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_opensuse_rpm_contract.py",
@@ -179,7 +181,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         platform="Linux (Arch)",
         sources=(
             "packaging/arch/PKGBUILD",
-            "scripts/build-and-package-arch.sh",
+            "scripts/build_and_package_arch.py",
         ),
         artifact_token="ecli_<version>_arch_<arch>.pkg.tar.zst",
         workflow="release.yml",
@@ -192,7 +194,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         key="slackware-txz",
         name="Slackware `.txz`",
         platform="Linux (Slackware)",
-        sources=("scripts/build-and-package-slackware.sh",),
+        sources=("scripts/build_and_package_slackware.py",),
         artifact_token="ecli_<version>_slackware_<arch>.txz",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_slackware_txz_contract.py",
@@ -206,7 +208,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         platform="Linux (cross-distro)",
         sources=(
             "packaging/linux/appimage/appimage-builder.yml",
-            "scripts/package_appimage.sh",
+            "scripts/package_appimage.py",
         ),
         artifact_token="ecli_<version>_linux_<arch>.AppImage",
         workflow="release.yml",
@@ -220,8 +222,8 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         name="FreeBSD `.pkg`",
         platform="FreeBSD",
         sources=(
-            "scripts/build-and-package-freebsd.sh",
-            "scripts/build-freebsd-pkg.sh",
+            "scripts/build_and_package_freebsd.py",
+            "scripts/build_freebsd_pkg.py",
             ".github/workflows/freebsd-pkg.yml",
         ),
         artifact_token="ecli_<version>_freebsd_<arch>.pkg",
@@ -236,7 +238,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         name="FreeBSD ports/chroot build path",
         platform="FreeBSD",
         sources=(
-            "scripts/build_freebsd_port.sh",
+            "scripts/build_freebsd_port.py",
             "tools/freebsd-chroot-build.sh",
         ),
         artifact_token="package-freebsd-port",
@@ -251,7 +253,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         name="macOS `.app`",
         platform="macOS",
         sources=(
-            "scripts/build-and-package-macos.sh",
+            "scripts/build_and_package_macos.py",
             "packaging/pyinstaller/ecli.spec",
             "main.py",
         ),
@@ -267,7 +269,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         name="macOS `.dmg`",
         platform="macOS",
         sources=(
-            "scripts/build-and-package-macos.sh",
+            "scripts/build_and_package_macos.py",
             ".github/workflows/macos-dmg.yml",
             ".github/workflows/macos-validate.yml",
             "docs/install/macos.md",
@@ -384,6 +386,20 @@ def get_artifact(key: str) -> Artifact:
         if artifact.key == key:
             return artifact
     raise KeyError(f"unknown canonical artifact key: {key}")
+
+
+def load_script_module(
+    repo_root: Path, relative_path: str, module_name: str
+) -> ModuleType:
+    """Import a standalone ``scripts/`` module by file path for behavior tests."""
+    script_path = repo_root / relative_path
+    spec = importlib.util.spec_from_file_location(module_name, script_path)
+    assert spec is not None and spec.loader is not None, (
+        f"could not load script module: {relative_path}"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 @pytest.fixture

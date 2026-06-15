@@ -57,9 +57,10 @@ Before FreeBSD packaging analysis, read:
 Inspect:
 
 ```text
-scripts/build-and-package-freebsd.sh
-tools/freebsd-chroot-build.sh
-scripts/build_freebsd_port.sh
+scripts/build_and_package_freebsd.py   # canonical Python entrypoint
+scripts/build_freebsd_pkg.py           # canonical Python entrypoint
+scripts/build_freebsd_port.py          # canonical Python entrypoint
+tools/freebsd-chroot-build.sh          # chroot helper (not yet migrated)
 .github/workflows/freebsd-pkg.yml
 .github/workflows/release.yml
 ```

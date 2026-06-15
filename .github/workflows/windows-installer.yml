@@ -22,7 +22,7 @@ name: Windows Installer
       - "src/**"
       - "scripts/build-and-package-windows.ps1"
       - "scripts/check_runtime_imports.py"
-      - "scripts/verify_runtime.sh"
+      - "scripts/verify_runtime.py"
       - "packaging/windows/nsis/**"
       - "packaging/pyinstaller/ecli.spec"
       - "pyproject.toml"

@@ -44,8 +44,9 @@ def test_deb_script_uses_canonical_naming(
     read_repo_text: RepoReader,
     assert_tokens_present: TokenAssertion,
 ) -> None:
-    script = read_repo_text("scripts/build-and-package-deb.sh")
+    # Canonical implementation is the Python entrypoint.
+    script = read_repo_text("scripts/build_and_package_deb.py")
     assert_tokens_present(
         script,
-        ["${PACKAGE_NAME}_${VERSION}_linux_${FILENAME_ARCH}.deb", "FILENAME_ARCH"],
+        ["{PACKAGE_NAME}_{version}_linux_{arch}.deb", "filename_arch"],
     )

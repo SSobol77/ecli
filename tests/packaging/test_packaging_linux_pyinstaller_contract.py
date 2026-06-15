@@ -48,7 +48,8 @@ def test_linux_pyinstaller_uses_root_main_compatibility_shim(
 ) -> None:
     main_py = read_repo_text("main.py")
     spec = read_repo_text("packaging/pyinstaller/ecli.spec")
-    linux_script = read_repo_text("scripts/build_pyinstaller_linux.sh")
+    # Canonical implementation is the Python entrypoint.
+    linux_script = read_repo_text("scripts/build_pyinstaller_linux.py")
 
     assert_tokens_present(
         main_py, ["from ecli.__main__ import main", "SystemExit(main())"]
@@ -58,5 +59,5 @@ def test_linux_pyinstaller_uses_root_main_compatibility_shim(
     )
     assert_tokens_present(
         linux_script,
-        ['MAIN_SCRIPT="main.py"', 'SPEC_FILE="packaging/pyinstaller/ecli.spec"'],
+        ['MAIN_SCRIPT = "main.py"', 'Path("packaging/pyinstaller/ecli.spec")'],
     )

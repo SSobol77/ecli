@@ -55,7 +55,7 @@ Stage 1 rule: inspect and report only. Do not run macOS builds, trigger workflow
 
 Inspect:
 - main.py compatibility shim;
-- scripts/build-and-package-macos.sh;
+- scripts/build_and_package_macos.py;
 - packaging/pyinstaller/ecli.spec;
 - .github/workflows/macos-dmg.yml;
 - .github/workflows/macos-validate.yml;

@@ -66,17 +66,22 @@ Visual Studio Build Tools are only required if native dependencies or build tool
 
 ## Build Matrix
 
+Use `make help` for the short developer workflow and `make help-full` for the
+complete package/validation/release command surface. `make doctor` checks local
+tool availability without building packages, and `make sysinfo` prints the
+configured version, release directory, OS, and architecture variables.
+
 | Target artifact | Script / entrypoint | Environment | Expected output | Validation step |
 |---|---|---|---|---|
-| Linux binary | `scripts/build_pyinstaller_linux.sh` | Linux | `dist/` executable | smoke run + file existence |
-| DEB | `scripts/build-and-package-deb.sh` | Linux | `releases/<version>/ecli_<version>_linux_<arch>.deb` | checksum + contract check |
-| RPM | `scripts/build-and-package-rpm.sh` | Linux/RPM tooling | `releases/<version>/ecli_<version>_linux_<arch>.rpm` | checksum + contract check |
-| openSUSE RPM | `scripts/build-and-package-opensuse-rpm.sh` | openSUSE/SUSE RPM tooling | `releases/<version>/ecli_<version>_opensuse_<arch>.rpm` | checksum + package contents |
-| Arch package | `scripts/build-and-package-arch.sh` or `packaging/arch/PKGBUILD` | Arch Linux | `releases/<version>/ecli_<version>_arch_<arch>.pkg.tar.zst` | checksum + package contents |
-| Slackware TXZ | `scripts/build-and-package-slackware.sh` | Slackware with `makepkg` | `releases/<version>/ecli_<version>_slackware_<arch>.txz` | checksum + package contents |
+| Linux binary | `scripts/build_pyinstaller_linux.py` | Linux | `dist/` executable | smoke run + file existence |
+| DEB | `scripts/build_and_package_deb.py` | Linux | `releases/<version>/ecli_<version>_linux_<arch>.deb` | checksum + contract check |
+| RPM | `scripts/build_and_package_rpm.py` | Linux/RPM tooling | `releases/<version>/ecli_<version>_linux_<arch>.rpm` | checksum + contract check |
+| openSUSE RPM | `scripts/build_and_package_opensuse_rpm.py` | openSUSE/SUSE RPM tooling | `releases/<version>/ecli_<version>_opensuse_<arch>.rpm` | checksum + package contents |
+| Arch package | `scripts/build_and_package_arch.py` or `packaging/arch/PKGBUILD` | Arch Linux | `releases/<version>/ecli_<version>_arch_<arch>.pkg.tar.zst` | checksum + package contents |
+| Slackware TXZ | `scripts/build_and_package_slackware.py` | Slackware with `makepkg` | `releases/<version>/ecli_<version>_slackware_<arch>.txz` | checksum + package contents |
 | Nix package | `flake.nix` / `packaging/nix/package.nix` | Nix with flakes | `result/` symlink from `nix build .` | `nix run .` smoke test |
-| FreeBSD PKG | `scripts/build-and-package-freebsd.sh` | FreeBSD host/VM | `releases/<version>/ecli_<version>_freebsd_<arch>.pkg` | checksum + contract check |
-| macOS DMG | `scripts/build-and-package-macos.sh` | macOS | `releases/<version>/ecli_<version>_macos_<arch>.dmg` | checksum + contract check |
+| FreeBSD PKG | `scripts/build_and_package_freebsd.py` | FreeBSD host/VM | `releases/<version>/ecli_<version>_freebsd_<arch>.pkg` | checksum + contract check |
+| macOS DMG | `scripts/build_and_package_macos.py` | macOS | `releases/<version>/ecli_<version>_macos_<arch>.dmg` | checksum + contract check |
 | Windows EXEs | `scripts/build-and-package-windows.ps1` | Windows + NSIS | `releases/<version>/ecli_<version>_win_x86_64.exe` and `releases/<version>/ecli_<version>_win_x86_64_setup.exe` | checksum + contract check |
 
 ## Known Unsupported/Constrained Combinations
@@ -90,6 +95,30 @@ Visual Studio Build Tools are only required if native dependencies or build tool
 - Nix builds require flakes and a nixpkgs input; this repository does not claim nixpkgs publication.
 
 - Platform packaging without required local toolchain is expected to fail.
+
+## Artifact Checksums and Verification
+
+Checksum sidecars and verification use standard-library Python entrypoints
+(part of the staged shell-to-Python script migration; see
+`docs/release/artifact-contract.md` under `Shell-to-Python Script Migration`):
+
+```bash
+# Generate the basename-only SHA256 sidecar(s)
+python3 scripts/sign_checksums.py releases/<version>/<artifact>
+
+# Verify an artifact against its sidecar (granular exit codes 0-5)
+python3 scripts/verify_artifact.py releases/<version>/<artifact>
+```
+
+Active shell wrappers under `scripts/` have been removed. Use the canonical
+Python entrypoints directly in new docs, automation, and tests, including
+`scripts/verify_artifact.py`, `scripts/sign_checksums.py`, and all platform
+build scripts above. `scripts/build-and-package-windows.ps1` is a separate
+Windows-native packaging surface and is not part of this migration.
+`.claude/hooks/block-mutations.sh` is a Claude hook, not a packaging script.
+`tools/freebsd-chroot-build.sh` remains a FreeBSD chroot helper outside the
+script migration. The unused tracked helper the removed FreeBSD package-renaming shell helper was
+removed during no-shell cleanup.
 
 ## Expected Outputs and Contract
 

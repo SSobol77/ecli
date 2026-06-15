@@ -135,6 +135,33 @@ Matrix`; missing docs, agent contracts, runbooks, or validation coverage are
 AUD-003 drift. Codex may repair documentation/tests when explicitly authorized,
 but must not publish, upload, tag, push, or trigger workflows.
 
+Active build, packaging, verification, and release-helper scripts under
+`scripts/` have been migrated to standard-library Python without changing the
+release contract. The migration is **complete**: no active shell wrapper remains
+under `scripts/`. Canonical Python implementations include verification:
+`scripts/verify_artifact.py`, `scripts/sign_checksums.py`,
+`scripts/check_log_invariant.py`, `scripts/verify_runtime.py`; build/packaging:
+`scripts/build_pyinstaller_linux.py`,
+`scripts/build_and_package_{deb,rpm,opensuse_rpm,arch,slackware,macos,freebsd}.py`,
+`scripts/package_appimage.py`, `scripts/build_freebsd_pkg.py`,
+`scripts/build_freebsd_port.py`, `scripts/build_docker.py`,
+`scripts/publish_pypi.py`. `scripts/build-and-package-windows.ps1` is a separate
+Windows-native surface, not part of the migration. `.claude/hooks/block-mutations.sh`
+is a Claude hook, `tools/freebsd-chroot-build.sh` is a separate FreeBSD chroot
+helper, and the removed FreeBSD package-renaming shell helper was removed as unused tracked tooling.
+The `Makefile`, workflows, and `.cirrus.yml` call the Python entrypoints
+directly. The migration contract is defined in
+`docs/release/artifact-contract.md` under `Shell-to-Python Script Migration` and
+enforced by `tests/packaging/test_scripts_python_migration_contract.py`. Release
+readiness is blocked if active shell logic is reintroduced under `scripts/`.
+Migrated scripts must never
+publish, upload, sign with external keys, tag, push, or trigger workflows.
+
+The root `Makefile` is the primary Codex-inspectable command surface. Use
+`make help`, `make help-full`, `make list-targets`, `make doctor`, and
+`make sysinfo` for read-only discovery. Do not run maintainer-owned
+release/upload targets; they are guarded and remain outside Codex execution.
+
 ## Rendering policy
 
 Rendering work is Stage-2-locked unless the maintainer explicitly approves a narrow Stage 1b fix.

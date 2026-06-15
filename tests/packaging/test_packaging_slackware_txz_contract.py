@@ -44,5 +44,6 @@ def test_slackware_txz_script_uses_canonical_naming(
     read_repo_text: RepoReader,
     assert_tokens_present: TokenAssertion,
 ) -> None:
-    script = read_repo_text("scripts/build-and-package-slackware.sh")
-    assert_tokens_present(script, ["${PACKAGE_NAME}_${VERSION}_slackware_${ARCH}.txz"])
+    # Canonical implementation is the Python entrypoint.
+    script = read_repo_text("scripts/build_and_package_slackware.py")
+    assert_tokens_present(script, ["{PACKAGE_NAME}_{version}_slackware_{arch}.txz"])

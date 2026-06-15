@@ -51,7 +51,7 @@ def test_linux_tarball_makefile_naming_and_targets(
             "package-tar-linux:",
             "package-tar-linux-assert",
             "ecli_$(TAR_VERSION)_linux_$(LINUX_ARCH).tar.gz",
-            "scripts/build_pyinstaller_linux.sh",
-            "verify_runtime.sh",
+            "scripts/build_pyinstaller_linux.py",
+            "verify_runtime.py",
         ],
     )

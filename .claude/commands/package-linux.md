@@ -140,6 +140,26 @@ Any hard-coded Linux packaging version surface must be reported.
 
 Any script that mutates tracked packaging descriptors must be reported as release-risk drift.
 
+## Shell-to-Python script migration
+
+The shell-to-Python migration is **complete**: active shell wrappers under
+`scripts/` have been removed. Use the Python entrypoints when inspecting Linux
+packaging flows:
+
+- `python3 scripts/verify_artifact.py <artifact>` — SHA256 sidecar verifier (exit codes `0`–`5`).
+- `python3 scripts/sign_checksums.py <artifact> [...]` — writes `<artifact>.sha256` sidecars.
+- `python3 scripts/check_log_invariant.py` — development log-location invariant.
+- `python3 scripts/build_pyinstaller_linux.py`, `scripts/build_and_package_deb.py`,
+  `scripts/build_and_package_rpm.py`, `scripts/build_and_package_opensuse_rpm.py`,
+  `scripts/build_and_package_arch.py`, `scripts/build_and_package_slackware.py`,
+  `scripts/package_appimage.py`, `scripts/build_docker.py`, and
+  `scripts/verify_runtime.py`.
+
+The migration contract is defined in
+`docs/release/artifact-contract.md` under `Shell-to-Python Script Migration` and
+enforced by `tests/packaging/test_scripts_python_migration_contract.py`. Report
+any active shell logic reintroduced under `scripts/` as release-blocking drift.
+
 ## Output format
 
 Finish with:

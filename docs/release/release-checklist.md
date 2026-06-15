@@ -28,8 +28,18 @@ See the LICENSE file in the project root for full license text.
 - [ ] Empty, stale, decorative, or unused packaging files have been removed from
       active workflows/scripts or wired into the matrix.
 - [ ] Artifact contract names are configured and validated.
+- [ ] `make help`, `make help-full`, `make list-targets`, `make doctor`, and
+      `make sysinfo` match current package surfaces and canonical Python
+      scripts.
 - [ ] `make validate-gate2` passes before any publish step.
 - [ ] Required packaging scripts exist and are executable.
+- [ ] Active shell wrappers under `scripts/` are absent; Python entrypoints under
+      `scripts/` are canonical. Windows PowerShell packaging
+      (`scripts/build-and-package-windows.ps1`), the Claude hook
+      (`.claude/hooks/block-mutations.sh`), and the FreeBSD chroot helper
+      (`tools/freebsd-chroot-build.sh`) are classified separately.
+- [ ] Confirm the removed FreeBSD package-renaming shell helper remains absent unless a future
+      dedicated tools migration restores equivalent Python tooling.
 - [ ] Workflow references are valid (no missing files such as packaging specs).
 - [ ] Checksums are generated for all release artifacts.
 - [ ] Contributor docs match actual release/build commands.

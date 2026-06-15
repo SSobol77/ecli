@@ -26,9 +26,9 @@ name: FreeBSD 14 .pkg
       - ".github/workflows/freebsd-pkg.yml"
       - "src/**"
       - "packaging/**"
-      - "scripts/build-and-package-freebsd.sh"
+      - "scripts/build_and_package_freebsd.py"
       - "scripts/check_runtime_imports.py"
-      - "scripts/verify_runtime.sh"
+      - "scripts/verify_runtime.py"
       - "ecli.spec"
       - "pyproject.toml"
 
@@ -63,7 +63,7 @@ jobs:
             env ASSUME_ALWAYS_YES=yes pkg install -y bash rust pkgconf
           run: |
             set -eux
-            sh ./scripts/build-and-package-freebsd.sh 2>&1 | tee freebsd-build.log
+            python3.11 ./scripts/build_and_package_freebsd.py 2>&1 | tee freebsd-build.log
 
       - name: Upload FreeBSD build log on failure
         if: failure()

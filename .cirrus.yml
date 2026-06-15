@@ -55,7 +55,7 @@ freebsd_pkg_task:
   # --- Build using the canonical packager in your repo ------------------------
   # It installs all system & pip deps itself and enforces strict naming.
   build_script:
-    - sh scripts/build-and-package-freebsd.sh
+    - python3.11 scripts/build_and_package_freebsd.py
 
   # --- Verify STRICT artifact names/locations ---------------------------------
   verify_script:

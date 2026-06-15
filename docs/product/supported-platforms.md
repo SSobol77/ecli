@@ -81,3 +81,13 @@ remain covered by tests under `tests/packaging/`, by `.claude/commands/`, by
 - Live platform status: check CI dashboard and release notes for current status of each platform.
 - Incident triage: degraded platforms are reviewed with each release cycle; maintainers assess whether to restore, drop, or stabilize the platform.
 - Expected communication: major changes to platform status (removal, restoration, degradation) are noted in release documentation.
+
+## Script Migration Note
+
+Active shell wrappers under `scripts/` have been removed; canonical package and
+verification implementations are Python entrypoints under `scripts/`. Windows
+PowerShell packaging remains separate at `scripts/build-and-package-windows.ps1`.
+`.claude/hooks/block-mutations.sh` is a Claude hook, not product packaging.
+`tools/freebsd-chroot-build.sh` remains a FreeBSD chroot helper outside the
+script migration, and the removed FreeBSD package-renaming shell helper was removed as unused
+tracked tooling.
