@@ -172,66 +172,32 @@ def info_plist(version: str, icon_entry: str) -> str:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
-    """Build and verify the macOS DMG; return the exit code."""
-    parser = argparse.ArgumentParser(
-        prog="build_and_package_macos.py",
-        description="Build the macOS Universal2 DMG.",
-    )
-    parser.parse_args(argv)
-
-    root = Path(__file__).resolve().parent.parent
-
-    if platform.system() != "Darwin":
-        print("ERR macOS packaging must run on Darwin.", file=sys.stderr)
-        return EXIT_ERROR
-
-    spec = root / "packaging" / "pyinstaller" / "ecli.spec"
-
+def check_packaging_prerequisites() -> int:
     for tool in ("arch", "lipo", "codesign", "hdiutil", "shasum"):
         if not require_tool(tool):
             return EXIT_MISSING_TOOL
     if shutil.which(python_bin()) is None:
         print(f"ERR Missing Python interpreter: {python_bin()}", file=sys.stderr)
         return EXIT_MISSING_TOOL
+    return EXIT_OK
 
-    version = read_version(root)
-    print(f"OK  Version: {version}")
 
-    subprocess.run(
-        [python_bin(), "scripts/check_runtime_imports.py"], cwd=root, check=True
-    )
+def verify_python_arches(root: Path) -> None:
+    for arch_flag, label in (("-x86_64", "python-x86_64"), ("-arm64", "python-arm64")):
+        subprocess.run(
+            [
+                "arch",
+                arch_flag,
+                python_bin(),
+                "-c",
+                f'import platform; print("{label}", platform.machine())',
+            ],
+            cwd=root,
+            check=True,
+        )
 
-    releases_dir = root / "releases" / version
-    pkg_base = f"ecli_{version}_macos_{MACOS_ARCH}"
-    dmg_path = releases_dir / f"{pkg_base}.dmg"
-    sha_path = releases_dir / f"{pkg_base}.dmg.sha256"
-    universal_dir = root / "build" / "macos_universal2"
-    universal_bin = universal_dir / "ecli"
 
-    subprocess.run(
-        [
-            "arch",
-            "-x86_64",
-            python_bin(),
-            "-c",
-            'import platform; print("python-x86_64", platform.machine())',
-        ],
-        cwd=root,
-        check=True,
-    )
-    subprocess.run(
-        [
-            "arch",
-            "-arm64",
-            python_bin(),
-            "-c",
-            'import platform; print("python-arm64", platform.machine())',
-        ],
-        cwd=root,
-        check=True,
-    )
-
+def clean_previous_builds(root: Path, universal_dir: Path) -> None:
     print("==> Cleaning previous macOS build artifacts...")
     for path in (
         root / "build/macos_venv_x86_64",
@@ -244,11 +210,17 @@ def main(argv: list[str] | None = None) -> int:
     ):
         shutil.rmtree(path, ignore_errors=True)
 
-    if build_arch(root, spec, "x86_64", "-x86_64") is None:
-        return EXIT_ERROR
-    if build_arch(root, spec, "arm64", "-arm64") is None:
-        return EXIT_ERROR
 
+def build_arch_binaries(root: Path, spec: Path) -> bool:
+    return (
+        build_arch(root, spec, "x86_64", "-x86_64") is not None
+        and build_arch(root, spec, "arm64", "-arm64") is not None
+    )
+
+
+def merge_universal_binary(
+    root: Path, universal_dir: Path, universal_bin: Path
+) -> bool:
     print("==> Merging binaries into Universal2 executable...")
     universal_dir.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -272,64 +244,71 @@ def main(argv: list[str] | None = None) -> int:
         check=True,
     ).stdout
     print(lipo_info)
-    if not ("x86_64" in lipo_info and "arm64" in lipo_info):
+    if "x86_64" in lipo_info and "arm64" in lipo_info:
+        return True
+    print(
+        "ERR Universal2 binary does not contain both x86_64 and arm64.",
+        file=sys.stderr,
+    )
+    return False
+
+
+def stage_app_bundle(
+    root: Path, dmg_staging: Path, universal_bin: Path, version: str
+) -> None:
+    app_dir = dmg_staging / f"{APP_NAME}.app"
+    contents = app_dir / "Contents"
+    (contents / "MacOS").mkdir(parents=True, exist_ok=True)
+    (contents / "Resources").mkdir(parents=True, exist_ok=True)
+    shutil.copy2(universal_bin, contents / "MacOS" / "ecli")
+    (contents / "MacOS" / "ecli").chmod(0o755)
+    icns = root / "img" / "logo_m.icns"
+    if icns.is_file():
+        shutil.copy2(icns, contents / "Resources" / "AppIcon.icns")
+        icon_entry = "  <key>CFBundleIconFile</key><string>AppIcon</string>"
+    else:
+        icon_entry = ""
         print(
-            "ERR Universal2 binary does not contain both x86_64 and arm64.",
+            "ERR No deterministic .icns asset found; macOS app icon is not set.",
             file=sys.stderr,
         )
-        return EXIT_ERROR
-
-    print("==> Applying ad-hoc codesign...")
-    subprocess.run(
-        ["codesign", "--sign", "-", "--force", str(universal_bin)], cwd=root, check=True
+    (contents / "Info.plist").write_text(
+        info_plist(version, icon_entry), encoding="utf-8"
     )
     subprocess.run(
-        ["codesign", "--verify", "--verbose", str(universal_bin)], cwd=root, check=True
+        ["codesign", "--sign", "-", "--force", "--deep", str(app_dir)],
+        cwd=root,
+        check=True,
     )
+    subprocess.run(
+        ["codesign", "--verify", "--verbose", str(app_dir)], cwd=root, check=True
+    )
+    (dmg_staging / "Applications").symlink_to("/Applications")
 
+
+def stage_dmg_tree(
+    root: Path, dmg_staging: Path, universal_bin: Path, version: str
+) -> None:
     print("==> Creating DMG staging tree...")
-    releases_dir.mkdir(parents=True, exist_ok=True)
-    (releases_dir / ".macos.env").write_text(
-        "MACOS_ARCH=universal2\n", encoding="utf-8"
-    )
-
-    dmg_staging = root / "build" / "macos_dmg"
     shutil.rmtree(dmg_staging, ignore_errors=True)
     dmg_staging.mkdir(parents=True, exist_ok=True)
 
     if os.environ.get("ECLI_BUILD_MACOS_APP", "0") == "1":
-        app_dir = dmg_staging / f"{APP_NAME}.app"
-        contents = app_dir / "Contents"
-        (contents / "MacOS").mkdir(parents=True, exist_ok=True)
-        (contents / "Resources").mkdir(parents=True, exist_ok=True)
-        shutil.copy2(universal_bin, contents / "MacOS" / "ecli")
-        (contents / "MacOS" / "ecli").chmod(0o755)
-        icns = root / "img" / "logo_m.icns"
-        if icns.is_file():
-            shutil.copy2(icns, contents / "Resources" / "AppIcon.icns")
-            icon_entry = "  <key>CFBundleIconFile</key><string>AppIcon</string>"
-        else:
-            icon_entry = ""
-            print(
-                "ERR No deterministic .icns asset found; macOS app icon is not set.",
-                file=sys.stderr,
-            )
-        (contents / "Info.plist").write_text(
-            info_plist(version, icon_entry), encoding="utf-8"
-        )
-        subprocess.run(
-            ["codesign", "--sign", "-", "--force", "--deep", str(app_dir)],
-            cwd=root,
-            check=True,
-        )
-        subprocess.run(
-            ["codesign", "--verify", "--verbose", str(app_dir)], cwd=root, check=True
-        )
-        (dmg_staging / "Applications").symlink_to("/Applications")
-    else:
-        shutil.copy2(universal_bin, dmg_staging / "ecli")
-        (dmg_staging / "ecli").chmod(0o755)
+        stage_app_bundle(root, dmg_staging, universal_bin, version)
+        return
 
+    shutil.copy2(universal_bin, dmg_staging / "ecli")
+    (dmg_staging / "ecli").chmod(0o755)
+
+
+def create_dmg(
+    root: Path,
+    dmg_staging: Path,
+    dmg_path: Path,
+    sha_path: Path,
+    pkg_base: str,
+    version: str,
+) -> None:
     print("==> Creating compressed DMG...")
     dmg_path.unlink(missing_ok=True)
     sha_path.unlink(missing_ok=True)
@@ -371,6 +350,8 @@ def main(argv: list[str] | None = None) -> int:
     )
     dmg_tmp.unlink(missing_ok=True)
 
+
+def write_sha256_sidecar(releases_dir: Path, dmg_path: Path, sha_path: Path) -> None:
     print("==> Writing SHA256 sidecar...")
     result = subprocess.run(
         ["shasum", "-a", "256", dmg_path.name],
@@ -380,6 +361,68 @@ def main(argv: list[str] | None = None) -> int:
         check=True,
     )
     sha_path.write_text(result.stdout, encoding="utf-8")
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Build and verify the macOS DMG; return the exit code."""
+    parser = argparse.ArgumentParser(
+        prog="build_and_package_macos.py",
+        description="Build the macOS Universal2 DMG.",
+    )
+    parser.parse_args(argv)
+
+    root = Path(__file__).resolve().parent.parent
+
+    if platform.system() != "Darwin":
+        print("ERR macOS packaging must run on Darwin.", file=sys.stderr)
+        return EXIT_ERROR
+
+    spec = root / "packaging" / "pyinstaller" / "ecli.spec"
+
+    prereq_rc = check_packaging_prerequisites()
+    if prereq_rc != EXIT_OK:
+        return prereq_rc
+
+    version = read_version(root)
+    print(f"OK  Version: {version}")
+
+    subprocess.run(
+        [python_bin(), "scripts/check_runtime_imports.py"], cwd=root, check=True
+    )
+
+    releases_dir = root / "releases" / version
+    pkg_base = f"ecli_{version}_macos_{MACOS_ARCH}"
+    dmg_path = releases_dir / f"{pkg_base}.dmg"
+    sha_path = releases_dir / f"{pkg_base}.dmg.sha256"
+    universal_dir = root / "build" / "macos_universal2"
+    universal_bin = universal_dir / "ecli"
+
+    verify_python_arches(root)
+    clean_previous_builds(root, universal_dir)
+
+    if not build_arch_binaries(root, spec):
+        return EXIT_ERROR
+
+    if not merge_universal_binary(root, universal_dir, universal_bin):
+        return EXIT_ERROR
+
+    print("==> Applying ad-hoc codesign...")
+    subprocess.run(
+        ["codesign", "--sign", "-", "--force", str(universal_bin)], cwd=root, check=True
+    )
+    subprocess.run(
+        ["codesign", "--verify", "--verbose", str(universal_bin)], cwd=root, check=True
+    )
+
+    releases_dir.mkdir(parents=True, exist_ok=True)
+    (releases_dir / ".macos.env").write_text(
+        "MACOS_ARCH=universal2\n", encoding="utf-8"
+    )
+
+    dmg_staging = root / "build" / "macos_dmg"
+    stage_dmg_tree(root, dmg_staging, universal_bin, version)
+    create_dmg(root, dmg_staging, dmg_path, sha_path, pkg_base, version)
+    write_sha256_sidecar(releases_dir, dmg_path, sha_path)
 
     if not dmg_path.is_file():
         print(f"ERR Missing {dmg_path}", file=sys.stderr)

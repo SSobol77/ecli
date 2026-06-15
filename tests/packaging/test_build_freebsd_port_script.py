@@ -37,8 +37,10 @@ def test_non_freebsd_returns_error(
 
 
 def test_port_makefile_structure(port: ModuleType) -> None:
-    makefile = port.port_makefile("4.5.6")
+    dist_dir = Path("/repo/build/freebsd_port_distfiles")
+    makefile = port.port_makefile("4.5.6", dist_dir)
     assert "DISTVERSION=    4.5.6" in makefile
+    assert "MASTER_SITES=   file:///repo/build/freebsd_port_distfiles/" in makefile
     # Recipe lines must be tab-indented for make to accept them.
     assert (
         "\t@cd ${WRKSRC} && python3.11 ./scripts/build_and_package_freebsd.py"

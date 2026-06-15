@@ -15,8 +15,8 @@
 """Build ECLI via a local FreeBSD ports skeleton and produce a native ``.pkg``.
 
 Canonical Python replacement for ``scripts/build_freebsd_port.sh``. On FreeBSD
-14.x (as root) it archives the repo into ``/tmp``, generates a local port
-skeleton under ``/usr/ports/editors/ecli_local``, runs ``make makesum`` and
+14.x (as root) it archives the repo into an owner-controlled build directory,
+generates a local port skeleton under ``/usr/ports/editors/ecli_local``, runs ``make makesum`` and
 ``make clean package``, then copies/renames the result to
 ``releases/<version>/ecli_<version>_freebsd_<arch>.pkg`` with a SHA256 sidecar.
 
@@ -36,8 +36,10 @@ import argparse
 import os
 import platform
 import shutil
+import stat
 import subprocess
 import sys
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -78,7 +80,7 @@ def normalize_arch() -> str:
     return raw
 
 
-def port_makefile(version: str) -> str:
+def port_makefile(version: str, dist_dir: Path) -> str:
     """Return the local-port Makefile (tab-indented recipes preserved)."""
     lines = [
         "PORTNAME=       ecli",
@@ -96,7 +98,7 @@ def port_makefile(version: str) -> str:
         "ONLY_FOR_ARCHS= amd64",
         "",
         "# We fetch from a local tarball prepared by the script",
-        "MASTER_SITES=   file:///tmp/",
+        f"MASTER_SITES=   file://{dist_dir.as_posix()}/",
         "DISTFILES=      ecli-${DISTVERSION}.tar.gz",
         "",
         "# Extracted tree lives here",
@@ -179,6 +181,53 @@ def write_sha256(releases_dir: Path, artifact: Path) -> None:
         print("WARN No sha256/shasum available; skipping checksum.", file=sys.stderr)
 
 
+def prepare_dist_dir(root: Path) -> Path:
+    """Return an owner-controlled repository build directory for ports distfiles."""
+    build_dir = root / "build"
+    dist_dir = build_dir / "freebsd_port_distfiles"
+    for directory in (build_dir, dist_dir):
+        if directory.is_symlink():
+            msg = f"Unsafe symlinked build directory: {directory}"
+            raise RuntimeError(msg)
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        if stat.S_IMODE(directory.stat().st_mode) & 0o002:
+            msg = f"Unsafe world-writable build directory: {directory}"
+            raise RuntimeError(msg)
+    return dist_dir
+
+
+def create_source_tarball(root: Path, dist_dir: Path, version: str) -> Path:
+    """Create the ports source tarball without using public writable directories."""
+    distpath = dist_dir / f"ecli-{version}.tar.gz"
+    with tempfile.TemporaryDirectory(prefix="ecli-port-", dir=dist_dir) as tmp:
+        tmppath = Path(tmp) / distpath.name
+        subprocess.run(
+            [
+                "tar",
+                "--exclude",
+                ".git",
+                "--exclude",
+                "build",
+                "--exclude",
+                "dist",
+                "--exclude",
+                ".pytest_cache",
+                "--exclude",
+                ".ruff_cache",
+                "--exclude",
+                ".mypy_cache",
+                "-czf",
+                str(tmppath),
+                ".",
+            ],
+            cwd=root,
+            check=True,
+        )
+        distpath.unlink(missing_ok=True)
+        shutil.move(str(tmppath), str(distpath))
+    return distpath
+
+
 def main(argv: list[str] | None = None) -> int:
     """Build the local FreeBSD port and copy the resulting .pkg."""
     parser = argparse.ArgumentParser(
@@ -199,42 +248,28 @@ def main(argv: list[str] | None = None) -> int:
     print(f"OK  Version: {version}")
 
     portdir = Path("/usr/ports") / PORT_CAT / PORT_NAME
-    distpath = Path("/tmp") / f"ecli-{version}.tar.gz"
     arch = normalize_arch()
 
     if not Path("/usr/ports").is_dir():
         print("ERR Ports tree is required.", file=sys.stderr)
         return EXIT_ERROR
 
+    try:
+        dist_dir = prepare_dist_dir(root)
+    except RuntimeError as exc:
+        print(f"ERR {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    distpath = dist_dir / f"ecli-{version}.tar.gz"
+
     print(f"==> Creating source tarball: {distpath}")
-    distpath.unlink(missing_ok=True)
-    subprocess.run(
-        [
-            "tar",
-            "--exclude",
-            ".git",
-            "--exclude",
-            "build",
-            "--exclude",
-            "dist",
-            "--exclude",
-            ".pytest_cache",
-            "--exclude",
-            ".ruff_cache",
-            "--exclude",
-            ".mypy_cache",
-            "-czf",
-            str(distpath),
-            ".",
-        ],
-        cwd=root,
-        check=True,
-    )
+    create_source_tarball(root, dist_dir, version)
 
     print(f"==> Creating local port skeleton at: {portdir}")
     shutil.rmtree(portdir, ignore_errors=True)
     portdir.mkdir(parents=True, exist_ok=True)
-    (portdir / "Makefile").write_text(port_makefile(version), encoding="utf-8")
+    (portdir / "Makefile").write_text(
+        port_makefile(version, dist_dir), encoding="utf-8"
+    )
     (portdir / "pkg-descr").write_text(PKG_DESCR, encoding="utf-8")
 
     print("==> Ensuring base system build deps (host) ...")

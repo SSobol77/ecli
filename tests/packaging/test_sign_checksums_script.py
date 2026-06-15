@@ -24,7 +24,7 @@ import pytest
 from conftest import load_script_module
 
 
-SIDECAR_LINE = re.compile(r"^[0-9a-f]{64}  [^/\n]+\n$")
+SIDECAR_LINE = re.compile(r"^[0-9a-f]{64} {2}[^/\n]+\n$")
 
 
 @pytest.fixture

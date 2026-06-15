@@ -143,6 +143,36 @@ def _run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, check=True, **kwargs)  # type: ignore[arg-type]
 
 
+def _extract_rpm(artifact: Path, payload: Path, root: Path) -> int:
+    if shutil.which("rpm2cpio") and shutil.which("cpio"):
+        rpm_input = artifact if artifact.is_absolute() else root / artifact
+        cpio = subprocess.Popen(
+            ["cpio", "-idm", "--quiet"],
+            cwd=payload,
+            stdin=subprocess.PIPE,
+        )
+        extractor = subprocess.Popen(["rpm2cpio", str(rpm_input)], stdout=cpio.stdin)
+        if cpio.stdin is not None:
+            cpio.stdin.close()
+        extractor.wait()
+        cpio.wait()
+        return 0
+    if shutil.which("bsdtar"):
+        _run(["bsdtar", "-xf", str(artifact), "-C", str(payload)])
+        return 0
+    print(
+        f"rpm2cpio+cpio or bsdtar is required to extract {artifact}",
+        file=sys.stderr,
+    )
+    return 1
+
+
+def _copy_executable_artifact(artifact: Path, payload: Path) -> None:
+    target = payload / "ecli"
+    shutil.copy2(artifact, target)
+    target.chmod(0o755)
+
+
 def extract_artifact(
     artifact: Path, tmpdir: Path, host_os: str, root: Path
 ) -> tuple[Path | None, int]:
@@ -160,33 +190,13 @@ def extract_artifact(
             return None, 1
         _run(["dpkg-deb", "-x", str(artifact), str(payload)])
     elif name.endswith(".rpm"):
-        if shutil.which("rpm2cpio") and shutil.which("cpio"):
-            rpm_input = artifact if artifact.is_absolute() else root / artifact
-            cpio = subprocess.Popen(
-                ["cpio", "-idm", "--quiet"],
-                cwd=payload,
-                stdin=subprocess.PIPE,
-            )
-            extractor = subprocess.Popen(
-                ["rpm2cpio", str(rpm_input)], stdout=cpio.stdin
-            )
-            if cpio.stdin is not None:
-                cpio.stdin.close()
-            extractor.wait()
-            cpio.wait()
-        elif shutil.which("bsdtar"):
-            _run(["bsdtar", "-xf", str(artifact), "-C", str(payload)])
-        else:
-            print(
-                f"rpm2cpio+cpio or bsdtar is required to extract {artifact}",
-                file=sys.stderr,
-            )
+        if _extract_rpm(artifact, payload, root) != 0:
             return None, 1
     elif name.endswith(".pkg"):
         _run(["tar", "-xf", str(artifact), "-C", str(payload)])
     elif name.endswith((".tar.gz", ".tgz")):
         _run(["tar", "-xzf", str(artifact), "-C", str(payload)])
-    elif name.endswith(".txz") or name.endswith(".pkg.tar.zst"):
+    elif name.endswith((".txz", ".pkg.tar.zst")):
         _run(["tar", "-xf", str(artifact), "-C", str(payload)])
     elif name.endswith(".dmg"):
         if host_os != "Darwin":
@@ -202,14 +212,8 @@ def extract_artifact(
         if rc != 0:
             return None, rc
         return mountpoint, 0
-    elif name.endswith((".AppImage", ".exe")):
-        target = payload / "ecli"
-        shutil.copy2(artifact, target)
-        target.chmod(0o755)
-    elif os.access(artifact, os.X_OK):
-        target = payload / "ecli"
-        shutil.copy2(artifact, target)
-        target.chmod(0o755)
+    elif name.endswith((".AppImage", ".exe")) or os.access(artifact, os.X_OK):
+        _copy_executable_artifact(artifact, payload)
     else:
         print(f"Unsupported artifact type: {artifact}", file=sys.stderr)
         return None, 1
@@ -399,6 +403,89 @@ def report_structural_pass(artifact: Path) -> None:
     )
 
 
+def resolve_artifact(
+    artifact_arg: str | None, root: Path, version: str
+) -> tuple[Path | None, int]:
+    artifact = (
+        default_artifact(root, version) if artifact_arg is None else Path(artifact_arg)
+    )
+    if not (artifact.exists() or (root / artifact).exists()):
+        print(f"Runtime artifact not found: {artifact}", file=sys.stderr)
+        return None, EXIT_ARTIFACT_MISSING
+    if not artifact.exists():
+        artifact = root / artifact
+    return artifact, EXIT_OK
+
+
+def handle_extract_failure(
+    artifact: Path, tmpdir: Path, host_os: str, mode: str, extract_rc: int
+) -> int:
+    if mode == "native" or (host_os == "Darwin" and artifact.name.endswith(".dmg")):
+        return extract_rc
+    if run_structural_check(artifact, tmpdir / "root", host_os):
+        report_structural_pass(artifact)
+        return EXIT_OK
+    return 1
+
+
+def run_payload_validation(
+    artifact: Path,
+    payload_root: Path,
+    tmpdir: Path,
+    host_os: str,
+    mode: str,
+    expected_version: str,
+) -> int:
+    if mode == "structural":
+        if run_structural_check(artifact, payload_root, host_os):
+            report_structural_pass(artifact)
+            return EXIT_OK
+        return 1
+
+    if mode == "native" or can_execute_artifact(artifact, host_os):
+        binary = find_launcher(payload_root)
+        if binary is None or not os.access(binary, os.X_OK):
+            report_launcher_missing(payload_root)
+            return EXIT_LAUNCHER_MISSING
+        if not run_native_smoke(binary, tmpdir, expected_version):
+            return 1
+        print(f"--> OK: native runtime smoke passed for {artifact}")
+        return EXIT_OK
+
+    if run_structural_check(artifact, payload_root, host_os):
+        report_structural_pass(artifact)
+        return EXIT_OK
+    return 1
+
+
+def validate_artifact(
+    artifact: Path, host_os: str, mode: str, expected_version: str
+) -> int:
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        mountpoint = tmpdir / "dmg"
+        try:
+            payload_root, extract_rc = extract_artifact(
+                artifact, tmpdir, host_os, Path(__file__).resolve().parent.parent
+            )
+            if extract_rc != 0:
+                return handle_extract_failure(
+                    artifact, tmpdir, host_os, mode, extract_rc
+                )
+            assert payload_root is not None
+            return run_payload_validation(
+                artifact,
+                payload_root,
+                tmpdir,
+                host_os,
+                mode,
+                expected_version,
+            )
+        finally:
+            if mountpoint.is_dir():
+                _detach_dmg(mountpoint)
+
+
 def main(argv: list[str] | None = None) -> int:
     """Validate a packaged ECLI launcher; return the exit code."""
     parser = argparse.ArgumentParser(
@@ -421,17 +508,9 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     expected_version_output = f"ecli {version}"
 
-    if args.artifact is None:
-        artifact = default_artifact(root, version)
-    else:
-        artifact = Path(args.artifact)
-
-    if not (artifact.exists() or (root / artifact).exists()):
-        print(f"Runtime artifact not found: {artifact}", file=sys.stderr)
-        return EXIT_ARTIFACT_MISSING
-
-    if not artifact.exists():
-        artifact = root / artifact
+    artifact, rc = resolve_artifact(args.artifact, root, version)
+    if artifact is None:
+        return rc
 
     if not args.allow_nonrelease and not is_within_release(artifact, root, version):
         print(
@@ -442,47 +521,7 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_OUTSIDE_RELEASE
 
     host_os = platform.system() or "unknown"
-    with tempfile.TemporaryDirectory() as tmp:
-        tmpdir = Path(tmp)
-        mountpoint = tmpdir / "dmg"
-        try:
-            payload_root, extract_rc = extract_artifact(artifact, tmpdir, host_os, root)
-
-            if extract_rc != 0:
-                if args.mode == "native" or (
-                    host_os == "Darwin" and artifact.name.endswith(".dmg")
-                ):
-                    return extract_rc
-                if run_structural_check(artifact, tmpdir / "root", host_os):
-                    report_structural_pass(artifact)
-                    return EXIT_OK
-                return 1
-
-            assert payload_root is not None
-            binary = find_launcher(payload_root)
-
-            if args.mode == "structural":
-                if run_structural_check(artifact, payload_root, host_os):
-                    report_structural_pass(artifact)
-                    return EXIT_OK
-                return 1
-
-            if args.mode == "native" or can_execute_artifact(artifact, host_os):
-                if binary is None or not os.access(binary, os.X_OK):
-                    report_launcher_missing(payload_root)
-                    return EXIT_LAUNCHER_MISSING
-                if not run_native_smoke(binary, tmpdir, expected_version_output):
-                    return 1
-                print(f"--> OK: native runtime smoke passed for {artifact}")
-                return EXIT_OK
-
-            if run_structural_check(artifact, payload_root, host_os):
-                report_structural_pass(artifact)
-                return EXIT_OK
-            return 1
-        finally:
-            if mountpoint.is_dir():
-                _detach_dmg(mountpoint)
+    return validate_artifact(artifact, host_os, args.mode, expected_version_output)
 
 
 if __name__ == "__main__":

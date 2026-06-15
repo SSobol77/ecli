@@ -62,7 +62,7 @@ def python_bin() -> str:
     return env("PYTHON", "python3.11")
 
 
-def read_version(root: Path, interpreter: str) -> str:
+def read_version(root: Path) -> str:
     with (root / "pyproject.toml").open("rb") as handle:
         return tomllib.load(handle)["project"]["version"]
 
@@ -347,7 +347,7 @@ def main(argv: list[str] | None = None) -> int:
     depends = [d for d in env("RPM_DEPENDS", "ncurses-libs;libyaml").split(";") if d]
     arch = normalized_arch()
 
-    version = read_version(root, python_bin())
+    version = read_version(root)
     print(f"==> Version: {version}")
 
     releases_dir_value = env("RELEASES_DIR", f"releases/{version}")

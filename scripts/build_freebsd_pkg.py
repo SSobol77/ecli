@@ -51,6 +51,7 @@ HOMEPAGE = "https://ecli.io"
 LICENSE = "GPL-2.0-only"
 COMMENT = "Terminal DevOps editor with AI and Git integration"
 CATEGORY = "editors"
+PYTHON_CMD = "python3.11"
 
 SYSTEM_PACKAGES = (
     "ca_root_nss",
@@ -84,7 +85,7 @@ PIP_PACKAGES = (
     "PyYAML",
 )
 
-REQUIRED_COMMANDS = ("python3.11", "pip", "pyinstaller", "pkg", "install", "git")
+REQUIRED_COMMANDS = (PYTHON_CMD, "pip", "pyinstaller", "pkg", "install", "git")
 
 
 def read_version(root: Path) -> str:
@@ -136,14 +137,14 @@ def install_python_dependencies(root: Path) -> bool:
     print("==> Installing Python runtime dependencies...")
     if (
         subprocess.run(
-            ["python3.11", "-c", "import tomllib"], capture_output=True, check=False
+            [PYTHON_CMD, "-c", "import tomllib"], capture_output=True, check=False
         ).returncode
         != 0
     ):
-        subprocess.run(["python3.11", "-m", "pip", "install", "tomli"], check=False)
+        subprocess.run([PYTHON_CMD, "-m", "pip", "install", "tomli"], check=False)
     if (
         subprocess.run(
-            ["python3.11", "-m", "pip", "install", *PIP_PACKAGES], cwd=root, check=False
+            [PYTHON_CMD, "-m", "pip", "install", *PIP_PACKAGES], cwd=root, check=False
         ).returncode
         != 0
     ):
@@ -488,19 +489,18 @@ def create_package(
         ):
             created = True
             break
-    if not created:
-        if (
-            subprocess.run(
-                ["pkg", "create", "-M", str(ucl_file), "-r", str(staging_root)],
-                cwd=root,
-                check=False,
-            ).returncode
-            == 0
-        ):
-            produced = root / f"{PACKAGE_NAME}-{version}.pkg"
-            if produced.is_file():
-                shutil.move(str(produced), str(releases_dir / produced.name))
-                created = True
+    if not created and (
+        subprocess.run(
+            ["pkg", "create", "-M", str(ucl_file), "-r", str(staging_root)],
+            cwd=root,
+            check=False,
+        ).returncode
+        == 0
+    ):
+        produced = root / f"{PACKAGE_NAME}-{version}.pkg"
+        if produced.is_file():
+            shutil.move(str(produced), str(releases_dir / produced.name))
+            created = True
     if not created:
         print("ERROR: All pkg create methods failed", file=sys.stderr)
         return None

@@ -103,7 +103,7 @@ def _dry_run(root: Path) -> int:
     return EXIT_OK
 
 
-def _publish(root: Path) -> int:
+def _publish() -> int:
     """Env-confirmed maintainer path; prints the manual procedure, never uploads."""
     if os.environ.get(PUBLISH_CONFIRM_ENV) != "1":
         print(
@@ -152,7 +152,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         return _dry_run(root)
     if args.publish:
-        return _publish(root)
+        return _publish()
 
     print(GUIDANCE, file=sys.stderr)
     return EXIT_BLOCKED

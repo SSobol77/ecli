@@ -45,6 +45,7 @@ EXIT_ERROR = 1
 EXIT_MISSING_TOOL = 5
 
 PACKAGE_NAME = "ecli"
+README_FILE = "README.md"
 
 
 def read_version(root: Path) -> str:
@@ -165,8 +166,8 @@ def main(argv: list[str] | None = None) -> int:
     doc_dir = staging_root / f"usr/doc/{PACKAGE_NAME}-{version}"
     if (root / "LICENSE").is_file():
         install_file(root / "LICENSE", doc_dir / "LICENSE", 0o644)
-    if (root / "README.md").is_file():
-        install_file(root / "README.md", doc_dir / "README.md", 0o644)
+    if (root / README_FILE).is_file():
+        install_file(root / README_FILE, doc_dir / README_FILE, 0o644)
 
     (staging_root / "install" / "slack-desc").write_text(slack_desc(), encoding="utf-8")
 
