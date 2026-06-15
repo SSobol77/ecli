@@ -243,7 +243,7 @@ def test_no_shell_wrappers_remain_under_scripts(
     read_repo_text: RepoReader,
 ) -> None:
     contract = read_repo_text(CANONICAL_CONTRACT_DOC)
-    script_shell_files = sorted((repo_root / "scripts").glob("*.sh"))
+    script_shell_files = sorted((repo_root / "scripts").rglob("*.sh"))
 
     assert script_shell_files == []
     assert "Canonical Python implementation" in contract

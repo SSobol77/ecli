@@ -78,7 +78,7 @@ Packaging script-migration and log-invariant checks (read-only, non-publishing):
 
 ```sh
 uv run pytest -q tests/packaging/test_scripts_python_migration_contract.py
-python3 scripts/check_log_invariant.py
+uv run python scripts/check_log_invariant.py
 ```
 
 ## Gate interpretation

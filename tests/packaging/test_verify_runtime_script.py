@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import io
 import tarfile
 from pathlib import Path
 from types import ModuleType
@@ -124,3 +125,57 @@ def test_native_mode_missing_launcher_returns_five(
     empty_dir.mkdir()
     rc = verify_runtime.main(["--allow-nonrelease", "--mode", "native", str(empty_dir)])
     assert rc == 5
+
+
+def test_rpm_extraction_failure_returns_error(
+    verify_runtime: ModuleType, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    return_codes = iter((1, 0))
+
+    class FakeProcess:
+        def __init__(self, cmd: list[str], **kwargs: object) -> None:
+            self.cmd = cmd
+            self.stdin = io.BytesIO() if kwargs.get("stdin") is not None else None
+            self._return_code = next(return_codes)
+
+        def wait(self) -> int:
+            return self._return_code
+
+    monkeypatch.setattr(verify_runtime.shutil, "which", lambda name: f"/usr/bin/{name}")
+    monkeypatch.setattr(verify_runtime.subprocess, "Popen", FakeProcess)
+
+    artifact = tmp_path / "ecli.rpm"
+    artifact.write_bytes(b"rpm")
+    payload = tmp_path / "payload"
+    payload.mkdir()
+
+    assert verify_runtime._extract_rpm(artifact, payload, tmp_path) == 1
+
+
+def test_scan_logs_reports_bounded_redacted_excerpt(
+    verify_runtime: ModuleType, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log_dir = tmp_path / ".config" / "ecli" / "logs"
+    log_dir.mkdir(parents=True)
+    log_file = log_dir / "editor.log"
+    log_file.write_text(
+        "\n".join(
+            [
+                "line 1",
+                "line 2",
+                "api_key=SECRET ModuleNotFoundError",
+                "line 4",
+                "line 5",
+                "line 6",
+                "line 7",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    assert verify_runtime.scan_logs(tmp_path) is False
+    captured = capsys.readouterr()
+    assert "SECRET" not in captured.err
+    assert "api_key=<redacted>" in captured.err
+    assert "line 7" not in captured.err
+    assert "omitted" in captured.err

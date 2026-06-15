@@ -15,12 +15,11 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from types import ModuleType
 
 import pytest
-from conftest import load_script_module
+from conftest import UnameStub, expected_release_artifact, load_script_module
 
 
 @pytest.fixture
@@ -36,9 +35,7 @@ def test_constants(slack: ModuleType) -> None:
 
 
 def test_normalize_arch(slack: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(
-        slack.os, "uname", lambda: os.uname_result(("Linux", "h", "r", "v", "aarch64"))
-    )
+    monkeypatch.setattr(slack.os, "uname", lambda: UnameStub("aarch64"))
     assert slack.normalize_arch() == "aarch64"
 
 
@@ -52,4 +49,8 @@ def test_slack_desc_layout(slack: ModuleType) -> None:
 
 def test_artifact_token(slack: ModuleType, repo_root: Path) -> None:
     version = slack.read_version(repo_root)
-    assert f"ecli_{version}_slackware_x86_64.txz".endswith("slackware_x86_64.txz")
+    expected = expected_release_artifact(
+        repo_root, version, f"{slack.PACKAGE_NAME}_{version}_slackware_x86_64.txz"
+    )
+    assert expected.parent == repo_root / "releases" / version
+    assert expected.name == f"{slack.PACKAGE_NAME}_{version}_slackware_x86_64.txz"

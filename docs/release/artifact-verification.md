@@ -48,7 +48,7 @@ callers that need the artifact-verifier exit contract must invoke the verifier
 directly:
 
 ```sh
-python3 scripts/verify_artifact.py releases/<version>/<artifact>
+uv run python scripts/verify_artifact.py releases/<version>/<artifact>
 ```
 
 The Python verifier is the only active entrypoint under `scripts/`; the removed
@@ -78,7 +78,7 @@ Exit codes:
   the standard-library `hashlib` implementation never reaches this state)
 
 The `make validate-*-contract` targets call the same verifier, but CI logic that
-branches on specific failure classes must call `python3 scripts/verify_artifact.py`
+branches on specific failure classes must call `uv run python scripts/verify_artifact.py`
 directly.
 
 ## Policy

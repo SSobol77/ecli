@@ -28,8 +28,8 @@ See the LICENSE file in the project root for full license text.
 | `pytest` | tests baseline check | partial/validation-required if tests absent | Optional | Yes |
 | `uv run pytest -q tests/packaging` | canonical 21-item packaging release-contract matrix guard | repository-local static check | Optional | Yes |
 | `uv run pytest -q tests/packaging/test_scripts_python_migration_contract.py` | shell-to-Python script migration contract guard | repository-local static check | Optional | Yes |
-| `python3 scripts/check_log_invariant.py` | development log-location invariant (artifacts only under `logs/`) | read-only git check | Optional | Yes |
-| `python3 scripts/verify_artifact.py <artifact>` | artifact checksum verification (exit codes 0-5) | structural/local check | No | Yes (release/packaging roles) |
+| `uv run python scripts/check_log_invariant.py` | development log-location invariant (artifacts only under `logs/`) | read-only git check | Optional | Yes |
+| `uv run python scripts/verify_artifact.py <artifact>` | artifact checksum verification (exit codes 0-5) | structural/local check | No | Yes (release/packaging roles) |
 | platform packaging script | artifact build | environment-dependent | No | Yes (release/packaging roles) |
 
 The packaging guard enforces the `Canonical 21-Item Platform & Packaging

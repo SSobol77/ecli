@@ -15,12 +15,11 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from types import ModuleType
 
 import pytest
-from conftest import load_script_module
+from conftest import UnameStub, expected_release_artifact, load_script_module
 
 
 @pytest.fixture
@@ -38,17 +37,16 @@ def test_package_name_and_exit_codes(arch: ModuleType) -> None:
 def test_normalize_arch_uses_aarch64(
     arch: ModuleType, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(
-        arch.os, "uname", lambda: os.uname_result(("Linux", "h", "r", "v", "aarch64"))
-    )
+    monkeypatch.setattr(arch.os, "uname", lambda: UnameStub("aarch64"))
     assert arch.normalize_arch() == "aarch64"
-    monkeypatch.setattr(
-        arch.os, "uname", lambda: os.uname_result(("Linux", "h", "r", "v", "x86_64"))
-    )
+    monkeypatch.setattr(arch.os, "uname", lambda: UnameStub("x86_64"))
     assert arch.normalize_arch() == "x86_64"
 
 
 def test_artifact_name_token(arch: ModuleType, repo_root: Path) -> None:
     version = arch.read_version(repo_root)
-    name = f"ecli_{version}_arch_x86_64.pkg.tar.zst"
-    assert name.endswith("arch_x86_64.pkg.tar.zst")
+    expected = expected_release_artifact(
+        repo_root, version, f"ecli_{version}_arch_x86_64.pkg.tar.zst"
+    )
+    assert expected.parent == repo_root / "releases" / version
+    assert expected.name == f"ecli_{version}_arch_x86_64.pkg.tar.zst"

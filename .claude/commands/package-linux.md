@@ -146,14 +146,18 @@ The shell-to-Python migration is **complete**: active shell wrappers under
 `scripts/` have been removed. Use the Python entrypoints when inspecting Linux
 packaging flows:
 
-- `python3 scripts/verify_artifact.py <artifact>` — SHA256 sidecar verifier (exit codes `0`–`5`).
-- `python3 scripts/sign_checksums.py <artifact> [...]` — writes `<artifact>.sha256` sidecars.
-- `python3 scripts/check_log_invariant.py` — development log-location invariant.
-- `python3 scripts/build_pyinstaller_linux.py`, `scripts/build_and_package_deb.py`,
-  `scripts/build_and_package_rpm.py`, `scripts/build_and_package_opensuse_rpm.py`,
-  `scripts/build_and_package_arch.py`, `scripts/build_and_package_slackware.py`,
-  `scripts/package_appimage.py`, `scripts/build_docker.py`, and
-  `scripts/verify_runtime.py`.
+- `uv run python scripts/verify_artifact.py <artifact>` — SHA256 sidecar verifier (exit codes `0`–`5`).
+- `uv run python scripts/sign_checksums.py <artifact> [...]` — writes `<artifact>.sha256` sidecars.
+- `uv run python scripts/check_log_invariant.py` — development log-location invariant.
+- `uv run python scripts/build_pyinstaller_linux.py`
+- `uv run python scripts/build_and_package_deb.py`
+- `uv run python scripts/build_and_package_rpm.py`
+- `uv run python scripts/build_and_package_opensuse_rpm.py`
+- `uv run python scripts/build_and_package_arch.py`
+- `uv run python scripts/build_and_package_slackware.py`
+- `uv run python scripts/package_appimage.py`
+- `uv run python scripts/build_docker.py`
+- `uv run python scripts/verify_runtime.py <artifact>`
 
 The migration contract is defined in
 `docs/release/artifact-contract.md` under `Shell-to-Python Script Migration` and

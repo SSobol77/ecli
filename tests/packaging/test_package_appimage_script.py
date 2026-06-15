@@ -19,7 +19,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from conftest import load_script_module
+from conftest import expected_release_artifact, load_script_module
 
 
 @pytest.fixture
@@ -46,4 +46,9 @@ def test_find_executable_missing(appimage: ModuleType, tmp_path: Path) -> None:
 
 def test_artifact_token(appimage: ModuleType, repo_root: Path) -> None:
     version = appimage.read_version(repo_root)
-    assert f"ecli_{version}_linux_x86_64.AppImage".endswith("linux_x86_64.AppImage")
+    arch = appimage.normalize_arch("x86_64")
+    expected = expected_release_artifact(
+        repo_root, version, f"ecli_{version}_linux_{arch}.AppImage"
+    )
+    assert expected.parent == repo_root / "releases" / version
+    assert expected.name == f"ecli_{version}_linux_{arch}.AppImage"

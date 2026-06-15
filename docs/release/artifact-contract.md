@@ -311,7 +311,7 @@ The removed legacy forms include:
 
 - `ecli_<version>_amd64.deb`
 - `ecli_<version>_amd64.rpm`
-- `ecli_<version>_amd64.pkg`
+- FreeBSD `.pkg` names that omitted the `freebsd` platform segment
 - `ecli_<version>_linux_x86_64.AppImage`
 - `ecli_<version>_Linux_x86_64.tar.gz`
 - `ecli_<version>_win_x64.exe`

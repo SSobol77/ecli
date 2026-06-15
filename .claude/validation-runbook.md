@@ -40,10 +40,10 @@ For packaging script-migration and log-invariant validation (read-only):
 
 ```sh
 uv run pytest -q tests/packaging/test_scripts_python_migration_contract.py
-python3 scripts/check_log_invariant.py
+uv run python scripts/check_log_invariant.py
 ```
 
-The canonical artifact verifier is `python3 scripts/verify_artifact.py`
+The canonical artifact verifier is `uv run python scripts/verify_artifact.py`
 (exit codes `0`-`5`). The shell-to-Python migration is complete: active shell
 wrappers under `scripts/` have been removed, and validation must call Python
 entrypoints such as `scripts/verify_artifact.py` and `scripts/verify_runtime.py`

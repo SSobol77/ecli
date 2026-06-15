@@ -130,7 +130,7 @@ def _live_files(repo_root: Path, roots: tuple[str, ...]) -> list[Path]:
 
 
 def test_no_shell_files_remain_under_scripts(repo_root: Path) -> None:
-    shell_files = sorted((repo_root / "scripts").glob("*.sh"))
+    shell_files = sorted((repo_root / "scripts").rglob("*.sh"))
     assert shell_files == []
 
 

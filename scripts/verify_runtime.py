@@ -60,6 +60,7 @@ FORBIDDEN_LOG_PATTERNS = (
     "No module named 'unittest'",
     "CRITICAL - ecli - Failed to import a critical application component",
 )
+LOG_EXCERPT_CONTEXT = 2
 
 
 def normalize_arch(raw: str) -> str:
@@ -154,8 +155,15 @@ def _extract_rpm(artifact: Path, payload: Path, root: Path) -> int:
         extractor = subprocess.Popen(["rpm2cpio", str(rpm_input)], stdout=cpio.stdin)
         if cpio.stdin is not None:
             cpio.stdin.close()
-        extractor.wait()
-        cpio.wait()
+        extractor_rc = extractor.wait()
+        cpio_rc = cpio.wait()
+        if extractor_rc != 0 or cpio_rc != 0:
+            print(
+                f"RPM extraction failed for {artifact} "
+                f"(rpm2cpio={extractor_rc}, cpio={cpio_rc}).",
+                file=sys.stderr,
+            )
+            return 1
         return 0
     if shutil.which("bsdtar"):
         _run(["bsdtar", "-xf", str(artifact), "-C", str(payload)])
@@ -311,9 +319,34 @@ def scan_logs(home: Path) -> bool:
     text = log_file.read_text(encoding="utf-8", errors="replace")
     if any(pattern in text for pattern in FORBIDDEN_LOG_PATTERNS):
         print("Runtime smoke created forbidden startup log entries:", file=sys.stderr)
-        print(text, file=sys.stderr)
+        print(_forbidden_log_excerpt(text), file=sys.stderr)
         return False
     return True
+
+
+def _redact_log_line(line: str) -> str:
+    for marker in ("Bearer ", "api_key=", "token=", "password="):
+        if marker in line:
+            return f"{line.split(marker, 1)[0]}{marker}<redacted>"
+    return line
+
+
+def _forbidden_log_excerpt(text: str) -> str:
+    lines = text.splitlines()
+    selected: list[str] = []
+    for index, line in enumerate(lines):
+        if any(pattern in line for pattern in FORBIDDEN_LOG_PATTERNS):
+            start = max(0, index - LOG_EXCERPT_CONTEXT)
+            end = min(len(lines), index + LOG_EXCERPT_CONTEXT + 1)
+            selected.extend(lines[start:end])
+            break
+    if not selected:
+        selected = lines[: 2 * LOG_EXCERPT_CONTEXT + 1]
+    excerpt = "\n".join(_redact_log_line(line) for line in selected)
+    omitted = len(lines) - len(selected)
+    if omitted > 0:
+        excerpt = f"{excerpt}\n... omitted {omitted} log lines ..."
+    return excerpt
 
 
 def run_native_smoke(binary: Path, tmpdir: Path, expected_version: str) -> bool:

@@ -514,14 +514,14 @@ Available versions: 0.0.1
 
 The `validate-*-contract` targets are Makefile shell logic. Checksum validation
 was originally implemented by the inline Make `verify_sha256` macro pattern.
-This has been extracted to `scripts/verify-artifact.sh`; Make targets continue
+This has been extracted to `scripts/verify_artifact.py`; Make targets continue
 to call the script, while CI consumers that require granular exit-code handling
 can invoke it directly.
 
 Direct invocation:
 
 ```sh
-scripts/verify-artifact.sh <artifact-path>
+uv run python scripts/verify_artifact.py <artifact-path>
 ```
 
 ### A.3 Direct Tamper Test
@@ -535,7 +535,7 @@ cp "$WHL_SIDECAR" "${WHL_SIDECAR}.bak"
 ORIG=$(cat "$WHL_SIDECAR")
 echo "ffff${ORIG:4}" > "$WHL_SIDECAR"
 set +e
-scripts/verify-artifact.sh "${WHL_SIDECAR%.sha256}"
+uv run python scripts/verify_artifact.py "${WHL_SIDECAR%.sha256}"
 rc=$?
 set -e
 echo "Direct invocation exit code: $rc"

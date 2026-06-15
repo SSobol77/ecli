@@ -90,7 +90,7 @@ under `scripts/`. Canonical Python implementations include verification:
 `scripts/publish_pypi.py`. `scripts/build-and-package-windows.ps1` is a separate
 Windows-native surface, not part of the migration. `.claude/hooks/block-mutations.sh`
 is a Claude hook and `tools/freebsd-chroot-build.sh` is a separate FreeBSD chroot
-helper. The unused the removed FreeBSD package-renaming shell helper helper was removed. The
+helper. The unused FreeBSD package-renaming shell helper was removed. The
 `Makefile` calls the Python entrypoints directly. The contract is defined in
 `docs/release/artifact-contract.md` under `Shell-to-Python Script Migration` and
 enforced by `tests/packaging/test_scripts_python_migration_contract.py`. Migrated

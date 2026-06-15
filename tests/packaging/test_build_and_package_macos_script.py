@@ -19,7 +19,7 @@ from pathlib import Path
 from types import ModuleType
 
 import pytest
-from conftest import load_script_module
+from conftest import expected_release_artifact, load_script_module
 
 
 @pytest.fixture
@@ -52,4 +52,8 @@ def test_info_plist_embeds_version(macos: ModuleType) -> None:
 
 def test_dmg_artifact_token(macos: ModuleType, repo_root: Path) -> None:
     version = macos.read_version(repo_root)
-    assert f"ecli_{version}_macos_universal2.dmg".endswith("macos_universal2.dmg")
+    expected = expected_release_artifact(
+        repo_root, version, f"ecli_{version}_macos_{macos.MACOS_ARCH}.dmg"
+    )
+    assert expected.parent == repo_root / "releases" / version
+    assert expected.name == f"ecli_{version}_macos_{macos.MACOS_ARCH}.dmg"

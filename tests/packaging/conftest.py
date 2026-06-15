@@ -66,6 +66,17 @@ class Artifact:
     codex_prompt: str
 
 
+@dataclass(frozen=True)
+class UnameStub:
+    """Minimal platform-neutral os.uname() stand-in for architecture tests."""
+
+    machine: str
+
+
+def expected_release_artifact(repo_root: Path, version: str, filename: str) -> Path:
+    return repo_root / "releases" / version / filename
+
+
 CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
     Artifact(
         index=1,

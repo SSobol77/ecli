@@ -107,7 +107,7 @@ Checksum sidecars and verification use standard-library Python entrypoints
 python3 scripts/sign_checksums.py releases/<version>/<artifact>
 
 # Verify an artifact against its sidecar (granular exit codes 0-5)
-python3 scripts/verify_artifact.py releases/<version>/<artifact>
+uv run python scripts/verify_artifact.py releases/<version>/<artifact>
 ```
 
 Active shell wrappers under `scripts/` have been removed. Use the canonical
