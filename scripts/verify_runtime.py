@@ -43,6 +43,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
 
 
@@ -61,6 +62,8 @@ FORBIDDEN_LOG_PATTERNS = (
     "CRITICAL - ecli - Failed to import a critical application component",
 )
 LOG_EXCERPT_CONTEXT = 2
+
+ArtifactExtractor = Callable[[Path, Path, Path, str, Path], tuple[Path | None, int]]
 
 
 def normalize_arch(raw: str) -> str:
@@ -181,6 +184,81 @@ def _copy_executable_artifact(artifact: Path, payload: Path) -> None:
     target.chmod(0o755)
 
 
+def _extract_deb_artifact(
+    artifact: Path, payload: Path, tmpdir: Path, host_os: str, root: Path
+) -> tuple[Path | None, int]:
+    if shutil.which("dpkg-deb") is None:
+        print(f"dpkg-deb is required to extract {artifact}", file=sys.stderr)
+        return None, 1
+    _run(["dpkg-deb", "-x", str(artifact), str(payload)])
+    return payload, 0
+
+
+def _extract_rpm_artifact(
+    artifact: Path, payload: Path, tmpdir: Path, host_os: str, root: Path
+) -> tuple[Path | None, int]:
+    if _extract_rpm(artifact, payload, root) != 0:
+        return None, 1
+    return payload, 0
+
+
+def _extract_tar_artifact(
+    artifact: Path, payload: Path, tmpdir: Path, host_os: str, root: Path
+) -> tuple[Path | None, int]:
+    _run(["tar", "-xf", str(artifact), "-C", str(payload)])
+    return payload, 0
+
+
+def _extract_gzip_tar_artifact(
+    artifact: Path, payload: Path, tmpdir: Path, host_os: str, root: Path
+) -> tuple[Path | None, int]:
+    _run(["tar", "-xzf", str(artifact), "-C", str(payload)])
+    return payload, 0
+
+
+def _extract_dmg_artifact(
+    artifact: Path, payload: Path, tmpdir: Path, host_os: str, root: Path
+) -> tuple[Path | None, int]:
+    if host_os != "Darwin":
+        print(
+            "DMG structural inspection requires macOS; CI must run native macOS smoke.",
+            file=sys.stderr,
+        )
+        return None, 2
+    mountpoint = tmpdir / "dmg"
+    mountpoint.mkdir(parents=True, exist_ok=True)
+    rc = _attach_dmg(artifact, mountpoint)
+    if rc != 0:
+        return None, rc
+    return mountpoint, 0
+
+
+def _extract_executable_artifact(
+    artifact: Path, payload: Path, tmpdir: Path, host_os: str, root: Path
+) -> tuple[Path | None, int]:
+    _copy_executable_artifact(artifact, payload)
+    return payload, 0
+
+
+def _artifact_extractor(artifact: Path) -> ArtifactExtractor | None:
+    name = artifact.name
+    extractors: tuple[tuple[tuple[str, ...], ArtifactExtractor], ...] = (
+        ((".deb",), _extract_deb_artifact),
+        ((".rpm",), _extract_rpm_artifact),
+        ((".pkg",), _extract_tar_artifact),
+        ((".tar.gz", ".tgz"), _extract_gzip_tar_artifact),
+        ((".txz", ".pkg.tar.zst"), _extract_tar_artifact),
+        ((".dmg",), _extract_dmg_artifact),
+        ((".AppImage", ".exe"), _extract_executable_artifact),
+    )
+    for suffixes, extractor in extractors:
+        if name.endswith(suffixes):
+            return extractor
+    if os.access(artifact, os.X_OK):
+        return _extract_executable_artifact
+    return None
+
+
 def extract_artifact(
     artifact: Path, tmpdir: Path, host_os: str, root: Path
 ) -> tuple[Path | None, int]:
@@ -191,42 +269,12 @@ def extract_artifact(
     if artifact.is_dir():
         return artifact, 0
 
-    name = artifact.name
-    if name.endswith(".deb"):
-        if shutil.which("dpkg-deb") is None:
-            print(f"dpkg-deb is required to extract {artifact}", file=sys.stderr)
-            return None, 1
-        _run(["dpkg-deb", "-x", str(artifact), str(payload)])
-    elif name.endswith(".rpm"):
-        if _extract_rpm(artifact, payload, root) != 0:
-            return None, 1
-    elif name.endswith(".pkg"):
-        _run(["tar", "-xf", str(artifact), "-C", str(payload)])
-    elif name.endswith((".tar.gz", ".tgz")):
-        _run(["tar", "-xzf", str(artifact), "-C", str(payload)])
-    elif name.endswith((".txz", ".pkg.tar.zst")):
-        _run(["tar", "-xf", str(artifact), "-C", str(payload)])
-    elif name.endswith(".dmg"):
-        if host_os != "Darwin":
-            print(
-                "DMG structural inspection requires macOS; CI must run native "
-                "macOS smoke.",
-                file=sys.stderr,
-            )
-            return None, 2
-        mountpoint = tmpdir / "dmg"
-        mountpoint.mkdir(parents=True, exist_ok=True)
-        rc = _attach_dmg(artifact, mountpoint)
-        if rc != 0:
-            return None, rc
-        return mountpoint, 0
-    elif name.endswith((".AppImage", ".exe")) or os.access(artifact, os.X_OK):
-        _copy_executable_artifact(artifact, payload)
-    else:
+    extractor = _artifact_extractor(artifact)
+    if extractor is None:
         print(f"Unsupported artifact type: {artifact}", file=sys.stderr)
         return None, 1
 
-    return payload, 0
+    return extractor(artifact, payload, tmpdir, host_os, root)
 
 
 def _attach_dmg(artifact: Path, mountpoint: Path) -> int:
