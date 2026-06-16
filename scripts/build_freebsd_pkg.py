@@ -32,7 +32,6 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import gzip
 import os
 import shutil
 import subprocess
@@ -40,6 +39,16 @@ import sys
 import tomllib
 from datetime import datetime
 from pathlib import Path
+
+from packaging_common import (
+    filename_arch,
+    gzip_file,
+    install_desktop_entry,
+    install_docs,
+    install_file,
+    install_icon,
+    write_sha256,
+)
 
 
 EXIT_OK = 0
@@ -86,20 +95,12 @@ PIP_PACKAGES = (
 )
 
 REQUIRED_COMMANDS = (PYTHON_CMD, "pip", "pyinstaller", "pkg", "install", "git")
+normalize_arch = filename_arch
 
 
 def read_version(root: Path) -> str:
     with (root / "pyproject.toml").open("rb") as handle:
         return tomllib.load(handle)["project"]["version"]
-
-
-def normalize_arch() -> str:
-    raw = os.uname().machine
-    if raw in ("amd64", "x86_64"):
-        return "x86_64"
-    if raw in ("aarch64", "arm64"):
-        return "arm64"
-    return raw
 
 
 def check_dependencies() -> bool:
@@ -278,6 +279,20 @@ def man_page(version: str) -> str:
     )
 
 
+def desktop_entry() -> str:
+    return (
+        "[Desktop Entry]\n"
+        "Name=ECLI\n"
+        "Comment=Terminal-first engineering operations workbench\n"
+        f"Exec={PACKAGE_NAME}\n"
+        f"Icon={PACKAGE_NAME}\n"
+        "Terminal=true\n"
+        "Type=Application\n"
+        "Categories=Development;IDE;Utility;\n"
+        "StartupNotify=false\n"
+    )
+
+
 def stage_package_files(
     root: Path, staging_root: Path, executable: Path, version: str
 ) -> bool:
@@ -286,61 +301,33 @@ def stage_package_files(
         print(f"ERROR: Executable not usable: {abs_exec}", file=sys.stderr)
         return False
 
-    bin_dst = staging_root / "usr/local/bin" / PACKAGE_NAME
-    shutil.copy2(abs_exec, bin_dst)
-    bin_dst.chmod(0o755)
+    install_file(abs_exec, staging_root / "usr/local/bin" / PACKAGE_NAME, 0o755)
 
-    desktop_src = root / "packaging/linux/fpm-common" / f"{PACKAGE_NAME}.desktop"
-    desktop_dst = (
-        staging_root / "usr/local/share/applications" / f"{PACKAGE_NAME}.desktop"
+    install_desktop_entry(
+        root,
+        staging_root / "usr/local/share/applications" / f"{PACKAGE_NAME}.desktop",
+        PACKAGE_NAME,
+        desktop_entry(),
     )
-    if desktop_src.is_file():
-        shutil.copy2(desktop_src, desktop_dst)
-        desktop_dst.chmod(0o644)
-    else:
-        desktop_dst.write_text(
-            "[Desktop Entry]\n"
-            "Name=ECLI\n"
-            "Comment=Terminal-first engineering operations workbench\n"
-            f"Exec={PACKAGE_NAME}\n"
-            f"Icon={PACKAGE_NAME}\n"
-            "Terminal=true\n"
-            "Type=Application\n"
-            "Categories=Development;IDE;Utility;\n"
-            "StartupNotify=false\n",
-            encoding="utf-8",
-        )
 
-    icon_src = root / "src/ecli/assets/ecli.png"
-    if icon_src.is_file():
-        icon_dst = (
-            staging_root
-            / "usr/local/share/icons/hicolor/256x256/apps"
-            / f"{PACKAGE_NAME}.png"
-        )
-        shutil.copy2(icon_src, icon_dst)
-        icon_dst.chmod(0o644)
-    else:
+    if not install_icon(
+        root,
+        staging_root
+        / "usr/local/share/icons/hicolor/256x256/apps"
+        / f"{PACKAGE_NAME}.png",
+    ):
+        icon_src = root / "src/ecli/assets/ecli.png"
         print(f"WARNING: Application icon not found: {icon_src}", file=sys.stderr)
 
-    doc_dir = staging_root / "usr/local/share/doc" / PACKAGE_NAME
-    for name in ("LICENSE", "README.md"):
-        src = root / name
-        if src.is_file():
-            dst = doc_dir / name
-            shutil.copy2(src, dst)
-            dst.chmod(0o644)
+    install_docs(root, staging_root / "usr/local/share/doc" / PACKAGE_NAME)
 
     man_dst = staging_root / "usr/local/man/man1" / f"{PACKAGE_NAME}.1"
     repo_man = root / "man" / f"{PACKAGE_NAME}.1"
     if repo_man.is_file():
-        shutil.copy2(repo_man, man_dst)
-        man_dst.chmod(0o644)
+        install_file(repo_man, man_dst, 0o644)
     else:
         man_dst.write_text(man_page(version), encoding="utf-8")
-    gz = man_dst.with_name(man_dst.name + ".gz")
-    gz.write_bytes(gzip.compress(man_dst.read_bytes(), compresslevel=9, mtime=0))
-    man_dst.unlink()
+    gzip_file(man_dst)
     return True
 
 
@@ -410,41 +397,6 @@ def ucl_manifest(version: str, abi: str) -> str:
     )
 
 
-def write_sha256(releases_dir: Path, artifact: Path) -> None:
-    name = artifact.name
-    (releases_dir / f"{name}.sha256").unlink(missing_ok=True)
-    if shutil.which("sha256sum"):
-        result = subprocess.run(
-            ["sha256sum", name],
-            cwd=releases_dir,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        (releases_dir / f"{name}.sha256").write_text(result.stdout, encoding="utf-8")
-    elif shutil.which("shasum"):
-        result = subprocess.run(
-            ["shasum", "-a", "256", name],
-            cwd=releases_dir,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        (releases_dir / f"{name}.sha256").write_text(result.stdout, encoding="utf-8")
-    elif shutil.which("sha256"):
-        digest = subprocess.run(
-            ["sha256", "-q", str(artifact)], capture_output=True, text=True, check=True
-        ).stdout.strip()
-        (releases_dir / f"{name}.sha256").write_text(
-            f"{digest}  {name}\n", encoding="utf-8"
-        )
-    else:
-        print(
-            "WARNING: No checksum utility found (sha256sum/shasum/sha256)",
-            file=sys.stderr,
-        )
-
-
 def create_package(
     root: Path, staging_root: Path, meta_dir: Path, releases_dir: Path, version: str
 ) -> Path | None:
@@ -510,14 +462,14 @@ def create_package(
         print("ERROR: pkg create did not produce a .pkg file", file=sys.stderr)
         return None
 
-    arch = normalize_arch()
+    arch = filename_arch()
     normalized = releases_dir / f"{PACKAGE_NAME}_{version}_freebsd_{arch}.pkg"
     normalized.unlink(missing_ok=True)
     shutil.move(str(candidates[0]), str(normalized))
     (releases_dir / ".freebsd.env").write_text(
         f"FREEBSD_ARCH := {arch}\n", encoding="utf-8"
     )
-    write_sha256(releases_dir, normalized)
+    write_sha256(releases_dir, normalized, remove_existing=True)
     return normalized
 
 

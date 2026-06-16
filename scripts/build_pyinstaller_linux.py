@@ -38,6 +38,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from packaging_common import require_tool
+
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -45,14 +47,6 @@ EXIT_ERROR = 1
 PACKAGE_NAME = "ecli"
 MAIN_SCRIPT = "main.py"
 SPEC_FILE = Path("packaging/pyinstaller/ecli.spec")
-
-
-def require_tool(name: str) -> bool:
-    """Return True if ``name`` is on PATH; otherwise print an error and False."""
-    if shutil.which(name) is None:
-        print(f"ERR: missing required tool: {name}", file=sys.stderr)
-        return False
-    return True
 
 
 def require_python_module(module: str) -> bool:

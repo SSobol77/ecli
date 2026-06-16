@@ -39,6 +39,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from packaging_common import install_docs, install_file, write_sha256
+
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -60,12 +62,6 @@ def normalize_arch() -> str:
     if raw in ("aarch64", "arm64"):
         return "aarch64"
     return raw
-
-
-def install_file(src: Path, dst: Path, mode: int) -> None:
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
-    dst.chmod(mode)
 
 
 def find_executable(root: Path) -> Path | None:
@@ -163,11 +159,11 @@ def main(argv: list[str] | None = None) -> int:
         staging_root / "usr/share/icons/hicolor/256x256/apps" / f"{PACKAGE_NAME}.png",
         0o644,
     )
-    doc_dir = staging_root / f"usr/doc/{PACKAGE_NAME}-{version}"
-    if (root / "LICENSE").is_file():
-        install_file(root / "LICENSE", doc_dir / "LICENSE", 0o644)
-    if (root / README_FILE).is_file():
-        install_file(root / README_FILE, doc_dir / README_FILE, 0o644)
+    install_docs(
+        root,
+        staging_root / f"usr/doc/{PACKAGE_NAME}-{version}",
+        ("LICENSE", README_FILE),
+    )
 
     (staging_root / "install" / "slack-desc").write_text(slack_desc(), encoding="utf-8")
 
@@ -181,16 +177,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     print("==> Writing checksum")
-    result = subprocess.run(
-        ["sha256sum", final_txz.name],
-        cwd=releases_dir,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    (releases_dir / f"{final_txz.name}.sha256").write_text(
-        result.stdout, encoding="utf-8"
-    )
+    write_sha256(releases_dir, final_txz)
     subprocess.run(
         [sys.executable, "scripts/verify_runtime.py", str(final_txz)],
         cwd=root,

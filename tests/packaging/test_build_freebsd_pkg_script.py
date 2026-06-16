@@ -52,6 +52,8 @@ def test_normalize_arch(fpkg: ModuleType, monkeypatch: pytest.MonkeyPatch) -> No
     import os
 
     monkeypatch.setattr(
-        fpkg.os, "uname", lambda: os.uname_result(("FreeBSD", "h", "r", "v", "arm64"))
+        fpkg.normalize_arch.__globals__["os"],
+        "uname",
+        lambda: os.uname_result(("FreeBSD", "h", "r", "v", "arm64")),
     )
     assert fpkg.normalize_arch() == "arm64"

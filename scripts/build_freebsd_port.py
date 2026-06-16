@@ -43,6 +43,8 @@ import tempfile
 import tomllib
 from pathlib import Path
 
+from packaging_common import filename_arch, write_sha256
+
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -64,20 +66,12 @@ HOST_DEPS = (
     "ncurses",
     "libyaml",
 )
+normalize_arch = filename_arch
 
 
 def read_version(root: Path) -> str:
     with (root / "pyproject.toml").open("rb") as handle:
         return tomllib.load(handle)["project"]["version"]
-
-
-def normalize_arch() -> str:
-    raw = os.uname().machine
-    if raw in ("amd64", "x86_64"):
-        return "x86_64"
-    if raw in ("aarch64", "arm64"):
-        return "arm64"
-    return raw
 
 
 def port_makefile(version: str, dist_dir: Path) -> str:
@@ -159,28 +153,6 @@ PKG_DESCR = (
 )
 
 
-def write_sha256(releases_dir: Path, artifact: Path) -> None:
-    name = artifact.name
-    if shutil.which("sha256"):
-        digest = subprocess.run(
-            ["sha256", "-q", str(artifact)], capture_output=True, text=True, check=True
-        ).stdout.strip()
-        (releases_dir / f"{name}.sha256").write_text(
-            f"{digest}  {name}\n", encoding="utf-8"
-        )
-    elif shutil.which("shasum"):
-        result = subprocess.run(
-            ["shasum", "-a", "256", name],
-            cwd=releases_dir,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        (releases_dir / f"{name}.sha256").write_text(result.stdout, encoding="utf-8")
-    else:
-        print("WARN No sha256/shasum available; skipping checksum.", file=sys.stderr)
-
-
 def prepare_dist_dir(root: Path) -> Path:
     """Return an owner-controlled repository build directory for ports distfiles."""
     build_dir = root / "build"
@@ -248,7 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     print(f"OK  Version: {version}")
 
     portdir = Path("/usr/ports") / PORT_CAT / PORT_NAME
-    arch = normalize_arch()
+    arch = filename_arch()
 
     if not Path("/usr/ports").is_dir():
         print("ERR Ports tree is required.", file=sys.stderr)
@@ -324,7 +296,7 @@ def main(argv: list[str] | None = None) -> int:
     (releases_dir / ".freebsd.env").write_text(
         f"FREEBSD_ARCH := {arch}\n", encoding="utf-8"
     )
-    write_sha256(releases_dir, dest_pkg)
+    write_sha256(releases_dir, dest_pkg, prefer_freebsd_sha256=True)
 
     print(f"OK  Copied & renamed -> {dest_pkg}")
     subprocess.run(["pkg", "info", "-F", str(dest_pkg)], check=False)

@@ -32,7 +32,6 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import gzip
 import os
 import shutil
 import subprocess
@@ -40,6 +39,17 @@ import sys
 import tomllib
 from datetime import datetime
 from pathlib import Path
+
+from packaging_common import (
+    filename_arch,
+    gzip_file,
+    install_desktop_entry,
+    install_docs,
+    install_file,
+    install_icon,
+    require_tool,
+    write_sha256,
+)
 
 
 EXIT_OK = 0
@@ -68,35 +78,6 @@ def python_bin() -> str:
 def read_version(root: Path) -> str:
     with (root / "pyproject.toml").open("rb") as handle:
         return tomllib.load(handle)["project"]["version"]
-
-
-def filename_arch() -> str:
-    raw = os.uname().machine
-    if raw in ("amd64", "x86_64"):
-        return "x86_64"
-    if raw in ("aarch64", "arm64"):
-        return "arm64"
-    return raw
-
-
-def require_tool(name: str) -> bool:
-    if shutil.which(name) is None:
-        print(f"ERROR: Missing required tool: {name}", file=sys.stderr)
-        return False
-    return True
-
-
-def install_file(src: Path, dst: Path, mode: int) -> None:
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
-    dst.chmod(mode)
-
-
-def gzip_file(path: Path, level: int = 9) -> Path:
-    gz = path.with_name(path.name + ".gz")
-    gz.write_bytes(gzip.compress(path.read_bytes(), compresslevel=level, mtime=0))
-    path.unlink()
-    return gz
 
 
 def desktop_entry() -> str:
@@ -214,26 +195,21 @@ def stage_payload(root: Path, staging: Path, executable: Path, version: str) -> 
 
     install_file(executable, staging / "usr/bin" / PACKAGE_NAME, 0o755)
 
-    desktop_src = root / "packaging/linux/fpm-common" / f"{PACKAGE_NAME}.desktop"
-    desktop_dst = staging / "usr/share/applications" / f"{PACKAGE_NAME}.desktop"
-    if desktop_src.is_file():
-        install_file(desktop_src, desktop_dst, 0o644)
-    else:
-        desktop_dst.write_text(desktop_entry(), encoding="utf-8")
-
-    icon_src = root / "src/ecli/assets/ecli.png"
-    if icon_src.is_file():
-        install_file(
-            icon_src,
-            staging / "usr/share/icons/hicolor/256x256/apps" / f"{PACKAGE_NAME}.png",
-            0o644,
-        )
+    install_desktop_entry(
+        root,
+        staging / "usr/share/applications" / f"{PACKAGE_NAME}.desktop",
+        PACKAGE_NAME,
+        desktop_entry(),
+    )
+    install_icon(
+        root,
+        staging / "usr/share/icons/hicolor/256x256/apps" / f"{PACKAGE_NAME}.png",
+    )
 
     doc_dir = staging / "usr/share/doc" / PACKAGE_NAME
+    install_docs(root, doc_dir)
     for name in ("LICENSE", "README.md"):
-        src = root / name
-        if src.is_file():
-            install_file(src, doc_dir / name, 0o644)
+        if (doc_dir / name).is_file():
             gzip_file(doc_dir / name)
 
     man_dst = staging / "usr/share/man/man1" / f"{PACKAGE_NAME}.1"
@@ -290,33 +266,6 @@ def build_fpm_command(staging: Path, version: str, final_deb: Path) -> list[str]
         "usr",
     ]
     return cmd
-
-
-def write_sha256(releases_dir: Path, artifact: Path) -> None:
-    name = artifact.name
-    if shutil.which("sha256sum"):
-        result = subprocess.run(
-            ["sha256sum", name],
-            cwd=releases_dir,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        (releases_dir / f"{name}.sha256").write_text(result.stdout, encoding="utf-8")
-    elif shutil.which("shasum"):
-        result = subprocess.run(
-            ["shasum", "-a", "256", name],
-            cwd=releases_dir,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        (releases_dir / f"{name}.sha256").write_text(result.stdout, encoding="utf-8")
-    else:
-        print(
-            "WARNING: no sha256 tool found (sha256sum/shasum). Skipping checksum.",
-            file=sys.stderr,
-        )
 
 
 def main(argv: list[str] | None = None) -> int:

@@ -33,7 +33,9 @@ def test_filename_arch(deb: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None
     import os
 
     monkeypatch.setattr(
-        deb.os, "uname", lambda: os.uname_result(("Linux", "h", "r", "v", "aarch64"))
+        deb.filename_arch.__globals__["os"],
+        "uname",
+        lambda: os.uname_result(("Linux", "h", "r", "v", "aarch64")),
     )
     assert deb.filename_arch() == "arm64"
 

@@ -32,7 +32,7 @@ def freebsd(repo_root: Path) -> ModuleType:
 
 def test_normalize_arch(freebsd: ModuleType, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        freebsd.os,
+        freebsd.normalize_arch.__globals__["os"],
         "uname",
         lambda: os.uname_result(("FreeBSD", "h", "r", "v", "amd64")),
     )

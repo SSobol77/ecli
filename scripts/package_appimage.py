@@ -46,6 +46,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from packaging_common import install_file, normalize_arch
+
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -55,20 +57,6 @@ EXIT_VERSION_MISMATCH = 2
 def read_version(root: Path) -> str:
     with (root / "pyproject.toml").open("rb") as handle:
         return tomllib.load(handle)["project"]["version"]
-
-
-def normalize_arch(raw: str) -> str:
-    if raw in ("amd64", "x86_64"):
-        return "x86_64"
-    if raw in ("aarch64", "arm64"):
-        return "arm64"
-    return raw
-
-
-def install_file(src: Path, dst: Path, mode: int) -> None:
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
-    dst.chmod(mode)
 
 
 def find_executable(root: Path) -> Path | None:

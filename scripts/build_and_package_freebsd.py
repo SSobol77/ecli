@@ -33,7 +33,6 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import gzip
 import os
 import shutil
 import subprocess
@@ -42,6 +41,16 @@ import time
 import tomllib
 from datetime import datetime
 from pathlib import Path
+
+from packaging_common import (
+    filename_arch,
+    gzip_file,
+    install_desktop_entry,
+    install_docs,
+    install_file,
+    install_icon,
+    write_sha256,
+)
 
 
 EXIT_OK = 0
@@ -86,6 +95,8 @@ PIP_PACKAGES = (
     "PyYAML",
 )
 
+normalize_arch = filename_arch
+
 
 def python_bin() -> str:
     return os.environ.get("PYTHON", "python3.11")
@@ -94,15 +105,6 @@ def python_bin() -> str:
 def read_version(root: Path) -> str:
     with (root / "pyproject.toml").open("rb") as handle:
         return tomllib.load(handle)["project"]["version"]
-
-
-def normalize_arch() -> str:
-    raw = os.uname().machine
-    if raw in ("amd64", "x86_64"):
-        return "x86_64"
-    if raw in ("aarch64", "arm64"):
-        return "arm64"
-    return raw
 
 
 def install_system_dependencies() -> bool:
@@ -277,6 +279,20 @@ def man_page(version: str) -> str:
     )
 
 
+def desktop_entry() -> str:
+    return (
+        "[Desktop Entry]\n"
+        "Name=ECLI\n"
+        "Comment=Terminal-first engineering operations workbench\n"
+        f"Exec={PACKAGE_NAME}\n"
+        f"Icon={PACKAGE_NAME}\n"
+        "Terminal=true\n"
+        "Type=Application\n"
+        "Categories=Development;IDE;Utility;\n"
+        "StartupNotify=false\n"
+    )
+
+
 def stage_files(root: Path, executable: Path, version: str) -> Path:
     staging_root = root / "build" / "freebsd_pkg_staging"
     meta_dir = root / "build" / "freebsd_pkg_meta"
@@ -293,59 +309,30 @@ def stage_files(root: Path, executable: Path, version: str) -> Path:
         (staging_root / sub).mkdir(parents=True, exist_ok=True)
     meta_dir.mkdir(parents=True, exist_ok=True)
 
-    bin_dst = staging_root / "usr/local/bin" / PACKAGE_NAME
-    shutil.copy2(executable, bin_dst)
-    bin_dst.chmod(0o755)
+    install_file(executable, staging_root / "usr/local/bin" / PACKAGE_NAME, 0o755)
 
-    desktop_src = root / "packaging/linux/fpm-common" / f"{PACKAGE_NAME}.desktop"
-    desktop_dst = (
-        staging_root / "usr/local/share/applications" / f"{PACKAGE_NAME}.desktop"
+    install_desktop_entry(
+        root,
+        staging_root / "usr/local/share/applications" / f"{PACKAGE_NAME}.desktop",
+        PACKAGE_NAME,
+        desktop_entry(),
     )
-    if desktop_src.is_file():
-        shutil.copy2(desktop_src, desktop_dst)
-        desktop_dst.chmod(0o644)
-    else:
-        desktop_dst.write_text(
-            "[Desktop Entry]\n"
-            "Name=ECLI\n"
-            "Comment=Terminal-first engineering operations workbench\n"
-            f"Exec={PACKAGE_NAME}\n"
-            f"Icon={PACKAGE_NAME}\n"
-            "Terminal=true\n"
-            "Type=Application\n"
-            "Categories=Development;IDE;Utility;\n"
-            "StartupNotify=false\n",
-            encoding="utf-8",
-        )
 
-    icon_src = root / "src/ecli/assets/ecli.png"
-    if icon_src.is_file():
-        icon_dst = (
-            staging_root
-            / "usr/local/share/icons/hicolor/256x256/apps"
-            / f"{PACKAGE_NAME}.png"
-        )
-        shutil.copy2(icon_src, icon_dst)
-        icon_dst.chmod(0o644)
-
-    doc_dir = staging_root / "usr/local/share/doc" / PACKAGE_NAME
-    for name in ("LICENSE", "README.md"):
-        src = root / name
-        if src.is_file():
-            dst = doc_dir / name
-            shutil.copy2(src, dst)
-            dst.chmod(0o644)
+    install_icon(
+        root,
+        staging_root
+        / "usr/local/share/icons/hicolor/256x256/apps"
+        / f"{PACKAGE_NAME}.png",
+    )
+    install_docs(root, staging_root / "usr/local/share/doc" / PACKAGE_NAME)
 
     man_dst = staging_root / "usr/local/man/man1" / f"{PACKAGE_NAME}.1"
     repo_man = root / "man" / f"{PACKAGE_NAME}.1"
     if repo_man.is_file():
-        shutil.copy2(repo_man, man_dst)
-        man_dst.chmod(0o644)
+        install_file(repo_man, man_dst, 0o644)
     else:
         man_dst.write_text(man_page(version), encoding="utf-8")
-    gz = man_dst.with_name(man_dst.name + ".gz")
-    gz.write_bytes(gzip.compress(man_dst.read_bytes(), compresslevel=9, mtime=0))
-    man_dst.unlink()
+    gzip_file(man_dst)
 
     return staging_root
 
@@ -414,7 +401,7 @@ def make_pkg(root: Path, staging_root: Path, version: str) -> Path | None:
         check=True,
     )
 
-    arch = normalize_arch()
+    arch = filename_arch()
     candidates = sorted(releases_dir.glob(f"{PACKAGE_NAME}-{version}*.pkg"))
     if not candidates:
         print("ERROR: pkg create did not produce a .pkg file", file=sys.stderr)
@@ -427,30 +414,8 @@ def make_pkg(root: Path, staging_root: Path, version: str) -> Path | None:
         f"FREEBSD_ARCH := {arch}\n", encoding="utf-8"
     )
 
-    write_freebsd_sha256(releases_dir, dest_pkg)
+    write_sha256(releases_dir, dest_pkg, prefer_freebsd_sha256=True)
     return dest_pkg
-
-
-def write_freebsd_sha256(releases_dir: Path, artifact: Path) -> None:
-    name = artifact.name
-    if shutil.which("sha256"):
-        digest = subprocess.run(
-            ["sha256", "-q", str(artifact)], capture_output=True, text=True, check=True
-        ).stdout.strip()
-        (releases_dir / f"{name}.sha256").write_text(
-            f"{digest}  {name}\n", encoding="utf-8"
-        )
-    elif shutil.which("shasum"):
-        result = subprocess.run(
-            ["shasum", "-a", "256", name],
-            cwd=releases_dir,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        (releases_dir / f"{name}.sha256").write_text(result.stdout, encoding="utf-8")
-    else:
-        print("WARN: No sha256/shasum available; skipping checksum.", file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:

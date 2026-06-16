@@ -14,6 +14,7 @@
 from __future__ import annotations
 
 import importlib.util
+import sys
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
@@ -409,7 +410,15 @@ def load_script_module(
         f"could not load script module: {relative_path}"
     )
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    script_dir = str(script_path.parent)
+    inserted = script_dir not in sys.path
+    if inserted:
+        sys.path.insert(0, script_dir)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        if inserted:
+            sys.path.remove(script_dir)
     return module
 
 

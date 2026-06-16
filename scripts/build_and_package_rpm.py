@@ -40,7 +40,6 @@ Exit codes:
 from __future__ import annotations
 
 import argparse
-import gzip
 import os
 import shutil
 import subprocess
@@ -48,6 +47,17 @@ import sys
 import tomllib
 from datetime import datetime
 from pathlib import Path
+
+from packaging_common import (
+    filename_arch,
+    gzip_file,
+    install_desktop_entry,
+    install_docs,
+    install_file,
+    install_icon,
+    require_tool,
+    write_sha256,
+)
 
 
 EXIT_OK = 0
@@ -62,38 +72,12 @@ def python_bin() -> str:
     return env("PYTHON", "python3.11")
 
 
+normalized_arch = filename_arch
+
+
 def read_version(root: Path) -> str:
     with (root / "pyproject.toml").open("rb") as handle:
         return tomllib.load(handle)["project"]["version"]
-
-
-def normalized_arch() -> str:
-    raw = os.uname().machine
-    if raw in ("amd64", "x86_64"):
-        return "x86_64"
-    if raw in ("aarch64", "arm64"):
-        return "arm64"
-    return raw
-
-
-def require_tool(name: str) -> bool:
-    if shutil.which(name) is None:
-        print(f"ERROR: Missing required tool: {name}", file=sys.stderr)
-        return False
-    return True
-
-
-def install_file(src: Path, dst: Path, mode: int) -> None:
-    dst.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(src, dst)
-    dst.chmod(mode)
-
-
-def gzip_file(path: Path, level: int = 9) -> Path:
-    gz = path.with_name(path.name + ".gz")
-    gz.write_bytes(gzip.compress(path.read_bytes(), compresslevel=level, mtime=0))
-    path.unlink()
-    return gz
 
 
 def desktop_entry(package_name: str) -> str:
@@ -217,22 +201,17 @@ def stage_payload(
 
     install_file(executable, bin_dir / package_name, 0o755)
 
-    desktop_src = root / "packaging/linux/fpm-common" / f"{package_name}.desktop"
-    if desktop_src.is_file():
-        install_file(desktop_src, apps_dir / f"{package_name}.desktop", 0o644)
-    else:
-        (apps_dir / f"{package_name}.desktop").write_text(
-            desktop_entry(package_name), encoding="utf-8"
-        )
+    install_desktop_entry(
+        root,
+        apps_dir / f"{package_name}.desktop",
+        package_name,
+        desktop_entry(package_name),
+    )
+    install_icon(root, icon_dir / f"{package_name}.png")
 
-    icon_src = root / "src/ecli/assets/ecli.png"
-    if icon_src.is_file():
-        install_file(icon_src, icon_dir / f"{package_name}.png", 0o644)
-
+    install_docs(root, doc_dir)
     for name in ("LICENSE", "README.md"):
-        src = root / name
-        if src.is_file():
-            install_file(src, doc_dir / name, 0o644)
+        if (doc_dir / name).is_file():
             gzip_file(doc_dir / name)
 
     man_dst = man_dir / f"{package_name}.1"
@@ -302,33 +281,6 @@ def build_fpm_command(
     return cmd
 
 
-def write_sha256(releases_dir: Path, artifact: Path) -> None:
-    name = artifact.name
-    if shutil.which("sha256sum"):
-        result = subprocess.run(
-            ["sha256sum", name],
-            cwd=releases_dir,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        (releases_dir / f"{name}.sha256").write_text(result.stdout, encoding="utf-8")
-    elif shutil.which("shasum"):
-        result = subprocess.run(
-            ["shasum", "-a", "256", name],
-            cwd=releases_dir,
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        (releases_dir / f"{name}.sha256").write_text(result.stdout, encoding="utf-8")
-    else:
-        print(
-            "WARNING: no sha256 tool found (sha256sum/shasum). Skipping checksum.",
-            file=sys.stderr,
-        )
-
-
 def main(argv: list[str] | None = None) -> int:
     """Build the RPM and verify it; return the exit code."""
     parser = argparse.ArgumentParser(
@@ -345,7 +297,7 @@ def main(argv: list[str] | None = None) -> int:
     category = env("CATEGORY", "editors")
     platform_label = env("RPM_PLATFORM_LABEL", "linux")
     depends = [d for d in env("RPM_DEPENDS", "ncurses-libs;libyaml").split(";") if d]
-    arch = normalized_arch()
+    arch = filename_arch()
 
     version = read_version(root)
     print(f"==> Version: {version}")

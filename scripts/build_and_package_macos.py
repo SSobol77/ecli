@@ -45,6 +45,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from packaging_common import require_tool
+
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -63,13 +65,6 @@ def python_bin() -> str:
 def read_version(root: Path) -> str:
     with (root / "pyproject.toml").open("rb") as handle:
         return tomllib.load(handle)["project"]["version"]
-
-
-def require_tool(name: str) -> bool:
-    if shutil.which(name) is None:
-        print(f"ERR Missing required tool: {name}", file=sys.stderr)
-        return False
-    return True
 
 
 def build_arch(root: Path, spec: Path, arch_name: str, arch_flag: str) -> Path | None:
@@ -351,7 +346,9 @@ def create_dmg(
     dmg_tmp.unlink(missing_ok=True)
 
 
-def write_sha256_sidecar(releases_dir: Path, dmg_path: Path, sha_path: Path) -> None:
+def write_macos_sha256_sidecar(
+    releases_dir: Path, dmg_path: Path, sha_path: Path
+) -> None:
     print("==> Writing SHA256 sidecar...")
     result = subprocess.run(
         ["shasum", "-a", "256", dmg_path.name],
@@ -422,7 +419,7 @@ def main(argv: list[str] | None = None) -> int:
     dmg_staging = root / "build" / "macos_dmg"
     stage_dmg_tree(root, dmg_staging, universal_bin, version)
     create_dmg(root, dmg_staging, dmg_path, sha_path, pkg_base, version)
-    write_sha256_sidecar(releases_dir, dmg_path, sha_path)
+    write_macos_sha256_sidecar(releases_dir, dmg_path, sha_path)
 
     if not dmg_path.is_file():
         print(f"ERR Missing {dmg_path}", file=sys.stderr)

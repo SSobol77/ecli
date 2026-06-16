@@ -39,6 +39,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from packaging_common import write_sha256
+
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -59,19 +61,6 @@ def normalize_arch() -> str:
     if raw in ("aarch64", "arm64"):
         return "aarch64"
     return raw
-
-
-def write_sha256(releases_dir: Path, artifact_name: str) -> None:
-    result = subprocess.run(
-        ["sha256sum", artifact_name],
-        cwd=releases_dir,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    (releases_dir / f"{artifact_name}.sha256").write_text(
-        result.stdout, encoding="utf-8"
-    )
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -132,7 +121,7 @@ def main(argv: list[str] | None = None) -> int:
     shutil.copy2(raw_artifact, normalized)
 
     print("==> Writing checksum")
-    write_sha256(releases_dir, normalized.name)
+    write_sha256(releases_dir, normalized)
     subprocess.run(
         [sys.executable, "scripts/verify_runtime.py", str(normalized)],
         cwd=root,

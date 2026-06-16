@@ -61,6 +61,8 @@ def test_normalize_arch(port: ModuleType, monkeypatch: pytest.MonkeyPatch) -> No
     import os
 
     monkeypatch.setattr(
-        port.os, "uname", lambda: os.uname_result(("FreeBSD", "h", "r", "v", "amd64"))
+        port.normalize_arch.__globals__["os"],
+        "uname",
+        lambda: os.uname_result(("FreeBSD", "h", "r", "v", "amd64")),
     )
     assert port.normalize_arch() == "x86_64"

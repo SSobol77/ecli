@@ -67,6 +67,8 @@ def test_normalized_arch(rpm: ModuleType, monkeypatch: pytest.MonkeyPatch) -> No
     import os
 
     monkeypatch.setattr(
-        rpm.os, "uname", lambda: os.uname_result(("Linux", "h", "r", "v", "x86_64"))
+        rpm.normalized_arch.__globals__["os"],
+        "uname",
+        lambda: os.uname_result(("Linux", "h", "r", "v", "x86_64")),
     )
     assert rpm.normalized_arch() == "x86_64"
