@@ -63,6 +63,11 @@ For mypy, highlight P0-related errors separately, especially History.py. For pyt
 
 Do not run git commit, git push, git tag, GitHub write commands, workflow triggers, GitHub release commands, release targets, publish targets, artifact upload commands, twine upload, uv publish, or python -m twine upload.
 
+`Taskfile.yml` is optional developer convenience only. You may use `task` only
+when it delegates to existing Makefile targets. Makefile remains the
+authoritative build/release contract, release/publish tasks must remain guarded,
+and packaging scripts must remain Python entrypoints under `scripts/*.py`.
+
 If a report file is needed, print Markdown only; the maintainer redirects stdout to the target file.
 
 Finish with:

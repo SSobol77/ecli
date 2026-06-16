@@ -29,6 +29,7 @@ See the LICENSE file in the project root for full license text.
 |---|---:|---|---|
 | Python 3.11+ | Yes | runtime and build scripts | all platforms |
 | `uv` | Recommended | deterministic dependency workflow | all platforms |
+| `task` | Optional | developer convenience wrapper over Makefile targets | all platforms |
 | `pipx` | Optional | convenient tool installation | all platforms |
 | `ruff` / `pytest` toolchain | Role-dependent | local validation | maintainer-focused |
 | `twine` | Release-only | PyPI artifact validation in `make validate-gate2` | install via `.[release]`, `.[dev]`, or `requirements-dev.txt` |
@@ -49,6 +50,16 @@ See the LICENSE file in the project root for full license text.
    - `uv sync`
 5. Runtime sanity:
    - `python main.py`
+
+## Command Surface
+
+Makefile remains the authoritative build/release contract. Use `make help`,
+`make help-full`, `make doctor`, and `make sysinfo` for canonical discovery.
+`Taskfile.yml` is an optional developer convenience wrapper for common commands
+such as `task help`, `task validate`, and `task validate-packaging`; it must
+delegate to existing Makefile targets and must not define Taskfile-only release
+or packaging behavior. CI and release gates continue to rely on the existing
+canonical command surfaces.
 
 ## Optional Setup by Role
 

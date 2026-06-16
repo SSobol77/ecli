@@ -221,3 +221,10 @@ Maintainer-owned release/upload Make targets are guarded. Set
 `ECLI_ALLOW_RELEASE=1` only when intentionally running targets such as
 `release-deb`, `release-rpm`, `release-appimage`, `release-freebsd`,
 `release-macos`, `release-windows`, or `publish-all`.
+
+`Taskfile.yml` may expose convenience tasks such as `task publish-all`,
+`task release-linux`, `task release-freebsd`, `task release-macos`,
+`task release-windows`, and `task release-pypi`, but those tasks must only wrap
+the existing Makefile targets and preserve their guard behavior. Makefile
+remains the authoritative build/release contract; CI and release gates continue
+to rely on the existing canonical command surfaces.

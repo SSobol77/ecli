@@ -162,6 +162,13 @@ The root `Makefile` is the primary Codex-inspectable command surface. Use
 `make sysinfo` for read-only discovery. Do not run maintainer-owned
 release/upload targets; they are guarded and remain outside Codex execution.
 
+`Taskfile.yml` may be used only as an optional developer convenience wrapper
+around existing Makefile targets. Codex must not introduce Taskfile-only
+build/release behavior, must not weaken release/publish guards, and must keep
+packaging scripts as Python entrypoints under `scripts/*.py`. Makefile remains
+the authoritative build/release contract; CI and release gates continue to use
+the existing canonical command surfaces.
+
 ## Rendering policy
 
 Rendering work is Stage-2-locked unless the maintainer explicitly approves a narrow Stage 1b fix.

@@ -64,6 +64,15 @@ map, `make list-targets` for public target discovery, `make doctor` for local
 tool availability, and `make sysinfo` for configured package variables.
 Maintainer-owned release/upload targets require `ECLI_ALLOW_RELEASE=1`.
 
+`Taskfile.yml` is an optional developer convenience wrapper. It may expose
+developer-friendly commands such as `task help`, `task validate-packaging`, and
+`task package-linux`, but those commands must delegate to existing Makefile
+targets. Makefile remains the authoritative build/release contract; CI and
+release gates continue to rely on Makefile, canonical Python scripts under
+`scripts/*.py`, and workflow-defined gates. Taskfile tasks must not redefine
+artifact names, bypass guarded release/publish targets, or call removed shell
+wrappers.
+
 ## Linux
 
 - DEB flow: `scripts/build_and_package_deb.py`

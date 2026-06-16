@@ -41,6 +41,14 @@ The orchestrator must not bypass `.claude/settings.local.json`.
 
 The orchestrator must not publish, upload, tag, push, commit, trigger release workflows, or run release/publish targets.
 
+`Taskfile.yml` is optional developer convenience only. Claude Code and its
+subagents may use `task` only when it delegates to existing Makefile targets.
+Makefile remains the authoritative build/release contract; do not replace
+Makefile targets with Taskfile-only behavior. Release/publish tasks must remain
+guarded, CI and release gates continue to rely on canonical Makefile/workflow
+surfaces, and packaging scripts must remain Python entrypoints under
+`scripts/*.py`.
+
 ## 2. Required operating model
 
 Claude Code must:

@@ -1,0 +1,135 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Project: Ecli
+# File: Taskfile.yml
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+#
+# Copyright (c) 2026 Siergej Sobolewski
+#
+# Licensed under the GNU General Public License version 2 only.
+# See the LICENSE file in the project root for full license text.
+
+version: "3"
+
+# Optional developer convenience wrapper.
+# The root Makefile remains the authoritative build/release contract.
+
+tasks:
+  help:
+    desc: Show the canonical Makefile command surface.
+    cmds:
+      - make help
+
+  install:
+    desc: Install development dependencies through the Makefile.
+    cmds:
+      - make install
+
+  run:
+    desc: Run ECLI from source through the Makefile.
+    cmds:
+      - make run
+
+  validate:
+    desc: Run the default local validation target.
+    cmds:
+      - make validate
+
+  validate-fast:
+    desc: Run fast local validation.
+    cmds:
+      - make validate-fast
+
+  validate-full:
+    desc: Run full local validation.
+    cmds:
+      - make validate-full
+
+  validate-packaging:
+    desc: Run packaging contract validation.
+    cmds:
+      - make validate-packaging
+
+  doctor:
+    desc: Inspect local tool availability.
+    cmds:
+      - make doctor
+
+  show-artifacts:
+    desc: Show built artifact summary.
+    cmds:
+      - make show-artifacts
+
+  clean:
+    desc: Remove local build and cache outputs.
+    cmds:
+      - make clean
+
+  package-pypi:
+    desc: Build PyPI wheel and source distribution through the Makefile.
+    cmds:
+      - make package-pypi
+
+  package-linux:
+    desc: Build the Linux package group through the Makefile.
+    cmds:
+      - make package-linux
+
+  package-freebsd:
+    desc: Build the native FreeBSD package through the Makefile.
+    cmds:
+      - make package-freebsd
+
+  package-macos:
+    desc: Build macOS artifacts through the Makefile.
+    cmds:
+      - make package-macos
+
+  package-windows:
+    desc: Build Windows artifacts through the Makefile.
+    cmds:
+      - make package-windows
+
+  package-nix:
+    desc: Build Nix outputs through the Makefile.
+    cmds:
+      - make package-nix
+
+  publish-pypi:
+    desc: Run the existing maintainer-owned PyPI publish guard.
+    cmds:
+      - make publish-pypi
+
+  publish-all:
+    desc: Run the existing guarded aggregate publish target.
+    cmds:
+      - make publish-all
+
+  release-linux:
+    desc: Run existing guarded Linux GitHub release upload targets.
+    cmds:
+      - make release-deb
+      - make release-rpm
+      - make release-appimage
+
+  release-freebsd:
+    desc: Run the existing guarded FreeBSD release upload target.
+    cmds:
+      - make release-freebsd
+
+  release-macos:
+    desc: Run the existing guarded macOS release upload target.
+    cmds:
+      - make release-macos
+
+  release-windows:
+    desc: Run the existing guarded Windows release upload target.
+    cmds:
+      - make release-windows
+
+  release-pypi:
+    desc: Run the existing maintainer-owned PyPI publish guard.
+    cmds:
+      - make publish-pypi

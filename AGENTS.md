@@ -401,6 +401,13 @@ without building packages, and `make sysinfo` prints configured package
 variables. Release/upload Make targets are maintainer-owned and require an
 explicit confirmation guard.
 
+`Taskfile.yml` is an optional developer convenience wrapper only. Agents may use
+`task` when it delegates to existing `make` targets, but must not replace
+Makefile targets with Taskfile-only behavior. Makefile remains the authoritative
+build/release contract; CI and release gates continue to rely on the existing
+canonical command surfaces. Release/publish tasks must remain guarded, and
+packaging scripts must remain Python entrypoints under `scripts/*.py`.
+
 Do not use bare `python` when the repository workflow expects `uv run python`.
 
 Do not use broad commands such as:
