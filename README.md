@@ -362,6 +362,12 @@ make run
 make help              # See all available build targets
 ```
 
+`Taskfile.yml` is available as an optional developer convenience wrapper for
+common local commands such as `task help`, `task validate`, and
+`task validate-packaging`. Makefile remains the authoritative build/release
+contract; CI and release gates continue to rely on the existing canonical
+command surfaces.
+
 ### Build System
 
 ECLI features a comprehensive multi-platform build system. For detailed information:
@@ -375,6 +381,7 @@ ECLI features a comprehensive multi-platform build system. For detailed informat
 ```bash
 # Display all available build targets
 make help
+task help              # Optional wrapper; delegates to make help
 
 # Check system capabilities and available tools
 make sysinfo
@@ -386,7 +393,7 @@ make package-macos      # macOS DMG
 make package-windows    # Windows portable EXE + installer
 make package-freebsd    # FreeBSD package
 
-# Release to GitHub (requires GitHub CLI)
+# Maintainer-owned guarded release/publish flow
 make publish-all
 ```
 

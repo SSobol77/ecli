@@ -74,6 +74,11 @@ make test
 make lint
 ```
 
+`task help` and other Taskfile commands may be used only as optional developer
+convenience wrappers when they delegate to existing Makefile targets. Makefile
+remains the authoritative build/release contract; do not replace Makefile
+validation, packaging, or release behavior with Taskfile-only commands.
+
 Packaging script-migration and log-invariant checks (read-only, non-publishing):
 
 ```sh
