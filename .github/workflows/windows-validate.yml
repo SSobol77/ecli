@@ -23,7 +23,7 @@ name: Windows Contract Validate
       - "pyproject.toml"
       - "scripts/build-and-package-windows.ps1"
       - "scripts/check_runtime_imports.py"
-      - "scripts/verify_runtime.sh"
+      - "scripts/verify_runtime.py"
       - "packaging/windows/**"
       - "packaging/pyinstaller/ecli.spec"
       - "src/**"

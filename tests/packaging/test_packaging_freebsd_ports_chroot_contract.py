@@ -46,7 +46,8 @@ def test_freebsd_ports_chroot_paths_and_make_targets(
     read_repo_text: RepoReader,
     assert_tokens_present: TokenAssertion,
 ) -> None:
-    port_script = read_repo_text("scripts/build_freebsd_port.sh")
+    # Canonical implementation is the Python entrypoint.
+    port_script = read_repo_text("scripts/build_freebsd_port.py")
     chroot_script = read_repo_text("tools/freebsd-chroot-build.sh")
     makefile = read_repo_text("Makefile")
 

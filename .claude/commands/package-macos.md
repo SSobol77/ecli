@@ -57,7 +57,7 @@ Inspect when present:
 
 ```text
 main.py
-scripts/build-and-package-macos.sh
+scripts/build_and_package_macos.py   # canonical Python entrypoint
 packaging/pyinstaller/ecli.spec
 .github/workflows/macos-dmg.yml
 .github/workflows/macos-validate.yml

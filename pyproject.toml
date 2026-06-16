@@ -190,9 +190,15 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**/*.py" = ["D100", "D101", "D102", "D103", "D104", "F401", "E402"]
+"tests/**/*.py" = ["D100", "D101", "D102", "D103", "D104", "F401", "E402", "PLC0415"]
 "src/ecli/__init__.py" = ["F401"]
 "src/ecli/__main__.py" = ["C901", "D100", "D212", "I001"]
+# Packaging/build orchestration scripts are procedural by design: many small
+# self-evident helpers and multi-step build flows with several guard returns
+# (mirroring the legacy shell). Exempt them from docstring-per-helper and the
+# complexity family, consistent with the __main__.py entrypoint exception. The
+# canonical module docstrings document each script's full contract.
+"scripts/*.py" = ["D103", "C901", "PLR0911", "PLR0912", "PLR0913", "PLR0915"]
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"

@@ -44,8 +44,9 @@ def test_appimage_script_uses_canonical_naming(
     read_repo_text: RepoReader,
     assert_tokens_present: TokenAssertion,
 ) -> None:
-    script = read_repo_text("scripts/package_appimage.sh")
-    assert_tokens_present(script, ["ecli_${VERSION}_linux_${ARCH}.AppImage"])
+    # Canonical implementation is the Python entrypoint.
+    script = read_repo_text("scripts/package_appimage.py")
+    assert_tokens_present(script, ["ecli_{version}_linux_{arch}.AppImage"])
 
 
 def test_appimage_generated_staging_paths_are_not_release_contract_surfaces(

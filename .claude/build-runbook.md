@@ -75,6 +75,27 @@ Publishing attempted: no
 Notes:
 ```
 
+## Shell-to-Python script migration
+
+Active build, packaging, verification, and release-helper scripts under
+`scripts/` have been migrated to standard-library Python without changing the
+release contract. The migration is **complete**: no active shell wrapper remains
+under `scripts/`. Canonical Python implementations include verification:
+`scripts/verify_artifact.py` exit codes `0`–`5`, `scripts/sign_checksums.py`,
+`scripts/check_log_invariant.py`, `scripts/verify_runtime.py`; build/packaging:
+`scripts/build_pyinstaller_linux.py`,
+`scripts/build_and_package_{deb,rpm,opensuse_rpm,arch,slackware,macos,freebsd}.py`,
+`scripts/package_appimage.py`, `scripts/build_freebsd_pkg.py`,
+`scripts/build_freebsd_port.py`, `scripts/build_docker.py`,
+`scripts/publish_pypi.py`. `scripts/build-and-package-windows.ps1` is a separate
+Windows-native surface, not part of the migration. `.claude/hooks/block-mutations.sh`
+is a Claude hook and `tools/freebsd-chroot-build.sh` is a separate FreeBSD chroot
+helper. The unused FreeBSD package-renaming shell helper was removed. The
+`Makefile` calls the Python entrypoints directly. The contract is defined in
+`docs/release/artifact-contract.md` under `Shell-to-Python Script Migration` and
+enforced by `tests/packaging/test_scripts_python_migration_contract.py`. Migrated
+scripts must never publish, upload, tag, push, or trigger workflows.
+
 ## Version policy
 
 `pyproject.toml` is the version source of truth.

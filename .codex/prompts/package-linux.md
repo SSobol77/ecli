@@ -60,6 +60,8 @@ Claude-specific files under .claude/ and CLAUDE.md are not Codex authority.
 
 Stage 1 rule: inspect and report only. Do not build packages, publish, upload, tag, push, trigger workflows, create releases, run release targets, run publish targets, or mutate tracked packaging descriptors.
 
+Script-migration note: the shell-to-Python migration is complete. Active shell wrappers under scripts/ have been removed; canonical Python implementations include scripts/verify_artifact.py exit codes 0-5, scripts/sign_checksums.py, scripts/check_log_invariant.py, scripts/verify_runtime.py, scripts/build_pyinstaller_linux.py, scripts/build_and_package_deb.py, scripts/build_and_package_rpm.py, scripts/build_and_package_opensuse_rpm.py, scripts/build_and_package_arch.py, scripts/build_and_package_slackware.py, scripts/package_appimage.py, and scripts/build_docker.py. The migration contract lives in docs/release/artifact-contract.md under "Shell-to-Python Script Migration" and is enforced by tests/packaging/test_scripts_python_migration_contract.py. Report any active shell logic reintroduced under scripts/ as release-blocking drift.
+
 Inspect:
 - pyproject.toml;
 - packaging/arch/PKGBUILD;

@@ -32,7 +32,7 @@ No Phase 1 implementation was started.
 Phase 0 artifact-contract work is present: platform validation targets exist,
 checksum sidecars use basename-only SHA256 format, PyPI namespace
 `ecli-editor` is reserved, and direct checksum verification is now available via
-`scripts/verify-artifact.sh` for CI consumers that need granular exit codes.
+`scripts/verify_artifact.py` for CI consumers that need granular exit codes.
 
 Phase 1 is not implementation-ready until maintainer decisions are made for
 paid/external services and signing credentials: Apple Developer Program,
@@ -42,8 +42,8 @@ notarization secrets, PyPI Trusted Publishers, and Windows code-signing path.
 
 ### Existing Repo State
 
-- `make package-macos` calls `scripts/build-and-package-macos.sh`.
-- `scripts/build-and-package-macos.sh` builds a PyInstaller app bundle, creates a
+- `make package-macos` calls `scripts/build_and_package_macos.py`.
+- `scripts/build_and_package_macos.py` builds a PyInstaller app bundle, creates a
   DMG with `hdiutil`, writes `releases/<version>/.macos.env`, and emits
   `ecli_<version>_macos_<arch>.dmg` plus `.sha256`.
 - `.github/workflows/macos-dmg.yml` builds a DMG on `macos-13` and uploads it as

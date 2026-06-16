@@ -49,20 +49,20 @@ validation tests. Do not invent unsupported package types.
 
 | # | Package / artifact | Platform / system | Repository source files | Expected artifact / output | Related GitHub workflow | Required test file | Required Claude command coverage | Required Codex prompt coverage | Release-readiness condition |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | PyPI wheel | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.sh` | `ecli_editor-<version>-py3-none-any.whl` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_wheel_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Wheel builds, `twine check --strict` passes, checksum sidecar present |
-| 2 | PyPI source distribution | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.sh` | `ecli_editor-<version>.tar.gz` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_sdist_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Sdist builds, `twine check --strict` passes, checksum sidecar present |
-| 3 | Linux generic PyInstaller executable | Linux | `packaging/pyinstaller/ecli.spec`; `packaging/pyinstaller/rthooks/force_imports.py`; `scripts/build_pyinstaller_linux.sh`; root `main.py` compatibility shim | `dist/ecli` PyInstaller binary | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_pyinstaller_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Runtime import check passes; spec uses root `main.py`; binary smoke-runs |
-| 4 | Linux release tarball | Linux | `scripts/build_pyinstaller_linux.sh`; `scripts/verify_runtime.sh`; `Makefile` targets `package-tar-linux`, `validate-tar-linux-contract` | `ecli_<version>_linux_<arch>.tar.gz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_tarball_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Tarball artifact and SHA256 sidecar validated; runtime smoke check passes |
-| 5 | Debian / Ubuntu `.deb` | Linux (Debian/Ubuntu) | `scripts/build-and-package-deb.sh`; `docker/build-linux-deb.Dockerfile`; `Makefile` target `package-deb` | `ecli_<version>_linux_<arch>.deb` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_deb_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | DEB artifact naming and SHA256 checks pass; package metadata inspected when toolchain present |
-| 6 | generic RPM `.rpm` | Linux (RPM family) | `scripts/build-and-package-rpm.sh`; `docker/build-linux-rpm.Dockerfile`; `Makefile` target `package-rpm` | `ecli_<version>_linux_<arch>.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | RPM artifact naming and SHA256 checks pass; FPM/RPM metadata inspected when toolchain present |
-| 7 | openSUSE / SUSE RPM | Linux (openSUSE/SUSE) | `scripts/build-and-package-opensuse-rpm.sh`; shared RPM flow | `ecli_<version>_opensuse_<arch>.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_opensuse_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | openSUSE/SUSE artifact naming and SHA256 checks pass through the shared RPM contract |
-| 8 | Arch Linux `PKGBUILD` | Linux (Arch) | `packaging/arch/PKGBUILD` (never root `PKGBUILD`); `scripts/build-and-package-arch.sh` | `ecli_<version>_arch_<arch>.pkg.tar.zst` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_arch_pkgbuild_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Raw `makepkg` output normalized; SHA256 sidecar present; no active root `PKGBUILD` alias |
-| 9 | Slackware `.txz` | Linux (Slackware) | `scripts/build-and-package-slackware.sh`; Linux PyInstaller helper | `ecli_<version>_slackware_<arch>.txz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_slackware_txz_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Slackware `.txz` artifact naming and SHA256 checks pass |
-| 10 | AppImage | Linux (cross-distro) | `packaging/linux/appimage/appimage-builder.yml`; `scripts/package_appimage.sh`; `Makefile` target `package-appimage` | `ecli_<version>_linux_<arch>.AppImage` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_appimage_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | AppImage artifact naming and SHA256 checks pass; descriptor mutation is AUD-003 drift |
-| 11 | FreeBSD `.pkg` | FreeBSD | `scripts/build-and-package-freebsd.sh`; `scripts/build-freebsd-pkg.sh`; `.github/workflows/freebsd-pkg.yml` | `ecli_<version>_freebsd_<arch>.pkg` | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_pkg_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Native/VM `.pkg` naming and SHA256 checks pass; vmactions log and checksum evidence captured |
-| 12 | FreeBSD ports/chroot build path | FreeBSD | `scripts/build_freebsd_port.sh`; `tools/freebsd-chroot-build.sh`; `Makefile` targets `package-freebsd-port`, `package-freebsd-chroot` | Native `.pkg` from local `package-freebsd-port` / `package-freebsd-chroot` paths | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_ports_chroot_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Local port and chroot paths produce a normalized `.pkg`; not source-history payload by default |
-| 13 | macOS `.app` | macOS | `scripts/build-and-package-macos.sh`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `ECLI.app` bundle | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_app_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | `.app` bundle built from shared PyInstaller spec using root `main.py`; Universal2 layout |
-| 14 | macOS `.dmg` | macOS | `scripts/build-and-package-macos.sh`; `.github/workflows/macos-dmg.yml`; `.github/workflows/macos-validate.yml`; `docs/install/macos.md` | `ecli_<version>_macos_universal2.dmg` | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_dmg_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | macOS Contract Validate passes; DMG artifact and SHA256 structural validation |
+| 1 | PyPI wheel | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.py` | `ecli_editor-<version>-py3-none-any.whl` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_wheel_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Wheel builds, `twine check --strict` passes, checksum sidecar present |
+| 2 | PyPI source distribution | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.py` | `ecli_editor-<version>.tar.gz` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_sdist_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Sdist builds, `twine check --strict` passes, checksum sidecar present |
+| 3 | Linux generic PyInstaller executable | Linux | `packaging/pyinstaller/ecli.spec`; `packaging/pyinstaller/rthooks/force_imports.py`; `scripts/build_pyinstaller_linux.py`; root `main.py` compatibility shim | `dist/ecli` PyInstaller binary | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_pyinstaller_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Runtime import check passes; spec uses root `main.py`; binary smoke-runs |
+| 4 | Linux release tarball | Linux | `scripts/build_pyinstaller_linux.py`; `scripts/verify_runtime.py`; `Makefile` targets `package-tar-linux`, `validate-tar-linux-contract` | `ecli_<version>_linux_<arch>.tar.gz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_tarball_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Tarball artifact and SHA256 sidecar validated; runtime smoke check passes |
+| 5 | Debian / Ubuntu `.deb` | Linux (Debian/Ubuntu) | `scripts/build_and_package_deb.py`; `docker/build-linux-deb.Dockerfile`; `Makefile` target `package-deb` | `ecli_<version>_linux_<arch>.deb` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_deb_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | DEB artifact naming and SHA256 checks pass; package metadata inspected when toolchain present |
+| 6 | generic RPM `.rpm` | Linux (RPM family) | `scripts/build_and_package_rpm.py`; `docker/build-linux-rpm.Dockerfile`; `Makefile` target `package-rpm` | `ecli_<version>_linux_<arch>.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | RPM artifact naming and SHA256 checks pass; FPM/RPM metadata inspected when toolchain present |
+| 7 | openSUSE / SUSE RPM | Linux (openSUSE/SUSE) | `scripts/build_and_package_opensuse_rpm.py`; shared RPM flow | `ecli_<version>_opensuse_<arch>.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_opensuse_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | openSUSE/SUSE artifact naming and SHA256 checks pass through the shared RPM contract |
+| 8 | Arch Linux `PKGBUILD` | Linux (Arch) | `packaging/arch/PKGBUILD` (never root `PKGBUILD`); `scripts/build_and_package_arch.py` | `ecli_<version>_arch_<arch>.pkg.tar.zst` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_arch_pkgbuild_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Raw `makepkg` output normalized; SHA256 sidecar present; no active root `PKGBUILD` alias |
+| 9 | Slackware `.txz` | Linux (Slackware) | `scripts/build_and_package_slackware.py`; Linux PyInstaller helper | `ecli_<version>_slackware_<arch>.txz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_slackware_txz_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Slackware `.txz` artifact naming and SHA256 checks pass |
+| 10 | AppImage | Linux (cross-distro) | `packaging/linux/appimage/appimage-builder.yml`; `scripts/package_appimage.py`; `Makefile` target `package-appimage` | `ecli_<version>_linux_<arch>.AppImage` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_appimage_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | AppImage artifact naming and SHA256 checks pass; descriptor mutation is AUD-003 drift |
+| 11 | FreeBSD `.pkg` | FreeBSD | `scripts/build_and_package_freebsd.py`; `scripts/build_freebsd_pkg.py`; `.github/workflows/freebsd-pkg.yml` | `ecli_<version>_freebsd_<arch>.pkg` | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_pkg_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Native/VM `.pkg` naming and SHA256 checks pass; vmactions log and checksum evidence captured |
+| 12 | FreeBSD ports/chroot build path | FreeBSD | `scripts/build_freebsd_port.py`; `tools/freebsd-chroot-build.sh`; `Makefile` targets `package-freebsd-port`, `package-freebsd-chroot` | Native `.pkg` from local `package-freebsd-port` / `package-freebsd-chroot` paths | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_ports_chroot_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Local port and chroot paths produce a normalized `.pkg`; not source-history payload by default |
+| 13 | macOS `.app` | macOS | `scripts/build_and_package_macos.py`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `ECLI.app` bundle | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_app_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | `.app` bundle built from shared PyInstaller spec using root `main.py`; Universal2 layout |
+| 14 | macOS `.dmg` | macOS | `scripts/build_and_package_macos.py`; `.github/workflows/macos-dmg.yml`; `.github/workflows/macos-validate.yml`; `docs/install/macos.md` | `ecli_<version>_macos_universal2.dmg` | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_dmg_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | macOS Contract Validate passes; DMG artifact and SHA256 structural validation |
 | 15 | Windows portable `.exe` | Windows | `scripts/build-and-package-windows.ps1`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `ecli_<version>_win_<arch>.exe` | `.github/workflows/windows-installer.yml` | `tests/packaging/test_packaging_windows_portable_exe_contract.py` | `.claude/commands/package-windows.md` | `.codex/prompts/package-windows.md` | Portable EXE help/version smoke passes; checksum sidecar present |
 | 16 | Windows NSIS installer `.exe` | Windows | `packaging/windows/nsis/ecli.nsi`; `scripts/build-and-package-windows.ps1`; `.github/workflows/windows-installer.yml`; `.github/workflows/windows-validate.yml`; `docs/install/windows.md` | `ecli_<version>_win_<arch>_setup.exe` | `.github/workflows/windows-installer.yml` | `tests/packaging/test_packaging_windows_nsis_installer_contract.py` | `.claude/commands/package-windows.md` | `.codex/prompts/package-windows.md` | Windows Contract Validate passes; NSIS installer and checksum validation |
 | 17 | Nix flake | Nix / NixOS | `flake.nix` | `nix run .` app / `nix build .` package | _local build path; no release workflow_ | `tests/packaging/test_packaging_nix_flake_contract.py` | `.claude/commands/package-nix.md` | `.codex/prompts/package-nix.md` | Flake exposes default package/app for declared systems; version drift reported against `pyproject.toml` |
@@ -80,16 +80,16 @@ this matrix, agent contracts, build/release runbooks, and validation tests.
 
 | Surface | Artifacts / package form | Contract files and active paths | Validation / contract evidence |
 |---|---|---|---|
-| PyPI | wheel `.whl`; source distribution `.tar.gz` | `pyproject.toml`; `scripts/publish_pypi.sh`; `.github/workflows/pypi-validate.yml`; `Makefile` targets `package-pypi`, `validate-pypi-contract` | PyPI contract workflow; wheel/sdist checksum checks; `twine check --strict`; `pyproject.toml` is the version source of truth |
-| Linux generic | PyInstaller executable; release `.tar.gz` | `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim; `scripts/build_pyinstaller_linux.sh`; `Makefile` targets `package-tar-linux`, `validate-tar-linux-contract` | Runtime import check; PyInstaller spec entry check; tarball artifact and SHA256 sidecar validation |
-| Debian / Ubuntu | `.deb` | `scripts/build-and-package-deb.sh`; `build/deb_staging/`; Docker helper `docker/build-linux-deb.Dockerfile`; `Makefile` target `package-deb` | Debian artifact naming and SHA256 checks; package-manager metadata inspection when toolchain is present |
-| RPM generic | `.rpm` | `scripts/build-and-package-rpm.sh`; Docker helper `docker/build-linux-rpm.Dockerfile`; `Makefile` target `package-rpm` | RPM artifact naming and SHA256 checks; FPM/RPM metadata inspection when toolchain is present |
-| openSUSE / SUSE | RPM package path | `scripts/build-and-package-opensuse-rpm.sh`; shared RPM flow; `Makefile` RPM contract target with `opensuse` platform label | openSUSE/SUSE artifact naming and SHA256 checks through the shared RPM package contract |
-| Arch | `PKGBUILD`; normalized `.pkg.tar.zst` | root `PKGBUILD` if restored; `packaging/arch/PKGBUILD`; `scripts/build-and-package-arch.sh` | Raw `makepkg` output must be normalized to `ecli_<version>_arch_<arch>.pkg.tar.zst` with SHA256 sidecar; a missing active root `PKGBUILD` alias is release-contract drift |
-| Slackware | `.txz` | `scripts/build-and-package-slackware.sh`; Linux PyInstaller helper | Slackware `.txz` artifact naming and SHA256 checks |
-| AppImage | `.AppImage` | `packaging/linux/appimage/appimage-builder.yml`; `scripts/package_appimage.sh`; `Makefile` target `package-appimage` | AppImage artifact naming and SHA256 checks; tracked descriptor mutation is AUD-003 drift until removed |
-| FreeBSD | `.pkg`; local port/chroot path | `scripts/build-and-package-freebsd.sh`; `scripts/build-freebsd-pkg.sh`; `scripts/build_freebsd_port.sh`; `tools/freebsd-chroot-build.sh`; `.github/workflows/freebsd-pkg.yml` | Native/VM/chroot `.pkg` naming and SHA256 checks; vmactions workflow log and checksum evidence |
-| macOS | `.app`; `.dmg`; universal2 / x86_64 / arm64 packaging path | `scripts/build-and-package-macos.sh`; `.github/workflows/macos-dmg.yml`; `.github/workflows/macos-validate.yml`; `docs/install/macos.md`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | macOS Contract Validate; Universal2 binary creation; DMG artifact and SHA256 structural validation |
+| PyPI | wheel `.whl`; source distribution `.tar.gz` | `pyproject.toml`; `scripts/publish_pypi.py`; `.github/workflows/pypi-validate.yml`; `Makefile` targets `package-pypi`, `validate-pypi-contract` | PyPI contract workflow; wheel/sdist checksum checks; `twine check --strict`; `pyproject.toml` is the version source of truth |
+| Linux generic | PyInstaller executable; release `.tar.gz` | `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim; `scripts/build_pyinstaller_linux.py`; `Makefile` targets `package-tar-linux`, `validate-tar-linux-contract` | Runtime import check; PyInstaller spec entry check; tarball artifact and SHA256 sidecar validation |
+| Debian / Ubuntu | `.deb` | `scripts/build_and_package_deb.py`; `build/deb_staging/`; Docker helper `docker/build-linux-deb.Dockerfile`; `Makefile` target `package-deb` | Debian artifact naming and SHA256 checks; package-manager metadata inspection when toolchain is present |
+| RPM generic | `.rpm` | `scripts/build_and_package_rpm.py`; Docker helper `docker/build-linux-rpm.Dockerfile`; `Makefile` target `package-rpm` | RPM artifact naming and SHA256 checks; FPM/RPM metadata inspection when toolchain is present |
+| openSUSE / SUSE | RPM package path | `scripts/build_and_package_opensuse_rpm.py`; shared RPM flow; `Makefile` RPM contract target with `opensuse` platform label | openSUSE/SUSE artifact naming and SHA256 checks through the shared RPM package contract |
+| Arch | `PKGBUILD`; normalized `.pkg.tar.zst` | root `PKGBUILD` if restored; `packaging/arch/PKGBUILD`; `scripts/build_and_package_arch.py` | Raw `makepkg` output must be normalized to `ecli_<version>_arch_<arch>.pkg.tar.zst` with SHA256 sidecar; a missing active root `PKGBUILD` alias is release-contract drift |
+| Slackware | `.txz` | `scripts/build_and_package_slackware.py`; Linux PyInstaller helper | Slackware `.txz` artifact naming and SHA256 checks |
+| AppImage | `.AppImage` | `packaging/linux/appimage/appimage-builder.yml`; `scripts/package_appimage.py`; `Makefile` target `package-appimage` | AppImage artifact naming and SHA256 checks; tracked descriptor mutation is AUD-003 drift until removed |
+| FreeBSD | `.pkg`; local port/chroot path | `scripts/build_and_package_freebsd.py`; `scripts/build_freebsd_pkg.py`; `scripts/build_freebsd_port.py`; `tools/freebsd-chroot-build.sh`; `.github/workflows/freebsd-pkg.yml` | Native/VM/chroot `.pkg` naming and SHA256 checks; vmactions workflow log and checksum evidence |
+| macOS | `.app`; `.dmg`; universal2 / x86_64 / arm64 packaging path | `scripts/build_and_package_macos.py`; `.github/workflows/macos-dmg.yml`; `.github/workflows/macos-validate.yml`; `docs/install/macos.md`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | macOS Contract Validate; Universal2 binary creation; DMG artifact and SHA256 structural validation |
 | Windows | portable `.exe`; NSIS installer `.exe` | `scripts/build-and-package-windows.ps1`; `packaging/windows/nsis/ecli.nsi`; `.github/workflows/windows-installer.yml`; `.github/workflows/windows-validate.yml`; `docs/install/windows.md`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | Windows Contract Validate; portable help/version smoke; NSIS installer and checksum validation |
 | Nix / NixOS | flake app/package; Nix derivation | `flake.nix`; `packaging/nix/package.nix`; Codex/Claude Nix package prompts | Nix package inspection contract; hard-coded version/license drift must be reported against `pyproject.toml` |
 | Docker build helpers | containerized Linux `.deb` and `.rpm` helper images | `docker/build-linux-deb.Dockerfile`; `docker/build-linux-rpm.Dockerfile`; `Makefile` targets `package-deb-docker`, `package-rpm-docker`, `package-docker` | Docker helper paths remain build helpers for Linux package contracts and must not publish or upload artifacts |
@@ -239,12 +239,69 @@ These packaging-adjacent scripts exist in the tree but are not active members of
 the canonical 21-item matrix. They are documented here so that no packaging
 script is undocumented:
 
-- `scripts/build-docker.sh` — legacy single-image DEB helper. It is superseded by
-  the canonical Docker DEB/RPM build helpers (`docker/build-linux-deb.Dockerfile`,
-  `docker/build-linux-rpm.Dockerfile`) and the `make package-docker` target. It
-  still references `docker/build-linux.Dockerfile`, which no longer exists, so it
-  is reported drift and is slated for cleanup. It must not be wired into release
-  automation.
+- `scripts/build_docker.py` — legacy
+  single-image DEB helper. It is superseded by the canonical Docker DEB/RPM build
+  helpers (`docker/build-linux-deb.Dockerfile`, `docker/build-linux-rpm.Dockerfile`)
+  and the `make package-docker` target. It still references
+  `docker/build-linux.Dockerfile`, which no longer exists, so it is reported drift
+  and is slated for cleanup. It must not be wired into release automation.
+
+## Shell-to-Python Script Migration
+
+ECLI has completed the migration of active packaging/build/verification scripts
+under `scripts/` from shell to Python. The migration must never change the
+release contract: artifact names, locations, checksum format, and the documented
+exit-code contracts are preserved.
+
+Migration rules (normative):
+
+- Each migrated script has a canonical Python implementation using only the
+  standard library, explicit `argparse`, `pathlib.Path`, and (where it shells
+  out) `subprocess.run(..., check=True)` with explicit command arrays.
+- Active shell wrappers under `scripts/` are removed. Business logic must not be
+  reintroduced in shell under `scripts/`.
+- Exit-code semantics, artifact naming, and contract-relevant environment
+  variables are preserved.
+- A migrated script must never publish, upload, sign with external keys, tag,
+  push, or trigger workflows.
+- Migration status is enforced by
+  `tests/packaging/test_scripts_python_migration_contract.py`.
+
+Migration status: **complete**. The Python module is the only canonical
+implementation for migrated active scripts under `scripts/`; no active shell
+wrapper remains there. The `Makefile`, GitHub Actions workflows, and `.cirrus.yml`
+call the Python entrypoints directly. Release readiness is blocked if any active
+shell wrapper is reintroduced under `scripts/`; the migration is enforced by
+`tests/packaging/test_scripts_python_migration_contract.py`.
+
+`scripts/build-and-package-windows.ps1` is a separate Windows-native packaging
+surface (PowerShell), not part of the shell-to-Python migration. The external
+`tools/freebsd-chroot-build.sh` chroot helper is out of scope for this batch and
+tracked as a future dedicated tools migration follow-up.
+`.claude/hooks/block-mutations.sh` is a Claude hook, not a packaging/build script.
+The unused tracked helper the removed FreeBSD package-renaming shell helper was removed during the
+no-shell cleanup; FreeBSD package naming is covered by the canonical Python
+scripts and release contract tests.
+
+| Canonical Python implementation | Notes |
+|---|---|
+| `scripts/sign_checksums.py` | Writes coreutils basename-only `<artifact>.sha256` sidecars (SHA256 only; not GPG signing) |
+| `scripts/check_log_invariant.py` | Read-only `git ls-files` log-location invariant |
+| `scripts/verify_artifact.py` | Structural SHA256 sidecar verifier; exit-code contract `0`-`5` preserved |
+| `scripts/verify_runtime.py` | Cross-artifact launcher validation; exit codes (`0`/`2`/`3`/`4`/`5`/`6`) preserved |
+| `scripts/build_pyinstaller_linux.py` | Linux PyInstaller build; prefers `packaging/pyinstaller/ecli.spec` |
+| `scripts/build_and_package_deb.py` | `ecli_<version>_linux_<arch>.deb` via FPM; dependency set preserved |
+| `scripts/build_and_package_rpm.py` | `ecli_<version>_<platform>_<arch>.rpm`; `RPM_PLATFORM_LABEL`/`RPM_DEPENDS` env preserved |
+| `scripts/build_and_package_opensuse_rpm.py` | Delegates to the shared RPM flow with the openSUSE label/deps |
+| `scripts/build_and_package_arch.py` | `ecli_<version>_arch_<arch>.pkg.tar.zst` via `makepkg` (exit `5` on missing tool) |
+| `scripts/build_and_package_slackware.py` | `ecli_<version>_slackware_<arch>.txz` via `makepkg` (exit `5` on missing tool) |
+| `scripts/package_appimage.py` | `ecli_<version>_linux_<arch>.AppImage` via `appimage-builder` |
+| `scripts/build_and_package_macos.py` | `ecli_<version>_macos_universal2.dmg`; ad-hoc codesign only |
+| `scripts/build_and_package_freebsd.py` | Native/VM `ecli_<version>_freebsd_<arch>.pkg` via `pkg create` |
+| `scripts/build_freebsd_pkg.py` | Local FreeBSD `.pkg` (root; UCL/YAML manifests) |
+| `scripts/build_freebsd_port.py` | Local FreeBSD ports skeleton -> normalized `.pkg` |
+| `scripts/build_docker.py` | Legacy single-image DEB helper (documented drift; not wired into release automation) |
+| `scripts/publish_pypi.py` | Maintainer-owned publish guard; never uploads; supports `--dry-run` |
 
 ## Naming Migration Notes
 
@@ -254,7 +311,7 @@ The removed legacy forms include:
 
 - `ecli_<version>_amd64.deb`
 - `ecli_<version>_amd64.rpm`
-- `ecli_<version>_amd64.pkg`
+- FreeBSD `.pkg` names that omitted the `freebsd` platform segment
 - `ecli_<version>_linux_x86_64.AppImage`
 - `ecli_<version>_Linux_x86_64.tar.gz`
 - `ecli_<version>_win_x64.exe`
@@ -268,6 +325,6 @@ The migration makes artifact discovery deterministic for CI and release automati
 - missing contract artifact must fail the pipeline.
 
 - macOS DMG package builds must perform one native mounted-DMG runtime smoke
-  during `scripts/build-and-package-macos.sh`. Follow-up assertions in the same
+  during `scripts/build_and_package_macos.py`. Follow-up assertions in the same
   build job may use structural/checksum-only validation to avoid redundant
   immediate `hdiutil attach` calls against the same image.

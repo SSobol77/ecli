@@ -208,7 +208,7 @@ jobs:
             cargo --version
           run: |
             set -eux
-            PYTHON=python3.11 sh ./scripts/build-and-package-freebsd.sh 2>&1 | tee freebsd-build.log
+            PYTHON=python3.11 python3.11 ./scripts/build_and_package_freebsd.py 2>&1 | tee freebsd-build.log
 
       - name: Upload FreeBSD build log on failure
         if: failure()

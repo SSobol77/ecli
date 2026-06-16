@@ -47,9 +47,10 @@ def test_macos_app_uses_root_main_shim_and_app_bundle(
     # macOS .app still builds through the shared PyInstaller spec and the root
     # main.py compatibility shim — not a package-only entry point.
     main_py = read_repo_text("main.py")
-    macos_script = read_repo_text("scripts/build-and-package-macos.sh")
+    # Canonical implementation is the Python entrypoint.
+    macos_script = read_repo_text("scripts/build_and_package_macos.py")
     spec = read_repo_text("packaging/pyinstaller/ecli.spec")
 
     assert "from ecli.__main__ import main" in main_py
-    assert 'APP_NAME="ECLI"' in macos_script
+    assert 'APP_NAME = "ECLI"' in macos_script
     assert_tokens_present(spec, ['entry_point = project_root / "main.py"'])

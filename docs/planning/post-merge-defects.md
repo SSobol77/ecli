@@ -205,7 +205,7 @@ Implicated source lines:
    and select GNU (`-c CMD FILE`) vs BSD (`FILE COMMAND...`) syntax at
    runtime. Environment variables are now pushed in via `env HOME=... TERM=...`
    for both flavors so behavior is identical across Linux, FreeBSD, and macOS.
-2. `scripts/build-and-package-freebsd.sh`: added `STEP=` instrumentation, an
+2. Legacy FreeBSD package build script: added `STEP=` instrumentation, an
    `on_error` EXIT trap that dumps the failing step, dmesg tail, `sysctl`
    memory, and `df -h`, a `pkg update -f` retry loop, observable pip output,
    a low-memory guard before PyInstaller, and PyInstaller / Python version
@@ -243,4 +243,3 @@ Implicated source lines:
 ### Owner
 
 Release engineering — Siergej Sobolewski.
-

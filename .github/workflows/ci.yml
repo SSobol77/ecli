@@ -23,7 +23,7 @@ name: CI
       - "main.py"
       - "pyproject.toml"
       - "scripts/check_runtime_imports.py"
-      - "scripts/verify_runtime.sh"
+      - "scripts/verify_runtime.py"
       - "src/**"
       - "tests/**"
   pull_request:
@@ -34,7 +34,7 @@ name: CI
       - "main.py"
       - "pyproject.toml"
       - "scripts/check_runtime_imports.py"
-      - "scripts/verify_runtime.sh"
+      - "scripts/verify_runtime.py"
       - "src/**"
       - "tests/**"
 

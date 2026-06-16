@@ -206,3 +206,18 @@ protected environments such as `pypi` or `production` and require maintainer
 review before external publication. Gate 2 Phase 0 intentionally ships without
 workflow `environment:` bindings because protected environments are not yet
 configured for this repository.
+
+## Script Migration Contract
+
+Active shell wrappers under `scripts/` have been removed. Release preparation and
+workflow inspection must use canonical Python entrypoints under `scripts/`.
+`scripts/build-and-package-windows.ps1` remains a separate Windows PowerShell
+packaging surface. `.claude/hooks/block-mutations.sh` is a Claude hook, not a
+packaging script. `tools/freebsd-chroot-build.sh` remains a FreeBSD chroot helper
+outside this migration. The unused FreeBSD package-renaming shell helper was
+removed as tracked tooling.
+
+Maintainer-owned release/upload Make targets are guarded. Set
+`ECLI_ALLOW_RELEASE=1` only when intentionally running targets such as
+`release-deb`, `release-rpm`, `release-appimage`, `release-freebsd`,
+`release-macos`, `release-windows`, or `publish-all`.

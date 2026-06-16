@@ -48,6 +48,8 @@ Expected validation evidence:
 - uv run mypy src/ecli tests
 - uv run pytest -ra -q
 - uv run python scripts/check_runtime_imports.py
+- uv run pytest -q tests/packaging/test_scripts_python_migration_contract.py
+- uv run python scripts/check_log_invariant.py
 
 If outputs are already present in logs or pasted into the request, summarize those outputs instead of rerunning. If evidence is missing, say exactly which command output is missing. If you do run commands, run only the exact commands listed above.
 

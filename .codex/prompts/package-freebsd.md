@@ -52,10 +52,11 @@ Claude-specific files under .claude/ and CLAUDE.md are not Codex authority.
 
 Stage 1 rule: inspect and report only. Do not publish, upload, tag, push, trigger workflows, edit GitHub Releases, run release targets, run publish targets, or mutate tracked packaging descriptors.
 
-Inspect:
-- scripts/build-and-package-freebsd.sh;
-- scripts/build-freebsd-pkg.sh;
-- scripts/build_freebsd_port.sh;
+Inspect canonical Python entrypoints:
+- scripts/build_and_package_freebsd.py;
+- scripts/build_freebsd_pkg.py;
+- scripts/build_freebsd_port.py;
+- tools/freebsd-chroot-build.sh (chroot helper, not yet migrated);
 - FreeBSD-related docs and logs if present;
 - release artifact naming;
 - license metadata.

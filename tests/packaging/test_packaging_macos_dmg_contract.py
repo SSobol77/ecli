@@ -44,7 +44,8 @@ def test_macos_dmg_naming_and_validation_workflow(
     read_repo_text: RepoReader,
     assert_tokens_present: TokenAssertion,
 ) -> None:
-    macos_script = read_repo_text("scripts/build-and-package-macos.sh")
+    # Canonical implementation is the Python entrypoint.
+    macos_script = read_repo_text("scripts/build_and_package_macos.py")
     validate = read_repo_text(".github/workflows/macos-validate.yml")
 
     assert_tokens_present(macos_script, ["ecli_<version>_macos_universal2.dmg"])

@@ -44,8 +44,9 @@ def test_opensuse_rpm_uses_shared_rpm_flow_with_label(
     read_repo_text: RepoReader,
     assert_tokens_present: TokenAssertion,
 ) -> None:
-    script = read_repo_text("scripts/build-and-package-opensuse-rpm.sh")
+    # Canonical implementation is the Python entrypoint.
+    script = read_repo_text("scripts/build_and_package_opensuse_rpm.py")
     assert_tokens_present(
         script,
-        ['RPM_PLATFORM_LABEL="${RPM_PLATFORM_LABEL:-opensuse}"'],
+        ['"RPM_PLATFORM_LABEL", "opensuse"', "build_and_package_rpm.py"],
     )

@@ -84,10 +84,11 @@ Generated artifacts must not be written to:
 Before opening a PR that may generate local artifacts, run:
 
 ```bash
-./scripts/check-log-invariant.sh
+uv run python scripts/check_log_invariant.py
 ```
 
-The script must pass before merge.
+The script must pass before merge. Use `uv run python scripts/check_log_invariant.py`
+directly; active shell wrappers under `scripts/` have been removed.
 
 ## Validation Required
 

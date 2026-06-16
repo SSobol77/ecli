@@ -31,7 +31,7 @@ Base commit:
 Command:
 
 ```sh
-bash -n scripts/build-and-package-macos.sh
+uv run python -m py_compile scripts/build_and_package_macos.py
 ```
 
 Output:
@@ -71,11 +71,11 @@ rm -rf build/ dist/ .pytest_cache/ .ruff_cache/ .mypy_cache/ __pycache__
 find . -type d -name "__pycache__" -exec rm -rf {} +
 find . -type f -name "*.pyc" -delete
 echo "--> Intermediate build artifacts cleaned."
-./scripts/build-and-package-macos.sh
+uv run python scripts/build_and_package_macos.py
 make package-macos-assert
 make[1]: Entering directory '/home/ssb/Code/Ecli/ecli'
 test -n "0.1.0" || (echo "MACOS_PKG_VERSION empty (pyproject.toml)"; exit 1)
-scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_macos_universal2.dmg"
+uv run python scripts/verify_artifact.py "releases/0.1.0/ecli_0.1.0_macos_universal2.dmg"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_macos_universal2.dmg"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_macos_universal2.dmg.sha256"
 make[1]: Leaving directory '/home/ssb/Code/Ecli/ecli'
@@ -95,13 +95,13 @@ Output:
 
 ```text
 test -n "0.1.0" || (echo "MACOS_PKG_VERSION empty (pyproject.toml)"; exit 1)
-scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_macos_universal2.dmg"
+uv run python scripts/verify_artifact.py "releases/0.1.0/ecli_0.1.0_macos_universal2.dmg"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_macos_universal2.dmg"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_macos_universal2.dmg.sha256"
 echo "--> OK: macOS contract"
 ```
 
-Result: passed. The validator path continues to use `scripts/verify-artifact.sh`.
+Result: passed. The validator path continues to use `scripts/verify_artifact.py`.
 
 ### Verification: Workflow YAML Parse
 
@@ -344,7 +344,7 @@ Result: passed.
 Command:
 
 ```sh
-grep -n "macos_universal2" Makefile scripts/build-and-package-macos.sh
+grep -n "macos_universal2" Makefile scripts/build_and_package_macos.py
 ```
 
 Output:
@@ -352,9 +352,8 @@ Output:
 ```text
 Makefile:705:#       releases/<version>/ecli_<version>_macos_universal2.dmg
 Makefile:706:#       releases/<version>/ecli_<version>_macos_universal2.dmg.sha256
-scripts/build-and-package-macos.sh:6:#   releases/<version>/ecli_<version>_macos_universal2.dmg
-scripts/build-and-package-macos.sh:7:#   releases/<version>/ecli_<version>_macos_universal2.dmg.sha256
-scripts/build-and-package-macos.sh:75:UNIVERSAL_DIR="build/macos_universal2"
+scripts/build_and_package_macos.py:19:``releases/<version>/ecli_<version>_macos_universal2.dmg`` plus a SHA256 sidecar.
+scripts/build_and_package_macos.py:52:MACOS_ARCH = "universal2"
 ```
 
 Result: passed.
@@ -926,8 +925,8 @@ pwsh -File ./scripts/build-and-package-windows.ps1
 make package-windows-assert
 make[1]: Entering directory '/home/ssb/Code/Ecli/ecli'
 test -n "0.1.0" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
-scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
-scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+uv run python scripts/verify_artifact.py "releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+uv run python scripts/verify_artifact.py "releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe.sha256"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
@@ -949,8 +948,8 @@ Output:
 
 ```text
 test -n "0.1.0" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
-scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
-scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+uv run python scripts/verify_artifact.py "releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+uv run python scripts/verify_artifact.py "releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe.sha256"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
@@ -1146,8 +1145,8 @@ pwsh -File ./scripts/build-and-package-windows.ps1
 make package-windows-assert
 make[1]: Entering directory '/home/ssb/Code/Ecli/ecli'
 test -n "0.1.0" || (echo "WIN_PKG_VERSION empty (pyproject.toml)"; exit 1)
-scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
-scripts/verify-artifact.sh "releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
+uv run python scripts/verify_artifact.py "releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
+uv run python scripts/verify_artifact.py "releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64.exe.sha256"
 echo "--> OK: releases/0.1.0/ecli_0.1.0_win_x86_64_setup.exe"

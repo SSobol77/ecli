@@ -80,6 +80,17 @@ readiness depends on these CI/release surfaces remaining mapped:
 
 - Any platform marked release-ready must satisfy artifact contract checks.
 
+## Script Migration Contract
+
+- Active shell wrappers under `scripts/` have been removed; Python entrypoints
+  under `scripts/` are canonical.
+- `scripts/build-and-package-windows.ps1` remains the separate Windows
+  PowerShell packaging surface.
+- `.claude/hooks/block-mutations.sh` is a Claude hook, not packaging.
+- `tools/freebsd-chroot-build.sh` remains a FreeBSD chroot helper outside this
+  migration.
+- the removed FreeBSD package-renaming shell helper was unused tracked tooling and has been removed.
+
 ## FreeBSD Reliability Plan
 
 The FreeBSD `.pkg` leg currently runs inside `vmactions/freebsd-vm` (a

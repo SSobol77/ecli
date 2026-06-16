@@ -45,7 +45,7 @@ Status: complete.
 
 - [x] Canonical PyInstaller spec retained at `packaging/pyinstaller/ecli.spec`.
 - [x] Root-level stale `ecli.spec` path removed from the implementation path.
-- [x] `scripts/build-and-package-macos.sh` builds a Universal2 artifact by
+- [x] `scripts/build_and_package_macos.py` builds a Universal2 artifact by
   combining arm64 and x86_64 legs on `macos-14`.
 - [x] DMG output follows canonical naming:
   `ecli_<version>_macos_universal2.dmg`.
@@ -108,7 +108,7 @@ Status: deferred.
 - [ ] FreeBSD `.pkg` manifest polish is not included in Phase 1.
 - [ ] Canonical naming audit for the FreeBSD package internals is deferred.
 - [x] Existing Phase 0 FreeBSD packaging remains functional through
-  `scripts/build-and-package-freebsd.sh` and the release workflow's FreeBSD VM
+  `scripts/build_and_package_freebsd.py` and the release workflow's FreeBSD VM
   job.
 
 ### Out-of-Band Scope - License Normalization

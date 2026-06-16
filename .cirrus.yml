@@ -14,8 +14,8 @@
 # ==============================================================================
 # Cirrus CI — FreeBSD 14.x packaging for ECLI
 # Builds a native .pkg in a real FreeBSD VM and uploads STRICT artifacts:
-#   releases/<version>/ecli_<version>_amd64.pkg
-#   releases/<version>/ecli_<version>_amd64.pkg.sha256
+#   releases/<version>/ecli_<version>_freebsd_<arch>.pkg
+#   releases/<version>/ecli_<version>_freebsd_<arch>.pkg.sha256
 #
 # Triggers:
 #   - Pushes to main
@@ -55,14 +55,18 @@ freebsd_pkg_task:
   # --- Build using the canonical packager in your repo ------------------------
   # It installs all system & pip deps itself and enforces strict naming.
   build_script:
-    - sh scripts/build-and-package-freebsd.sh
+    - python3.11 scripts/build_and_package_freebsd.py
 
   # --- Verify STRICT artifact names/locations ---------------------------------
   verify_script:
     - |
       set -eu
-      ARCH="amd64"
-      PKG="releases/${VERSION}/ecli_${VERSION}_${ARCH}.pkg"
+      ARCH="$(uname -m)"
+      case "$ARCH" in
+        amd64|x86_64) ARCH="x86_64" ;;
+        aarch64|arm64) ARCH="arm64" ;;
+      esac
+      PKG="releases/${VERSION}/ecli_${VERSION}_freebsd_${ARCH}.pkg"
       SHA="${PKG}.sha256"
       test -f "$PKG" || { echo "Missing $PKG"; ls -R releases || true; exit 2; }
       test -f "$SHA" || { echo "Missing $SHA"; ls -R releases || true; exit 3; }
@@ -72,8 +76,8 @@ freebsd_pkg_task:
   # --- Publish artifacts to Cirrus UI (downloadable from the build page) ------
   artifacts:
     # Use the computed VERSION from version_script (exported via $CIRRUS_ENV)
-    - path: "releases/${VERSION}/ecli_${VERSION}_amd64.pkg"
-    - path: "releases/${VERSION}/ecli_${VERSION}_amd64.pkg.sha256"
+    - path: "releases/${VERSION}/ecli_${VERSION}_freebsd_*.pkg"
+    - path: "releases/${VERSION}/ecli_${VERSION}_freebsd_*.pkg.sha256"
 
   # --- When to run -------------------------------------------------------------
   # Build on main or on version tags. Adjust as needed.

@@ -44,7 +44,8 @@ def test_freebsd_pkg_script_and_workflow_declare_pkg_artifact(
     read_repo_text: RepoReader,
     assert_tokens_present: TokenAssertion,
 ) -> None:
-    script = read_repo_text("scripts/build-and-package-freebsd.sh")
+    # Canonical implementation is the Python entrypoint.
+    script = read_repo_text("scripts/build_and_package_freebsd.py")
     workflow = read_repo_text(".github/workflows/freebsd-pkg.yml")
 
     assert_tokens_present(script, ["ecli_<version>_freebsd_<arch>.pkg"])

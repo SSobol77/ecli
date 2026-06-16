@@ -394,6 +394,13 @@ make help
 make sysinfo
 ```
 
+The root `Makefile` is the primary ECLI command surface. `make help` is the
+short developer workflow, `make help-full` is the complete target map,
+`make list-targets` lists public targets, `make doctor` checks local tools
+without building packages, and `make sysinfo` prints configured package
+variables. Release/upload Make targets are maintainer-owned and require an
+explicit confirmation guard.
+
 Do not use bare `python` when the repository workflow expects `uv run python`.
 
 Do not use broad commands such as:
@@ -518,6 +525,37 @@ make publish-*
 ```
 
 If a requested command may publish, upload, tag, push, or mutate public release state, do not run it. Explain that it is blocked and provide a manual checklist instead.
+
+### Shell-to-Python script migration
+
+Active packaging/build/verification scripts under `scripts/` have been migrated
+from shell to Python, preserving the release contract (artifact names, locations,
+checksum format, exit-code contracts). The migration is **complete**.
+
+* Active shell wrappers under `scripts/` have been removed. Canonical Python implementations include:
+  * `scripts/verify_artifact.py` — artifact SHA256 sidecar verifier (exit codes `0`–`5`).
+  * `scripts/sign_checksums.py` — writes basename-only `<artifact>.sha256` sidecars (SHA256 only; not GPG signing).
+  * `scripts/check_log_invariant.py` — read-only development log-location invariant.
+  * `scripts/verify_runtime.py` — cross-artifact launcher validation.
+  * `scripts/build_pyinstaller_linux.py`, `scripts/build_and_package_{deb,rpm,opensuse_rpm,arch,slackware,macos,freebsd}.py`,
+    `scripts/package_appimage.py`, `scripts/build_freebsd_pkg.py`,
+    `scripts/build_freebsd_port.py`, `scripts/build_docker.py`,
+    `scripts/publish_pypi.py` (publish guard; never uploads).
+* Do not add active shell wrappers under `scripts/`; release readiness is
+  blocked if shell packaging/build/verification logic is reintroduced there.
+* `scripts/build-and-package-windows.ps1` is a separate Windows-native packaging
+  surface and is not part of this migration.
+* `.claude/hooks/block-mutations.sh` is a Claude hook, not a packaging script.
+* `tools/freebsd-chroot-build.sh` is a separate FreeBSD chroot helper outside
+  this migration.
+* the removed FreeBSD package-renaming shell helper was unused and removed during no-shell cleanup.
+* Python implementations use only the standard library, explicit `argparse`,
+  `pathlib.Path`, and `subprocess.run(..., check=True)` with explicit command
+  arrays. They must never publish, upload, sign with external keys, tag, push, or
+  trigger workflows.
+* The migration contract is enforced by
+  `tests/packaging/test_scripts_python_migration_contract.py` and documented in
+  `docs/release/artifact-contract.md` under `Shell-to-Python Script Migration`.
 
 ## 9. Dirty tree preservation
 

@@ -23,34 +23,75 @@ contracts, build/release runbooks, or validation tests under
 `tests/packaging/`. Empty, stale, decorative, or unused packaging files are
 forbidden.
 
+## Shell-to-Python Script Migration
+
+Active packaging/build/verification scripts under `scripts/` have been migrated
+from shell to Python without changing the release contract. The normative rules
+live in `docs/release/artifact-contract.md` under
+`Shell-to-Python Script Migration`, and the migration is enforced by
+`tests/packaging/test_scripts_python_migration_contract.py`.
+
+Migration status: **complete**. Python modules are the only canonical
+implementations for migrated active scripts under `scripts/`; no active shell
+wrapper remains there. The `Makefile`, GitHub Actions workflows, and
+`.cirrus.yml` call the Python entrypoints directly. The canonical Python target
+list and migration rules live in `docs/release/artifact-contract.md` under
+`Shell-to-Python Script Migration`.
+
+Canonical Python entrypoints include `scripts/sign_checksums.py`,
+`scripts/check_log_invariant.py`, `scripts/verify_artifact.py`,
+`scripts/verify_runtime.py`, `scripts/build_pyinstaller_linux.py`,
+`scripts/build_and_package_deb.py`, `scripts/build_and_package_rpm.py`,
+`scripts/build_and_package_opensuse_rpm.py`, `scripts/build_and_package_arch.py`,
+`scripts/build_and_package_slackware.py`, `scripts/package_appimage.py`,
+`scripts/build_and_package_macos.py`, `scripts/build_and_package_freebsd.py`,
+`scripts/build_freebsd_pkg.py`, `scripts/build_freebsd_port.py`,
+`scripts/build_docker.py`, and `scripts/publish_pypi.py`.
+
+`scripts/build-and-package-windows.ps1` is a separate Windows-native packaging
+surface (PowerShell), not part of the shell-to-Python migration.
+`.claude/hooks/block-mutations.sh` is a Claude hook, not a packaging script.
+`tools/freebsd-chroot-build.sh` is a separate FreeBSD chroot helper outside the
+script migration. The unused FreeBSD package-renaming shell helper was removed
+during no-shell cleanup. Release readiness is blocked if active shell is
+reintroduced under `scripts/`.
+
+## Makefile Command Surface
+
+The root `Makefile` is the primary developer and maintainer command surface.
+Use `make help` for the short workflow, `make help-full` for the complete target
+map, `make list-targets` for public target discovery, `make doctor` for local
+tool availability, and `make sysinfo` for configured package variables.
+Maintainer-owned release/upload targets require `ECLI_ALLOW_RELEASE=1`.
+
 ## Linux
 
-- DEB flow: `scripts/build-and-package-deb.sh`
+- DEB flow: `scripts/build_and_package_deb.py`
 
-- RPM flow: `scripts/build-and-package-rpm.sh`
+- RPM flow: `scripts/build_and_package_rpm.py`
 
-- openSUSE/SUSE RPM flow: `scripts/build-and-package-opensuse-rpm.sh`
+- openSUSE/SUSE RPM flow: `scripts/build_and_package_opensuse_rpm.py`
   - build prerequisites: `python3`, `python3-pip`, `python3-devel`, `gcc`, `make`, `rpm-build`; runtime packages include `ncurses6`, `libyaml-0-2`, and optional clipboard tools `xclip` or `xsel`.
 
-- Arch Linux package flow: `scripts/build-and-package-arch.sh`
+- Arch Linux package flow: `scripts/build_and_package_arch.py`
 
-- Slackware package flow: `scripts/build-and-package-slackware.sh`
+- Slackware package flow: `scripts/build_and_package_slackware.py`
   - build prerequisites: Slackware `makepkg`, `tar`, `xz`, `python3`,
     PyInstaller, and project Python build dependencies.
 
 - Nix package flow: `flake.nix` / `packaging/nix/package.nix`
 
-- AppImage flow: `scripts/package_appimage.sh`
+- AppImage flow: `scripts/package_appimage.py`
 
 ## FreeBSD
 
 Supported paths:
 
-- native host/VM: `scripts/build-and-package-freebsd.sh`
+- native host/VM: `scripts/build_and_package_freebsd.py`; local builder `scripts/build_freebsd_pkg.py`
 
-- chroot-based: `tools/freebsd-chroot-build.sh` (via make target)
+- chroot-based: `tools/freebsd-chroot-build.sh` (via make target; not yet migrated)
 
-- port-oriented build path: `scripts/build_freebsd_port.sh`
+- port-oriented build path: `scripts/build_freebsd_port.py`
 
 - CI VM path: `.github/workflows/freebsd-pkg.yml`
 
@@ -60,7 +101,7 @@ Governance rule:
 
 ## macOS
 
-- DMG flow: `scripts/build-and-package-macos.sh`
+- DMG flow: `scripts/build_and_package_macos.py`
 
 ## Windows
 
