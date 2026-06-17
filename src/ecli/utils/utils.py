@@ -37,6 +37,7 @@ embedded defaults.
 
 import logging
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -65,10 +66,14 @@ HUGGINGFACE_API_KEY=
 # This dictionary is a direct, hardcoded representation of `default_config.toml`.
 # It serves as the ultimate fallback, ensuring the application can ALWAYS start.
 DEFAULT_CONFIG: dict[str, Any] = {
+    # Built-in colour theme (1-4 light, 5-8 dark). See ecli.utils.themes.
+    "theme": 5,
     "colors": {"error": "red", "status": "bright_white", "green": "green"},
     "editor": {
         "use_system_clipboard": True, "default_new_filename": "new_file.py",
-        "tab_size": 4, "use_spaces": True,
+        "tab_size": 4, "use_spaces": True, "syntax_highlighting": True,
+        # Opt-in mouse support (off by default to preserve native text selection).
+        "mouse": False,
     },
     "fonts": {"font_family": "monospace", "font_size": 12},
     "keybindings": {
@@ -210,8 +215,90 @@ def ensure_user_config_exists() -> None:
             user_env_path.write_text(ENV_TEMPLATE, encoding="utf-8")
             logger.info(f"Created user .env template at: {user_env_path}")
 
+        migrate_legacy_theme_config(user_config_path)
+
     except Exception as e:
         logger.critical(f"Could not create user configuration files: {e}", exc_info=True)
+
+
+def migrate_legacy_theme_config(user_config_path: Path) -> bool:
+    """Upgrade a legacy ``[theme]``-table config to a root ``theme = N`` key.
+
+    Old configs used ``[theme]``/``[theme.ui]``/``[colors]`` tables that the
+    editor no longer reads, leaving users unable to switch themes by editing the
+    file. This is a one-time, backed-up, conservative migration: the dead tables
+    are commented out (never deleted) and a single editable ``theme = N`` line is
+    inserted, derived from the legacy ``name``/``id``. No-op when the config
+    already has a root ``theme`` key, has no legacy ``[theme]`` table, or cannot
+    be read. Returns True when a migration was written.
+    """
+    try:
+        text = user_config_path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+
+    if re.search(r"(?m)^\s*theme\s*=\s*\d", text):
+        return False  # already has a root theme = N
+    if not re.search(r"(?m)^\s*\[theme\]", text):
+        return False  # no legacy table to migrate
+
+    theme_id = _derive_legacy_theme_id(text)
+
+    lines = text.splitlines(keepends=True)
+    out: list[str] = []
+    commenting = False
+    for line in lines:
+        stripped = line.lstrip()
+        if re.match(r"\[(colors|theme(\.ui)?)\]", stripped):
+            commenting = True
+        elif stripped.startswith("["):
+            commenting = False
+        if commenting and stripped and not stripped.startswith("#"):
+            out.append("# " + line)
+        else:
+            out.append(line)
+    migrated = "".join(out)
+
+    insertion = (
+        "# Active colour theme (1-4 light, 5-8 dark). Edit this number to switch.\n"
+        f"theme = {theme_id}\n\n"
+    )
+    first_table = re.search(r"(?m)^\s*\[", migrated)
+    if first_table:
+        migrated = migrated[: first_table.start()] + insertion + migrated[first_table.start() :]
+    else:
+        migrated = insertion + migrated
+
+    try:
+        backup = user_config_path.with_name(user_config_path.name + ".bak")
+        if not backup.exists():
+            backup.write_text(text, encoding="utf-8")
+        user_config_path.write_text(migrated, encoding="utf-8")
+        logger.warning(
+            "Migrated legacy [theme] config to 'theme = %d' at %s (backup: %s).",
+            theme_id,
+            user_config_path,
+            backup,
+        )
+        return True
+    except Exception:
+        logger.exception("Legacy theme config migration failed; left config unchanged.")
+        return False
+
+
+def _derive_legacy_theme_id(text: str) -> int:
+    """Best-effort theme id from a legacy ``[theme]`` table's id/name."""
+    id_match = re.search(r"(?ms)^\s*\[theme\].*?^\s*id\s*=\s*(\d+)", text)
+    if id_match:
+        candidate = int(id_match.group(1))
+        if 1 <= candidate <= 8:
+            return candidate
+    name_match = re.search(
+        r"(?ms)^\s*\[theme\].*?^\s*name\s*=\s*[\"']([^\"']+)[\"']", text
+    )
+    if name_match and "light" in name_match.group(1).lower():
+        return 1
+    return 5
 
 
 
@@ -226,14 +313,30 @@ def load_config() -> dict[str, Any]:
     ensure_user_config_exists()
 
     user_config_path = Path.home() / ".config" / "ecli" / "config.toml"
+    loaded_from = "(built-in defaults only)"
     if user_config_path.is_file():
         try:
             user_config = toml.load(user_config_path)
             final_config = deep_merge(final_config, user_config)
-            logger.info(f"Successfully loaded and merged user config from {user_config_path}")
+            loaded_from = str(user_config_path)
+            logger.info("Loaded user config from %s", user_config_path)
+            if isinstance(user_config.get("theme"), dict):
+                logger.warning(
+                    "User config %s uses the legacy [theme] table. Set a root-level "
+                    "'theme = 1..8' (or [theme] id = N), or run with ECLI_THEME=N.",
+                    user_config_path,
+                )
         except Exception as e:
-            logger.error(f"Could not parse user config '{user_config_path}': {e}. Using defaults.")
+            logger.error(
+                "Could not parse user config '%s': %s. Using defaults.",
+                user_config_path,
+                e,
+            )
+            loaded_from = f"{user_config_path} (parse error; using defaults)"
 
+    # Record the effective config path so the runtime/UI can report which file
+    # was actually loaded (root-cause aid for "my config changes do nothing").
+    final_config["_loaded_config_path"] = loaded_from
     return final_config
 
 
@@ -333,26 +436,58 @@ def deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]
     return result
 
 
+# xterm-256 colour-cube channel levels (indices 16..231).
+_CUBE_LEVELS = (0, 95, 135, 175, 215, 255)
+
+
+def _xterm_index_rgb(index: int) -> tuple[int, int, int]:
+    """Return the approximate RGB of an xterm-256 colour index (16..255)."""
+    if index < 16:
+        return (0, 0, 0)
+    if index < 232:
+        i = index - 16
+        return (
+            _CUBE_LEVELS[(i // 36) % 6],
+            _CUBE_LEVELS[(i // 6) % 6],
+            _CUBE_LEVELS[i % 6],
+        )
+    gray = 8 + 10 * (index - 232)
+    return (gray, gray, gray)
+
+
 def hex_to_xterm(hex_color: str) -> int:
-    """
-    Converts a hexadecimal color string to the nearest xterm-256 color index.
+    """Convert a hex colour to the nearest xterm-256 index.
+
+    Considers both the 6x6x6 colour cube *and* the 24-step grayscale ramp (plus
+    pure black/white), returning whichever is closest in RGB space. This keeps
+    dark, near-neutral colours (e.g. ``#161B22``) on the grey ramp instead of
+    snapping them to a saturated cube cell.
     """
     hex_color = hex_color.lstrip("#")
     if len(hex_color) != 6:
         return WHITE_FG_IDX
     try:
-        r, g, b = (int(hex_color[i:i+2], 16) for i in (0, 2, 4))
+        r, g, b = (int(hex_color[i : i + 2], 16) for i in (0, 2, 4))
     except ValueError:
         return WHITE_FG_IDX
 
-    if r == g == b:
-        if r < 8: return 16
-        if r > 248: return 231
-        return round(((r - 8) / 247) * 24) + 232
+    def _nearest_level(value: int) -> int:
+        return min(range(6), key=lambda i: abs(_CUBE_LEVELS[i] - value))
 
-    return int(
+    candidates = [
         16
-        + (36 * round(r / 255 * 5))
-        + (6 * round(g / 255 * 5))
-        + round(b / 255 * 5)
-    )
+        + 36 * _nearest_level(r)
+        + 6 * _nearest_level(g)
+        + _nearest_level(b),  # colour cube
+        16,  # black
+        231,  # white
+    ]
+    # Nearest grayscale-ramp step (indices 232..255).
+    gray_step = round((((r + g + b) / 3) - 8) / 10)
+    candidates.append(232 + max(0, min(23, gray_step)))
+
+    def _distance(index: int) -> int:
+        cr, cg, cb = _xterm_index_rgb(index)
+        return (cr - r) ** 2 + (cg - g) ** 2 + (cb - b) ** 2
+
+    return min(candidates, key=_distance)

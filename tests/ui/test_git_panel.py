@@ -45,6 +45,12 @@ class FakeWindow:
     def keypad(self, value: bool) -> None:
         self.keypad_values.append(value)
 
+    def bkgd(self, ch: str, attr: int = 0) -> None:
+        return None
+
+    def touchwin(self) -> None:
+        return None
+
     def erase(self) -> None:
         return None
 

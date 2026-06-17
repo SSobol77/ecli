@@ -91,6 +91,28 @@ def test_split_text_empty_file_model_is_single_empty_line() -> None:
     assert split_text_preserving_content("") == [""]
 
 
+def test_split_text_does_not_break_on_form_feed_page_break() -> None:
+    # A form feed (\x0c) is a legal in-line character in Python source. It must
+    # stay inside a single logical line, not split it the way str.splitlines does.
+    raw = "x = 1\x0cy = 2"
+
+    assert split_text_preserving_content(raw) == ["x = 1\x0cy = 2"]
+
+
+def test_split_text_does_not_break_on_exotic_unicode_separators() -> None:
+    # Vertical tab, NEL and the Unicode line/paragraph separators are content,
+    # not editor line boundaries.
+    for separator in ("\x0b", "\x85", " ", " ", "\x1c", "\x1d", "\x1e"):
+        raw = f"left{separator}right"
+        assert split_text_preserving_content(raw) == [f"left{separator}right"]
+
+
+def test_split_text_mixed_real_and_exotic_terminators() -> None:
+    raw = "a\nb\x0cstill-b\r\nc"
+
+    assert split_text_preserving_content(raw) == ["a", "b\x0cstill-b", "c"]
+
+
 def test_detect_and_decode_prefers_strict_utf8_for_cyrillic_source() -> None:
     source = "".join(
         [

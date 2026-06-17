@@ -85,14 +85,23 @@ from ecli.integrations.LinterBridge import LinterBridge
 from ecli.services.registry import ServiceRegistry
 from ecli.ui.TerminalAppMode import TerminalAppMode
 from ecli.ui.DrawScreen import DrawScreen
+from ecli.ui.geometry import Rect, compute_layout
 from ecli.ui.KeyBinder import KeyBinder
+from ecli.ui.mouse import (
+    FocusRegion,
+    MouseAction,
+    decode_curses_mouse,
+    hit_test,
+)
 from ecli.ui.PanelManager import PanelManager
 from ecli.ui.panels import FileBrowserPanel, GitPanel
+from ecli.ui.textops import normalize_paste_text, selection_to_text
 from ecli.utils.logging_config import logger, log_record_to_file_handlers
 from ecli.utils.text_buffer import (
     detect_and_decode_text,
     split_text_preserving_content,
 )
+from ecli.utils.themes import ThemePalette, resolve_theme
 from ecli.utils.utils import hex_to_xterm
 
 
@@ -156,6 +165,40 @@ class _LightweightPanelManager:
 
     def draw_active_panel(self) -> None:
         return None
+
+
+#: Per-name terminal attribute and 8-colour fallback for each semantic colour.
+#: Structural and theme-independent; the foreground hex comes from the active
+#: theme palette (see ``Ecli.init_colors`` / ``ecli.utils.themes``).
+_SYNTAX_COLOR_STRUCTURE: dict[str, tuple[int, int]] = {
+    # Syntax Highlighting
+    "default": (curses.COLOR_WHITE, curses.A_NORMAL),
+    "comment": (curses.COLOR_WHITE, curses.A_DIM),
+    "keyword": (curses.COLOR_MAGENTA, curses.A_NORMAL),
+    "string": (curses.COLOR_CYAN, curses.A_NORMAL),
+    "number": (curses.COLOR_BLUE, curses.A_NORMAL),
+    "function": (curses.COLOR_YELLOW, curses.A_BOLD),
+    "class": (curses.COLOR_YELLOW, curses.A_BOLD),
+    "constant": (curses.COLOR_CYAN, curses.A_BOLD),
+    "type": (curses.COLOR_YELLOW, curses.A_NORMAL),
+    "operator": (curses.COLOR_RED, curses.A_NORMAL),
+    "decorator": (curses.COLOR_MAGENTA, curses.A_BOLD),
+    "variable": (curses.COLOR_WHITE, curses.A_NORMAL),
+    "tag": (curses.COLOR_GREEN, curses.A_NORMAL),
+    "attribute": (curses.COLOR_CYAN, curses.A_NORMAL),
+    "builtin": (curses.COLOR_YELLOW, curses.A_NORMAL),
+    # UI Elements
+    "error": (curses.COLOR_RED, curses.A_BOLD),
+    "status": (curses.COLOR_WHITE, curses.A_REVERSE),
+    "status_error": (curses.COLOR_RED, curses.A_REVERSE | curses.A_BOLD),
+    "line_number": (curses.COLOR_YELLOW, curses.A_DIM),
+    # Git statuses
+    "git_info": (curses.COLOR_GREEN, curses.A_NORMAL),  # Untracked, Clean
+    "git_dirty": (curses.COLOR_YELLOW, curses.A_NORMAL),  # Modified
+    "git_added": (curses.COLOR_CYAN, curses.A_NORMAL),  # Added
+    "git_deleted": (curses.COLOR_RED, curses.A_DIM),  # Deleted
+    "search_highlight": (curses.COLOR_BLACK, curses.A_NORMAL),
+}
 
 
 ## ==================== Ecli Class ====================
@@ -578,6 +621,13 @@ class Ecli:
         self.pyclip_available: bool = self._check_pyclip_availability()
         if not self.pyclip_available:
             self.use_system_clipboard = False
+        # Mouse support is opt-in ([editor].mouse = true) so it never disrupts
+        # native terminal text selection by default. Enabled at run() if both
+        # config and the terminal allow it.
+        self.mouse_enabled_config: bool = bool(
+            self.config.get("editor", {}).get("mouse", False)
+        )
+        self.mouse_active: bool = False
         # Setup auto-save
         self._auto_save_thread: Optional[threading.Thread] = None
         self._auto_save_enabled: bool = False
@@ -871,6 +921,31 @@ class Ecli:
         # so a redraw is always required.
         return True
 
+    def toggle_terminal_panel(self) -> bool:
+        """Reserved hook for the future Terminal Panel (F11) — not implemented.
+
+        The Terminal Panel will be a normal right-side panel that reuses the
+        existing split-layout architecture unchanged:
+
+        * 60% editor / 40% side panel via ``ecli.ui.geometry.compute_layout``;
+        * opaque themed panel surface, border/title/footer, no global-footer
+          overlap (``BasePanel._layout_window`` + ``panel_kind = "terminal"``);
+        * the F12 focus-switch model and Esc-to-close;
+        * the same theme roles and resize-safe clipping.
+
+        Future input contract (intentionally NOT wired here): F11 opens/closes
+        the panel, F12 switches focus, Esc closes the focused panel, and Ctrl+C
+        must interrupt the terminal process **only** when the terminal panel is
+        focused (handled by the panel, not the global editor copy binding).
+
+        No PTY, subprocess or terminal UI is started in this pass.
+        """
+        self._set_status_message(
+            "Terminal panel (F11) is reserved and not yet available."
+        )
+        logging.info("toggle_terminal_panel: reserved hook invoked (not implemented).")
+        return True
+
     def _get_service_registry(self) -> ServiceRegistry:
         """Return the editor-owned service registry, creating it lazily."""
         if self.service_registry is not None:
@@ -1145,23 +1220,12 @@ class Ecli:
             )
             return ""
 
-        start_col = max(0, min(start_col, len(self.text[start_row])))
-        end_col = max(0, min(end_col, len(self.text[end_row])))
-
-        if start_row == end_row:
-            # Single-line selection
-            return self.text[start_row][start_col:end_col]
-        # Multi-line selection
-        selected_parts = []
-        # Part of the first line
-        selected_parts.append(self.text[start_row][start_col:])
-        # Full middle lines
-        for i in range(start_row + 1, end_row):
-            selected_parts.append(self.text[i])
-        # Part of the last line
-        selected_parts.append(self.text[end_row][:end_col])
-
-        return "\n".join(selected_parts)
+        # Delegate to the central, buffer-coordinate-only extractor. It returns
+        # file content for the (row, col) span only — never line numbers, the
+        # gutter, borders, or any other rendered UI chrome.
+        return selection_to_text(
+            self.text, (start_row, start_col), (end_row, end_col)
+        )
 
     # --- Copy selected text ---
     def copy(self) -> bool:
@@ -1449,6 +1513,17 @@ class Ecli:
 
         return tokenized_segments
 
+    def _syntax_highlighting_enabled(self) -> bool:
+        """Return whether syntax highlighting is enabled in the active config.
+
+        Controlled by ``[editor].syntax_highlighting`` (default ``True``). A
+        missing or non-boolean value falls back to enabled so highlighting never
+        silently breaks on a malformed config.
+        """
+        editor_config = self.config.get("editor", {}) if isinstance(self.config, dict) else {}
+        value = editor_config.get("syntax_highlighting", True)
+        return bool(value) if isinstance(value, bool) else True
+
     # --- Syntax-highlighting helper ------------------------------
     def apply_syntax_highlighting_with_pygments(
         self,
@@ -1470,6 +1545,13 @@ class Ecli:
             A list of lists, where each inner list contains (substring,
             curses_attribute) tuples for a single line.
         """
+        # Respect the syntax-highlighting toggle. When disabled, every line is
+        # returned as a single default-coloured segment so the renderer draws
+        # plain text without touching the buffer.
+        if not self._syntax_highlighting_enabled():
+            default_color = self.colors.get("default", curses.A_NORMAL)
+            return [[(line, default_color)] for line in lines]
+
         # Ensure a lexer is set, even if it's just TextLexer.
         if self._lexer is None:
             self.detect_language()
@@ -1787,8 +1869,9 @@ class Ecli:
             self._force_full_redraw = True
             new_height, new_width = self.stdscr.getmaxyx()
 
-            # The calculation is correct, but let's log it.
-            self.visible_lines = max(1, new_height - 2)
+            # Reserve rows for the header/status/footer chrome (single source of
+            # truth lives in DrawScreen.content_height).
+            self.visible_lines = DrawScreen.content_height(new_height)
             self.last_window_size = (new_height, new_width)
             self.scroll_left = 0
             logging.debug(
@@ -3373,12 +3456,48 @@ class Ecli:
 
         # Now that the selection is cancelled, we simply insert the text.
         # The insert_text method will no longer see an active selection.
-        text_to_paste = text_to_paste.replace("\r\n", "\n").replace("\r", "\n")
+        # Central sanitiser: strip terminal/bracketed control sequences and
+        # normalise CRLF/CR -> LF while preserving valid Unicode.
+        text_to_paste = normalize_paste_text(text_to_paste)
 
         if self.insert_text(text_to_paste):
             self._set_status_message(f"Pasted from {source_of_paste} clipboard")
             return True
         return False
+
+    def insert_pasted_text(self, text: str) -> bool:
+        """Insert bracketed-paste / clipboard text as a single transaction.
+
+        Sanitises the payload via ``normalize_paste_text`` (strip bracketed-paste
+        markers and ANSI/terminal escape sequences, normalise ``\\r\\n`` / bare
+        ``\\r`` -> ``\\n``) while preserving valid Unicode, inserts the whole
+        payload via ``insert_text`` (one compound undo unit, one redraw), and
+        never interprets the payload as editor shortcuts. Returns True when a
+        redraw is needed.
+        """
+        if not text:
+            return False
+
+        text = normalize_paste_text(text)
+        if not text:
+            return False
+
+        # Mirror into the internal clipboard so a subsequent Ctrl+V is consistent.
+        self.internal_clipboard = text
+
+        # A paste replaces any active selection at the cursor; cancel it first so
+        # insert_text drops the selection inside the same compound action.
+        if self.is_selecting:
+            logging.debug("Bracketed paste over active selection.")
+
+        inserted = self.insert_text(text)
+        if inserted:
+            line_count = text.count("\n") + 1
+            self._set_status_message(
+                f"Pasted {line_count} line{'s' if line_count != 1 else ''} "
+                f"({len(text)} chars)"
+            )
+        return inserted
 
     def delete_selected_text(self) -> None:
         """High-level action to delete the currently selected text and record
@@ -5274,6 +5393,12 @@ class Ecli:
             f"_write_file: Writing to '{target_filename}' with encoding '{self.encoding}'"
         )
 
+        # Deterministic newline policy: logical lines are joined with a single
+        # LF on every platform and written through a binary handle so the OS
+        # text layer never re-translates them. Using os.linesep together with a
+        # text-mode handle double-translated on Windows (LF -> CRLF on a string
+        # that already held CRLF), corrupting the line structure on reopen.
+        newline = "\n"
         content_to_write = ""
         # Create a copy for safe modification
         lines_to_save = list(self.text)
@@ -5282,9 +5407,9 @@ class Ecli:
             if len(lines_to_save) == 1 and not lines_to_save[0]:
                 content_to_write = ""
             else:
-                content_to_write = os.linesep.join(lines_to_save)
+                content_to_write = newline.join(lines_to_save)
                 if getattr(self, "_file_had_final_newline", False):
-                    content_to_write += os.linesep
+                    content_to_write += newline
         else:
             # If the last line is empty and the second-to-last is not, remove it for saving
             if len(lines_to_save) > 1 and not lines_to_save[-1] and lines_to_save[-2]:
@@ -5292,18 +5417,15 @@ class Ecli:
             elif len(lines_to_save) == 1 and not lines_to_save[0]:
                 # If the file contains only one empty line (our technical one)
                 lines_to_save = []  # Save as an empty file
-            content_to_write = os.linesep.join(lines_to_save)
+            content_to_write = newline.join(lines_to_save)
+            # A freshly created buffer is persisted with a trailing newline.
+            if content_to_write:
+                content_to_write += newline
 
         try:
-            with self.safe_open(
-                target_filename, "w", encoding=self.encoding, errors="replace"
-            ) as f:
-                text_f = cast(TextIO, f)
-                text_f.write(content_to_write)
-                if content_to_write and not getattr(
-                    self, "_file_loaded_from_disk", False
-                ):
-                    text_f.write(os.linesep)
+            encoded = content_to_write.encode(self.encoding or "utf-8", errors="replace")
+            with self.safe_open(target_filename, "wb") as f:
+                cast(BinaryIO, f).write(encoded)
 
             logging.debug(f"Successfully wrote to '{target_filename}'")
 
@@ -5315,7 +5437,7 @@ class Ecli:
 
             self.modified = False
             self._file_loaded_from_disk = True
-            self._file_had_final_newline = content_to_write.endswith(os.linesep)
+            self._file_had_final_newline = content_to_write.endswith(newline)
             self.detect_language()
 
             # Update Git information as file state on disk has changed
@@ -6960,7 +7082,10 @@ class Ecli:
                 self.scroll_top <= text_row_idx < self.scroll_top + self.visible_lines
             ):
                 return None
-            screen_y_coord = text_row_idx - self.scroll_top
+            screen_y_coord = (
+                text_row_idx - self.scroll_top
+                + getattr(self, "_content_area_y_offset", 0)
+            )
             try:
                 if not (0 <= text_row_idx < len(self.text)):
                     logging.warning(
@@ -6978,9 +7103,9 @@ class Ecli:
                     f"get_screen_coords_for_highlight: IndexError accessing text for ({text_row_idx},{text_col_idx})."
                 )
                 return None
-            screen_x_coord = (
-                line_num_display_width + prefix_width_unscrolled - self.scroll_left
-            )
+            x_off = getattr(self, "_content_area_x_offset", 0)
+            text_left = line_num_display_width + x_off
+            screen_x_coord = text_left + prefix_width_unscrolled - self.scroll_left
             if text_col_idx >= len(self.text[text_row_idx]):
                 logging.warning(
                     f"get_screen_coords_for_highlight: text_col_idx {text_col_idx} is at or past EOL for line {text_row_idx} (len {len(self.text[text_row_idx])}). Cannot get char width for highlighting."
@@ -6994,13 +7119,13 @@ class Ecli:
                     f"get_screen_coords_for_highlight: Character at ({text_row_idx},{text_col_idx}) has width {char_display_width_at_coord}, not highlighting directly."
                 )
                 return None
+            right_edge = getattr(self, "_content_right_x", 0) or term_width
             if (
-                screen_x_coord >= term_width
-                or (screen_x_coord + char_display_width_at_coord)
-                <= line_num_display_width
+                screen_x_coord >= right_edge
+                or (screen_x_coord + char_display_width_at_coord) <= text_left
             ):
                 return None
-            return screen_y_coord, max(line_num_display_width, screen_x_coord)
+            return screen_y_coord, max(text_left, screen_x_coord)
 
         # 4. Calculate screen coordinates for both brackets
         coords1_on_screen = get_screen_coords_for_highlight(
@@ -7049,10 +7174,120 @@ class Ecli:
                             f"Curses error highlighting bracket 2 at screen ({scr_y2},{scr_x2}): {e}"
                         )
 
+    def _resolve_theme_pair_colors(
+        self,
+        name: str,
+        theme_hex: dict[str, str],
+        palette: ThemePalette,
+        can_use_256_colors: bool,
+        theme_bg: int,
+    ) -> tuple[int, int]:
+        """Resolve the (foreground, background) terminal colours for one pair.
+
+        On 256-colour terminals the foreground comes from the active theme; on
+        legacy terminals a fixed 8-colour fallback is used. ``search_highlight``
+        is special-cased to render on a bright warning swatch.
+        """
+        bg = theme_bg
+        if can_use_256_colors:
+            try:
+                fg = hex_to_xterm(theme_hex.get(name, palette.foreground))
+            except Exception:
+                fg = hex_to_xterm(palette.foreground)
+        else:
+            fg = _SYNTAX_COLOR_STRUCTURE[name][0]
+
+        if name == "search_highlight":
+            if can_use_256_colors:
+                try:
+                    bg = hex_to_xterm(palette.search_background)
+                except Exception:
+                    bg = theme_bg
+            else:
+                fg = curses.COLOR_BLACK
+                bg = curses.COLOR_YELLOW
+
+        return fg, bg
+
+    def _init_chrome_color_pairs(
+        self, palette: ThemePalette, start_pair_id: int, can_use_256_colors: bool
+    ) -> int:
+        """Allocate curses pairs for UI chrome (header/status/footer/border/...).
+
+        Each chrome role is a (fg, bg) pair so the bars render as solid coloured
+        surfaces. On non-256-colour terminals chrome degrades to reverse-video so
+        the bars still stand out from file text. Returns the next free pair id.
+        """
+        pair_id = start_pair_id
+        emphatic = ("accent", "key", "title", "number")
+        for name, (fg_hex, bg_hex) in palette.chrome_color_pairs().items():
+            if not can_use_256_colors:
+                attr = curses.A_REVERSE
+                if name.endswith(emphatic):
+                    attr |= curses.A_BOLD
+                self.colors[name] = attr
+                continue
+            if pair_id >= curses.COLOR_PAIRS:
+                self.colors[name] = curses.A_REVERSE
+                continue
+            try:
+                fg = hex_to_xterm(fg_hex)
+                bg = hex_to_xterm(bg_hex)
+                curses.init_pair(pair_id, fg, bg)
+                self.colors[name] = curses.color_pair(pair_id)
+                pair_id += 1
+            except (curses.error, Exception) as exc:  # noqa: BLE001
+                logging.debug("Chrome pair '%s' fell back to reverse: %s", name, exc)
+                self.colors[name] = curses.A_REVERSE
+        return pair_id
+
+    def _init_current_line_variants(
+        self,
+        palette: ThemePalette,
+        theme_hex: dict[str, str],
+        start_pair_id: int,
+        can_use_256_colors: bool,
+    ) -> int:
+        """Allocate "syntax-on-current-line" pairs and map base pair -> variant.
+
+        Each variant keeps the syntax foreground but swaps the background to the
+        theme's current-line colour, so the active row can be tinted while every
+        token keeps its colour. Returns the next free pair id.
+        """
+        self._current_line_variant = {}
+        if not can_use_256_colors:
+            return start_pair_id
+        try:
+            cur_bg = hex_to_xterm(palette.current_line)
+        except Exception:
+            return start_pair_id
+
+        pair_id = start_pair_id
+        for name in _SYNTAX_COLOR_STRUCTURE:
+            base_attr = self.colors.get(name)
+            if base_attr is None:
+                continue
+            base_pair = curses.pair_number(base_attr)
+            if base_pair == 0 or pair_id >= curses.COLOR_PAIRS:
+                continue
+            try:
+                fg = hex_to_xterm(theme_hex.get(name, palette.foreground))
+            except Exception:
+                fg = hex_to_xterm(palette.foreground)
+            try:
+                curses.init_pair(pair_id, fg, cur_bg)
+                self._current_line_variant[base_pair] = pair_id
+                pair_id += 1
+            except curses.error:
+                continue
+        return pair_id
+
     def init_colors(self) -> None:
         """Initializes curses color pairs with graceful degradation."""
         self.is_256_color_terminal: bool = False
         self.colors = {}  # Start fresh
+        # base_pair_number -> current-line-variant pair number (populated below).
+        self._current_line_variant: dict[int, int] = {}
 
         if not curses.has_colors() or curses.COLORS < 8:
             logging.warning(
@@ -7083,56 +7318,68 @@ class Ecli:
                 "git_deleted": curses.A_DIM,
                 # -----------------------------------------------------------------
                 "search_highlight": curses.A_REVERSE,
+                # --- UI chrome fallbacks for colourless terminals ---
+                "ui_header": curses.A_REVERSE | curses.A_BOLD,
+                "ui_header_accent": curses.A_REVERSE | curses.A_BOLD,
+                "ui_header_dim": curses.A_REVERSE,
+                "ui_status": curses.A_REVERSE,
+                "ui_status_dim": curses.A_REVERSE,
+                "ui_status_accent": curses.A_REVERSE | curses.A_BOLD,
+                "ui_footer": curses.A_REVERSE,
+                "ui_footer_key": curses.A_REVERSE | curses.A_BOLD,
+                "ui_border": curses.A_DIM,
+                "ui_panel_title": curses.A_BOLD,
+                "ui_current_line": curses.A_UNDERLINE,
+                "ui_current_line_number": curses.A_BOLD,
+                "ui_selection": curses.A_REVERSE,
+                "ui_info": curses.A_NORMAL,
+                "ui_success": curses.A_NORMAL,
+                "ui_warning": curses.A_BOLD,
+                "ui_error": curses.A_BOLD,
+                "ui_dim": curses.A_DIM,
+                "ui_panel": curses.A_NORMAL,
+                "ui_panel_dim": curses.A_DIM,
+                "ui_panel_title": curses.A_BOLD,
+                "ui_panel_border": curses.A_NORMAL,
+                "ui_panel_warning": curses.A_BOLD,
+                "ui_panel_error": curses.A_BOLD,
+                "ui_panel_selected": curses.A_REVERSE | curses.A_BOLD,
             }
             return
 
         curses.start_color()
         curses.use_default_colors()
 
-        # --- Adding new semantic names for Git ---
-        color_definitions = {
-            # Syntax Highlighting
-            "default": ("#C9D1D9", curses.COLOR_WHITE, curses.A_NORMAL),
-            "comment": ("#8B949E", curses.COLOR_WHITE, curses.A_DIM),
-            "keyword": ("#FF7B72", curses.COLOR_MAGENTA, curses.A_NORMAL),
-            "string": ("#A5D6FF", curses.COLOR_CYAN, curses.A_NORMAL),
-            "number": ("#79C0FF", curses.COLOR_BLUE, curses.A_NORMAL),
-            "function": ("#D2A8FF", curses.COLOR_YELLOW, curses.A_BOLD),
-            "constant": ("#79C0FF", curses.COLOR_CYAN, curses.A_BOLD),
-            "type": ("#F2CC60", curses.COLOR_YELLOW, curses.A_NORMAL),
-            "operator": ("#FF7B72", curses.COLOR_RED, curses.A_NORMAL),
-            "decorator": ("#D2A8FF", curses.COLOR_MAGENTA, curses.A_BOLD),
-            "variable": ("#C9D1D9", curses.COLOR_WHITE, curses.A_NORMAL),
-            "tag": ("#7EE787", curses.COLOR_GREEN, curses.A_NORMAL),
-            "attribute": ("#79C0FF", curses.COLOR_CYAN, curses.A_NORMAL),
-            # UI Elements
-            "error": ("#F85149", curses.COLOR_RED, curses.A_BOLD),
-            "status": ("#C9D1D9", curses.COLOR_WHITE, curses.A_REVERSE),
-            "status_error": (
-                "#F85149",
-                curses.COLOR_RED,
-                curses.A_REVERSE | curses.A_BOLD,
-            ),
-            "line_number": ("#817248", curses.COLOR_YELLOW, curses.A_DIM),
-            # --- Colors for Git statuses ---
-            "git_info": (
-                "#34913C",
-                curses.COLOR_GREEN,
-                curses.A_NORMAL,
-            ),  # Untracked, Clean
-            "git_dirty": ("#F2CC60", curses.COLOR_YELLOW, curses.A_NORMAL),  # Modified
-            "git_added": ("#A5D6FF", curses.COLOR_CYAN, curses.A_NORMAL),  # Added
-            "git_deleted": ("#F85149", curses.COLOR_RED, curses.A_DIM),  # Deleted
-            # -----------------------------------------
-            "search_highlight": ("#000000", curses.COLOR_BLACK, curses.A_NORMAL),
-        }
+        # Resolve the active built-in theme. Colours come exclusively from the
+        # selected palette (config key ``theme = 1..8``); the legacy free-form
+        # ``[colors]`` table is intentionally ignored so a single, deterministic
+        # source drives both the UI chrome and syntax highlighting.
+        palette: ThemePalette = resolve_theme(self.config)
+        self.active_theme = palette
+        if isinstance(self.config, dict) and self.config.get("colors"):
+            logging.info(
+                "Ignoring deprecated [colors] config section; using built-in "
+                "theme '%s' (theme = %d). Set 'theme = 1..8' to change palette.",
+                palette.name,
+                palette.theme_id,
+            )
 
-        user_colors = self.config.get("colors", {})
-        pair_id_counter = 1
+        theme_hex = palette.syntax_color_hex()
         can_use_256_colors = curses.COLORS >= 256
         self.is_256_color_terminal = can_use_256_colors
 
-        for name, (default_hex, default_8_color, attr) in color_definitions.items():
+        # Apply the theme background only on capable terminals; otherwise keep the
+        # terminal's default background (-1) so 8/16-colour terminals degrade
+        # gracefully to foreground-only theming.
+        theme_bg = -1
+        if can_use_256_colors:
+            try:
+                theme_bg = hex_to_xterm(palette.background)
+            except Exception:
+                theme_bg = -1
+
+        pair_id_counter = 1
+        for name, (_default_8_color, attr) in _SYNTAX_COLOR_STRUCTURE.items():
             if pair_id_counter >= curses.COLOR_PAIRS:
                 logging.warning(
                     f"Ran out of color pairs. Cannot initialize '{name}' \
@@ -7141,26 +7388,9 @@ class Ecli:
                 self.colors[name] = attr
                 continue
 
-            fg, bg = -1, -1
-
-            if can_use_256_colors:
-                hex_code = user_colors.get(name, default_hex)
-                try:
-                    fg = hex_to_xterm(hex_code)
-                except Exception:
-                    fg = hex_to_xterm(default_hex)
-            else:
-                fg = default_8_color
-
-            if name == "search_highlight":
-                bg_hex = user_colors.get("search_highlight_bg", "#FFAB70")
-                if can_use_256_colors:
-                    try:
-                        bg = hex_to_xterm(bg_hex)
-                    except Exception:
-                        bg = 215
-                else:
-                    bg = curses.COLOR_YELLOW
+            fg, bg = self._resolve_theme_pair_colors(
+                name, theme_hex, palette, can_use_256_colors, theme_bg
+            )
 
             try:
                 curses.init_pair(pair_id_counter, fg, bg)
@@ -7169,6 +7399,23 @@ class Ecli:
             except curses.error as e:
                 logging.error(f"Failed to initialize curses pair for '{name}': {e}")
                 self.colors[name] = attr
+
+        # Allocate current-line variants (same fg, current-line background) so the
+        # active row can be tinted without losing syntax colours.
+        pair_id_counter = self._init_current_line_variants(
+            palette, theme_hex, pair_id_counter, can_use_256_colors
+        )
+
+        # Allocate UI-chrome pairs (header/status/footer/border/current-line).
+        self._init_chrome_color_pairs(palette, pair_id_counter, can_use_256_colors)
+
+        # Paint the editor surface with the theme background so cleared regions
+        # (erase / clrtoeol) match the palette instead of the terminal default.
+        if can_use_256_colors and "default" in self.colors:
+            try:
+                self.stdscr.bkgd(" ", self.colors["default"])
+            except (curses.error, AttributeError) as exc:
+                logging.debug("Could not apply theme background to window: %s", exc)
 
     # ==================== HELP ==================================
     def _build_help_lines(self) -> list[str]:  # noqa: python:S3516
@@ -7809,6 +8056,13 @@ class Ecli:
             # Non-fatal on platforms without terminfo
             pass
 
+        # Enable bracketed paste so terminal pastes arrive as one payload.
+        self._set_bracketed_paste(True)
+        # Opt-in mouse support (off by default to keep native text selection).
+        self._enable_mouse()
+        # Surface the effective theme + which config file was actually loaded.
+        self._report_startup_config()
+
         # Input modes: raw/noecho + keypad/meta
         try:
             curses.raw()
@@ -7872,6 +8126,10 @@ class Ecli:
             except Exception:
                 pass
 
+            # Disable mouse + bracketed paste before leaving the alternate screen.
+            self._disable_mouse()
+            self._set_bracketed_paste(False)
+
             # --- EXIT terminal application modes (normal cursor keys + leave alt screen) ---
             try:
                 rmkx  = curses.tigetstr("rmkx")
@@ -7884,6 +8142,170 @@ class Ecli:
                 pass
 
             logger.info("Editor main loop finished.")
+
+    def _set_bracketed_paste(self, enable: bool) -> None:
+        """Enable/disable terminal bracketed-paste mode (best effort)."""
+        seq = "\x1b[?2004h" if enable else "\x1b[?2004l"
+        try:
+            sys.stdout.write(seq)
+            sys.stdout.flush()
+        except Exception:
+            logging.debug("Could not toggle bracketed paste mode.", exc_info=True)
+
+    def _enable_mouse(self) -> None:
+        """Enable curses mouse reporting if configured and supported (opt-in)."""
+        if not getattr(self, "mouse_enabled_config", False):
+            return
+        try:
+            avail = getattr(curses, "ALL_MOUSE_EVENTS", 0) | getattr(
+                curses, "REPORT_MOUSE_POSITION", 0
+            )
+            mask, _ = curses.mousemask(avail)
+            self.mouse_active = mask != 0
+            if self.mouse_active:
+                logging.info("Mouse support enabled.")
+            else:
+                logging.info("Mouse not supported by this terminal.")
+        except (curses.error, AttributeError):
+            self.mouse_active = False
+            logging.debug("Mouse support unavailable.", exc_info=True)
+
+    def _disable_mouse(self) -> None:
+        """Release the mouse mask (best effort)."""
+        if not getattr(self, "mouse_active", False):
+            return
+        try:
+            curses.mousemask(0)
+        except (curses.error, AttributeError):
+            pass
+        self.mouse_active = False
+
+    def _handle_mouse_event(self) -> bool:
+        """Dispatch one mouse event to the focused region (safe, non-destructive).
+
+        Only focus changes, wheel scrolling and list-row *selection* are applied;
+        no editor mutation and no guarded/destructive action (delete/rename/push/
+        publish) is ever triggered by a click. Degrades to a no-op when mouse
+        support is off or unavailable.
+        """
+        if not getattr(self, "mouse_active", False):
+            return False
+        try:
+            _id, x, y, _z, bstate = curses.getmouse()
+        except curses.error:
+            return False
+
+        button, action = decode_curses_mouse(bstate)
+        height, width = self.stdscr.getmaxyx()
+
+        pm = self.panel_manager
+        panel = (
+            getattr(pm, "active_panel", None)
+            if pm is not None and pm.is_panel_active()
+            else None
+        )
+        is_modal = bool(getattr(panel, "_rendered_as_modal", False)) if panel else False
+        side_panel = panel is not None and not is_modal
+        geo = compute_layout(width, height, active_panel=side_panel)
+        modal_rect = (
+            Rect(panel.start_x, panel.start_y, panel.width, panel.height)
+            if is_modal and panel is not None
+            else None
+        )
+        gutter = getattr(self.drawer, "_text_start_x", 0) + getattr(
+            self.drawer, "content_area_x_offset", 0
+        )
+        target = hit_test(geo, x, y, gutter_width=gutter, modal_rect=modal_rect)
+        return self._apply_mouse_target(target, button, action, panel)
+
+    def _apply_mouse_target(
+        self, target: Any, button: Any, action: Any, panel: Any
+    ) -> bool:
+        """Apply a safe intent from a hit-test result. Returns True on change."""
+        region = target.region
+        # Wheel scrolls whichever region it is over.
+        if action is MouseAction.WHEEL:
+            delta = 1 if button.name == "WHEEL_UP" else -1
+            if region is FocusRegion.PANEL and panel is not None:
+                return bool(panel.scroll_by(delta))
+            if region in (FocusRegion.EDITOR, FocusRegion.GUTTER):
+                return self._scroll_editor(delta * 3)
+            return False
+
+        if region is FocusRegion.MODAL:
+            return False  # keep the modal; no destructive action on click
+        if region is FocusRegion.PANEL and panel is not None:
+            changed = self._focus_to("panel")
+            hit = getattr(panel, "hit_entry_index", None)
+            if action is MouseAction.CLICK and callable(hit):
+                idx = hit(target.local_y)
+                if idx is not None and getattr(panel, "idx", None) != idx:
+                    panel.idx = idx  # selection only; never auto-opens
+                    changed = True
+            return changed
+        if region in (FocusRegion.EDITOR, FocusRegion.GUTTER):
+            changed = self._focus_to("editor")
+            if action is MouseAction.CLICK:
+                changed = self._move_cursor_to_click(target) or changed
+            return changed
+        # Header / status / footer / outside: focus editor, never touch buffer.
+        return self._focus_to("editor")
+
+    def _focus_to(self, where: str) -> bool:
+        """Set focus deterministically (mouse mirror of F12). Returns True on change."""
+        if getattr(self, "focus", None) == where:
+            return False
+        self.focus = where
+        return True
+
+    def _scroll_editor(self, rows: int) -> bool:
+        """Wheel-scroll the editor viewport by ``rows`` (positive = up)."""
+        max_scroll = max(0, len(self.text) - max(1, self.visible_lines))
+        new_top = max(0, min(self.scroll_top - rows, max_scroll))
+        if new_top != self.scroll_top:
+            self.scroll_top = new_top
+            return True
+        return False
+
+    def _move_cursor_to_click(self, target: Any) -> bool:
+        """Move the cursor to the clicked editor cell (non-destructive)."""
+        line = self.scroll_top + target.local_y
+        line = max(0, min(line, len(self.text) - 1))
+        gutter = getattr(self.drawer, "_text_start_x", 0)
+        col = self.scroll_left + max(0, target.local_x - gutter)
+        col = max(0, min(col, len(self.text[line])))
+        self.cursor_y, self.cursor_x = line, col
+        self._ensure_cursor_in_bounds()
+        return True
+
+    def _report_startup_config(self) -> None:
+        """Set an initial status line exposing the theme and loaded config path."""
+        try:
+            theme = getattr(self, "active_theme", None)
+            cfg_path = self.config.get("_loaded_config_path", "unknown")
+            if theme is not None:
+                self._set_status_message(
+                    f"Theme {theme.theme_id}: {theme.name} · config: {cfg_path}"
+                )
+        except Exception:
+            logging.debug("Could not report startup config.", exc_info=True)
+
+    def _handle_paste_event(self, text: str) -> bool:
+        """Route a captured bracketed paste to the focused component."""
+        if not text:
+            return False
+        if (
+            self.focus == "panel"
+            and self.panel_manager
+            and self.panel_manager.is_panel_active()
+        ):
+            active = getattr(self.panel_manager, "active_panel", None)
+            handler = getattr(active, "handle_paste", None)
+            if callable(handler):
+                return bool(handler(text))
+            # Panel does not accept paste; ignore to avoid corrupting the editor.
+            return False
+        return self.insert_pasted_text(text)
 
     def _process_events_and_input(self) -> bool:
         """Processes all non-UI events for a single main loop iteration, including
@@ -7920,6 +8342,19 @@ class Ecli:
 
         # Proceed only if a valid key was received (not an error or timeout).
         if key_input != curses.ERR and key_input != -1:
+            # Bracketed paste: insert the whole payload as one transaction and
+            # redraw once, instead of replaying it as individual keystrokes.
+            if key_input == KeyBinder.PASTE_EVENT:
+                if self._handle_paste_event(self.keybinder.last_paste):
+                    redraw_needed = True
+                return redraw_needed
+
+            # Mouse: unified dispatch path (only active when mouse is enabled).
+            if key_input == curses.KEY_MOUSE:
+                if self._handle_mouse_event():
+                    redraw_needed = True
+                return redraw_needed
+
             # Intercept the RESIZE key at the highest level, BEFORE dispatching it
             # to the focused component. This is a global event that affects the
             # entire UI.

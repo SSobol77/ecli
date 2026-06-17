@@ -49,6 +49,7 @@ import shlex
 import shutil
 import textwrap
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
@@ -56,6 +57,8 @@ import pyperclip
 from wcwidth import wcswidth
 
 from ecli.integrations.GitBridge import GitBridge, GitCommandResult
+from ecli.ui.design import TuiDesign
+from ecli.ui.geometry import centered_modal_rect, compute_layout
 from ecli.services.models.doctor import DoctorContext, DoctorFinding
 from ecli.services.models.plan import CommandPlan
 from ecli.utils.logging_config import logger
@@ -67,15 +70,55 @@ if TYPE_CHECKING:
 CursesWindow = Any
 
 
+# --- Panel-type vocabulary (split-layout architecture) ---------------------
+# All *side* panels are generic consumers of the same split-layout contract:
+# the 60/40 editor/panel split (ecli.ui.geometry.compute_layout), an opaque
+# themed panel surface, the border/title/footer system, the no-overlap rule
+# with the global status/footer, the F12 focus model, Esc-to-close, the theme
+# roles, and resize-safe clipping (BasePanel._layout_window).
+#
+# ``"terminal"`` is RESERVED here for a future Terminal Panel. It is documented
+# now so the layout/panel architecture explicitly supports it, but it is NOT
+# implemented in this pass (no PTY, no subprocess, no terminal UI). A future
+# ``TerminalPanel(BasePanel)`` only needs ``panel_kind = "terminal"`` and
+# ``is_modal_panel = False`` to inherit the entire split layout.
+SIDE_PANEL_KINDS: frozenset[str] = frozenset(
+    {
+        "file_manager",
+        "git_control",
+        "system_doctor",
+        "ai_provider",
+        "command_plan",
+        "services",
+        "terminal",  # reserved — future Terminal Panel (F11), not implemented yet
+    }
+)
+#: Centered modal panels (Help, dialogs); not part of the side-panel split.
+MODAL_PANEL_KINDS: frozenset[str] = frozenset({"help", "confirm", "info"})
+
+
 # ==================== BasePanel Class (Non-Blocking) ====================
 class BasePanel:
-    """A base class for non-blocking, interactive UI panels in the ECLI editor."""
+    """A base class for non-blocking, interactive UI panels in the ECLI editor.
+
+    Side panels (``is_modal_panel = False``) are generic consumers of the
+    split-layout system: ``_layout_window`` places them in the right 40% work
+    area without overlapping the global header/status/footer. A future Terminal
+    Panel (``panel_kind = "terminal"``) will reuse this unchanged — see
+    ``SIDE_PANEL_KINDS``.
+    """
 
     # Shift + Arrow key codes
     key_s_up = getattr(curses, "KEY_SR", 337)
     key_s_down = getattr(curses, "KEY_SF", 336)
     key_s_left = getattr(curses, "KEY_SLEFT", 393)
     key_s_right = getattr(curses, "KEY_SRIGHT", 402)
+
+    #: Panel-type identifier (one of SIDE_PANEL_KINDS / MODAL_PANEL_KINDS).
+    panel_kind: str = "generic"
+
+    #: Side panels occupy the right 40% work area; modal panels are centered.
+    is_modal_panel: bool = False
 
     def __init__(
         self, stdscr: CursesWindow, main_editor_instance: Ecli, **kwargs: Any
@@ -86,7 +129,39 @@ class BasePanel:
         self.visible: bool = False
         self.term_height, self.term_width = self.stdscr.getmaxyx()
         self.win: Optional[CursesWindow] = None
+        self._rendered_as_modal: bool = False
         logger.debug(f"Base class initialized for panel '{self.__class__.__name__}'.")
+
+    def _layout_window(
+        self, modal_width: int = 80, modal_height: int = 24
+    ) -> CursesWindow:
+        """Create the panel's backing window from the split-layout geometry.
+
+        Side panels are placed in the right work-area region (rows ``1..H-3``)
+        so they never collide with the global header/status/footer. When the
+        terminal is too narrow for a split (or the panel is modal), a centered
+        modal rectangle is used instead. The created window is opaque.
+        """
+        self.term_height, self.term_width = self.stdscr.getmaxyx()
+        geo = compute_layout(self.term_width, self.term_height, active_panel=True)
+        if self.is_modal_panel or geo.panel is None:
+            rect = centered_modal_rect(
+                self.term_width, self.term_height, modal_width, modal_height
+            )
+            self._rendered_as_modal = True
+        else:
+            rect = geo.panel
+            self._rendered_as_modal = False
+
+        self.start_x = rect.x
+        self.start_y = rect.y
+        self.width = rect.width
+        self.height = rect.height
+        win = curses.newwin(rect.height, rect.width, rect.y, rect.x)
+        win.keypad(True)
+        self.win = win
+        self._make_opaque(win)
+        return win
 
     def resize(self) -> None:
         """Recalculates terminal dimensions. Must be implemented in subclasses."""
@@ -110,6 +185,120 @@ class BasePanel:
         raise NotImplementedError(
             "The 'draw' method must be implemented in a child class."
         )
+
+    def scroll_by(self, delta: int) -> bool:
+        """Scroll the panel content by ``delta`` rows (wheel; +1 = up).
+
+        Non-destructive: adjusts a ``scroll`` offset or a list ``idx`` if the
+        panel has one. Returns True when the view changed.
+        """
+        scroll = getattr(self, "scroll", None)
+        if isinstance(scroll, int):
+            new = max(0, scroll - delta)
+            if new != scroll:
+                self.scroll = new
+                return True
+            return False
+        idx = getattr(self, "idx", None)
+        entries = getattr(self, "entries", None)
+        if isinstance(idx, int) and entries:
+            new = max(0, min(len(entries) - 1, idx - delta))
+            if new != idx:
+                self.idx = new
+                return True
+        return False
+
+    def _panel_bg_attr(self) -> int:
+        """Opaque, themed background attribute for this panel's window."""
+        return self.editor.colors.get("ui_panel", curses.A_REVERSE)
+
+    def _panel_border_attr(self, focused: bool = False) -> int:
+        """Single source of truth for panel border styling.
+
+        Every panel/modal resolves its border through this one role
+        (``panel_border``) and focus convention, so borders share one
+        thickness, one colour role and one style — no per-panel ad-hoc curses
+        pairs and no mixed border colours between panels. A deliberate severity
+        state must come from a design-system role, not a hardcoded local pair.
+        """
+        return TuiDesign(self.editor.colors).border(focused)
+
+    def _draw_panel_frame(
+        self,
+        win: Optional[CursesWindow],
+        title: str = "",
+        *,
+        focused: bool = False,
+        footer: str = "",
+    ) -> None:
+        """Draw the shared panel frame used by every panel and modal.
+
+        One single-thickness border in the ``panel_border`` role, the title
+        embedded into the top edge (``panel_title`` role) and an optional footer
+        label embedded into the bottom edge of the panel's own window — never
+        into the global footer, since the window is bounded by ``_layout_window``
+        to rows ``1..H-3``.
+        """
+        if win is None:
+            return
+        try:
+            h, w = win.getmaxyx()
+        except (curses.error, AttributeError):
+            return
+        border_attr = self._panel_border_attr(focused)
+        title_attr = self.editor.colors.get("ui_panel_title", border_attr)
+        try:
+            win.attron(border_attr)
+            win.border()
+            win.attroff(border_attr)
+        except curses.error:
+            pass
+        if title and w > 6:
+            label = f" {title.strip()} "[: max(0, w - 4)]
+            try:
+                win.addstr(0, 2, label, title_attr)
+            except curses.error:
+                pass
+        if footer and h >= 2 and w > 6:
+            label = f" {footer.strip()} "[: max(0, w - 4)]
+            try:
+                win.addstr(h - 1, 2, label, border_attr)
+            except curses.error:
+                pass
+
+    def _make_opaque(self, win: Optional[CursesWindow]) -> None:
+        """Give *win* a solid themed background so it never shows ghosting.
+
+        Setting ``bkgd`` makes ``erase`` fill every cell with the panel surface
+        colour (not transparent spaces), so no editor text bleeds through.
+        """
+        if win is None or not hasattr(win, "bkgd"):
+            return
+        try:
+            win.bkgd(" ", self._panel_bg_attr())
+        except curses.error:
+            pass
+
+    def _present(self, win: Optional[CursesWindow]) -> None:
+        """Refresh *win*, forcing a full re-copy to defeat overlay ghosting.
+
+        ``touchwin`` marks every cell dirty so ``noutrefresh`` re-copies the
+        whole panel over the editor, instead of skipping cells curses thinks are
+        unchanged (which is how editor text bled through on redraw).
+        """
+        if win is None:
+            return
+        if hasattr(win, "touchwin"):
+            try:
+                win.touchwin()
+            except curses.error:
+                pass
+        refresh = getattr(win, "noutrefresh", None) or getattr(win, "refresh", None)
+        if refresh is not None:
+            try:
+                refresh()
+            except curses.error:
+                pass
 
     def handle_key(self, key: Any) -> bool:
         """Handles a single key press event directed to the panel.
@@ -191,13 +380,9 @@ class AiResponsePanel(BasePanel):
         raw = kwargs.get("content", "(no data)")
         self.lines: list[str] = raw.splitlines() or [""]
 
-        self.width = int(self.term_width * 0.40)
-        self.height = self.term_height - 1
-        self.start_x = self.term_width - self.width
-        self.start_y = 0
-
-        self.win = curses.newwin(self.height, self.width, self.start_y, self.start_x)
-        self.win.keypad(True)
+        # Side-panel geometry (right 40% work area; never overlaps global chrome).
+        self.panel_kind = "ai_provider"
+        self._layout_window(modal_width=72, modal_height=22)
 
         self.cursor_y = 0
         self.cursor_x = 0
@@ -215,12 +400,7 @@ class AiResponsePanel(BasePanel):
     def resize(self) -> None:
         """Handle terminal resize by recalculating dimensions and recreating the window."""
         super().resize()
-        self.width = int(self.term_width * 0.40)
-        self.height = self.term_height - 1
-        self.start_x = self.term_width - self.width
-        self.start_y = 0
-        self.win = curses.newwin(self.height, self.width, self.start_y, self.start_x)
-        self.win.keypad(True)
+        self._layout_window(modal_width=72, modal_height=22)
 
     def _init_colors(self) -> None:
         """Initializes curses color pairs specific to this panel.
@@ -408,7 +588,7 @@ class AiResponsePanel(BasePanel):
 
             # If there's no space to draw, exit early.
             if viewport_height <= 0 or wrap_width <= 0:
-                self.win.noutrefresh()
+                self._present(self.win)
                 return
 
             # --- Calculate line wrapping and cursor position ---
@@ -441,7 +621,7 @@ class AiResponsePanel(BasePanel):
                     self._draw_cursor(row_y, visual_cursor_x, chunk)
 
             # Stage the changes for the next screen update without blocking.
-            self.win.noutrefresh()
+            self._present(self.win)
 
         except curses.error as e:
             # Catch any unexpected curses errors during the draw cycle to prevent a crash.
@@ -812,11 +992,8 @@ class FileBrowserPanel(BasePanel):
             **kwargs: Catches any additional keyword arguments.
         """
         super().__init__(stdscr, main_editor_instance, **kwargs)
-        self.width = int(self.term_width * 0.40)
-        self.height = self.term_height - 1
-        self.start_x = self.term_width - self.width
-        self.win = curses.newwin(self.height, self.width, 0, self.start_x)
-        self.win.keypad(True)
+        self.panel_kind = "file_manager"
+        self._layout_window()  # right 40% work area; no global-chrome overlap
         self.cwd = Path(start_path or os.getcwd()).resolve()
         self.entries: list[Optional[os.DirEntry]] = []
         self.idx = 0
@@ -831,11 +1008,7 @@ class FileBrowserPanel(BasePanel):
     def resize(self) -> None:
         """Handle terminal resize by recalculating dimensions and recreating the window."""
         super().resize()
-        self.width = int(self.term_width * 0.40)
-        self.height = self.term_height - 1
-        self.start_x = self.term_width - self.width
-        self.win = curses.newwin(self.height, self.width, 0, self.start_x)
-        self.win.keypad(True)
+        self._layout_window()
 
     def set_git_panel(self, git_panel: GitPanel) -> None:
         """Sets a link to GitPanel for integration."""
@@ -997,116 +1170,243 @@ class FileBrowserPanel(BasePanel):
         attr = self.editor.colors.get(color_key, 0) if color_key else 0
         return prefix, attr
 
+    # --- Midnight Commander-style rendering ----------------------------
+    @staticmethod
+    def _format_size(num: int) -> str:
+        """Human-readable file size in <=6 chars (e.g. '4.2K', '1.1M')."""
+        size = float(num)
+        for unit in ("B", "K", "M", "G", "T"):
+            if size < 1024 or unit == "T":
+                if unit == "B":
+                    return f"{int(size)}{unit}"
+                return f"{size:.1f}{unit}"
+            size /= 1024
+        return f"{int(size)}T"
+
+    @staticmethod
+    def _format_mtime(ts: float) -> str:
+        """Compact modified time: 'HH:MM' today, else 'MMM DD' / 'YYYY-MM-DD'."""
+        when = datetime.fromtimestamp(ts)
+        now = datetime.now()
+        if when.year != now.year:
+            return when.strftime("%Y-%m-%d")
+        if (now - when).days < 1 and when.day == now.day:
+            return when.strftime("%H:%M")
+        return when.strftime("%b %d")
+
+    def _is_dir(self, entry: Optional[os.DirEntry]) -> bool:
+        if entry is None:
+            return True
+        try:
+            return entry.is_dir(follow_symlinks=False)
+        except OSError:
+            return False
+
+    def _entry_meta(self, entry: Optional[os.DirEntry]) -> tuple[str, str, str]:
+        """Return (display_name, size_str, mtime_str) for a list entry."""
+        if entry is None:
+            return ("..", "", "")
+        is_dir = self._is_dir(entry)
+        name = entry.name + ("/" if is_dir else "")
+        try:
+            st = entry.stat(follow_symlinks=False)
+            size_str = "<DIR>" if is_dir else self._format_size(st.st_size)
+            mtime_str = self._format_mtime(st.st_mtime)
+        except OSError:
+            size_str, mtime_str = ("<DIR>" if is_dir else "—"), "—"
+        return (name, size_str, mtime_str)
+
+    def _git_marker(self, entry: Optional[os.DirEntry]) -> tuple[str, str]:
+        """Return (1-char git status marker, color_key) for an entry."""
+        prefix, _attr = self._get_git_entry_info(entry)
+        prefix = (prefix or " ")[:1]
+        key = {"M": "git_dirty", "?": "git_clean", "A": "git_clean", "D": "error"}.get(
+            prefix.strip(), "panel_dim"
+        )
+        return prefix, key
+
+    def _column_widths(self, inner: int) -> tuple[int, int, int]:
+        """Return (name_w, size_w, mod_w); drops columns on narrow panels."""
+        usable = inner - 2  # git marker + trailing margin
+        if usable >= 40:
+            size_w, mod_w = 7, 12
+        elif usable >= 26:
+            size_w, mod_w = 7, 0
+        else:
+            size_w, mod_w = 0, 0
+        gaps = (1 if size_w else 0) + (1 if mod_w else 0)
+        name_w = max(4, usable - size_w - mod_w - gaps)
+        return name_w, size_w, mod_w
+
+    def hit_entry_index(self, local_y: int) -> Optional[int]:
+        """Map a panel-local row (0-based) to the entry index it shows.
+
+        Returns ``None`` for clicks on the title/header/footer rows or empty
+        list area. Pure given the geometry recorded by the last ``draw``; never
+        opens or mutates anything — selection only.
+        """
+        list_top = getattr(self, "_list_first_row", 2)
+        list_bottom = getattr(self, "_list_last_row", self.height - 3)
+        if not (list_top <= local_y < list_bottom):
+            return None
+        idx = getattr(self, "_visible_top", 0) + (local_y - list_top)
+        if 0 <= idx < len(self.entries):
+            return idx
+        return None
+
     def draw(self) -> None:
-        """Draws the file browser's interface, including files, folders, and Git statuses."""
+        """Draw the MC-style file browser: breadcrumb, columns, full-row selection."""
         if not self.visible or self.win is None:
             if self.win is None:
                 logger.error("FileBrowserPanel.draw() called, but self.win is None.")
             return
-
-        # Guard clause: If the panel window is too small after a resize,
-        # abort drawing to prevent a curses error.
-        # A height/width of 4 is a safe minimum for borders and some content.
-        if self.height < 4 or self.width < 4:
+        if self.height < 6 or self.width < 10:
             return
 
-        self.win.erase()
+        d = TuiDesign(self.editor.colors)
         is_focused = self.editor.focus == "panel"
-        self._draw_frame(is_focused)
+        inner = self.width - 2
 
-        logger.debug(f"Drawing FileBrowserPanel, git_panel is: {self.git_panel}")
+        self.win.erase()
+        self._draw_frame(is_focused, d)
 
-        # The viewport height for listing files, accounting for top/bottom chrome.
-        viewport_h = self.height - 4
-        top = max(0, self.idx - viewport_h + 1) if self.idx >= viewport_h else 0
+        name_w, size_w, mod_w = self._column_widths(inner)
+        name_x, size_x = 3, 3 + name_w + 1
+        mod_x = size_x + size_w + 1
 
-        for n, entry in enumerate(self.entries[top : top + viewport_h]):
-            row = n + 1
-            # Ensure we don't try to draw outside the allocated vertical space.
-            if row >= self.height - 2:
-                break
-
-            is_selected = (top + n) == self.idx
-            is_dir = entry is None or entry.is_dir()
-            base_attr = self.attr_dir if is_dir else self.attr_file
-
-            if entry is None:
-                label = "/.."
-            else:
-                prefix, git_attr = self._get_git_entry_info(entry)
-                base_attr |= git_attr
-                icon = "📂" if is_dir else self._icon(entry.name)
-                dir_slash = "/" if is_dir else ""
-                label = f" {prefix} {icon} {entry.name}{dir_slash}"
-
-            # Correctly combine attributes for the final display.
-            final_attr = base_attr | (
-                self.attr_sel if is_selected and is_focused else 0
-            )
-
-            try:
-                # Use addnstr to prevent writing past the edge of the window.
-                self.win.addnstr(row, 1, label, self.width - 2, final_attr)
-            except curses.error:
-                # Silently fail if curses has an issue with this specific line.
-                pass
-
-        # --- Footer section ---
-        sep_y = self.height - 3
-
-        # Use a more robust method to draw the horizontal line that is less
-        # prone to errors on different terminal emulators or with edge-case dimensions.
+        # Column header row.
+        header_attr = d.attr("table_header", self.attr_dim)
         try:
-            # Combine the line character and its attribute into a single value before drawing.
-            char_with_attr = curses.ACS_HLINE | self.attr_border
-            # Use the 4-argument version of hline, which is generally more stable.
-            self.win.hline(sep_y, 1, char_with_attr, self.width - 2)
+            self.win.addnstr(1, 1, " " * inner, inner, header_attr)
+            self.win.addnstr(1, name_x, "Name"[:name_w], name_w, header_attr)
+            if size_w:
+                self.win.addnstr(1, size_x, "Size".rjust(size_w), size_w, header_attr)
+            if mod_w:
+                self.win.addnstr(1, mod_x, "Modified"[:mod_w], mod_w, header_attr)
         except curses.error:
-            # If drawing the line still fails (e.g., due to extreme dimensions),
-            # just skip it to prevent a crash.
             pass
 
-        hint_line1 = "F2:NewFile F3:NewFld F5:Copy F6:Rename Del:Delete"
-        hint_line2 = "F10/q:Close F12:Focus Enter:Open"
+        # File list with full-row selection.
+        list_top, list_bottom = 2, self.height - 3
+        viewport_h = max(0, list_bottom - list_top)
+        top = (
+            max(0, self.idx - viewport_h + 1)
+            if viewport_h and self.idx >= viewport_h
+            else 0
+        )
+        # Remember the list geometry so a mouse click can be mapped to an entry.
+        self._list_first_row = list_top
+        self._list_last_row = list_bottom
+        self._visible_top = top
+        sel_attr = d.selected(is_focused)
+        dir_attr = d.attr("panel_accent", self.attr_dir)
+        file_attr = d.attr("panel_text", self.attr_file)
+        dim_attr = d.attr("panel_dim", self.attr_dim)
 
-        # Only draw hint lines if they fit within the panel's current width.
-        if len(hint_line1) < self.width - 2:
-            self.win.addnstr(
-                self.height - 2, 2, hint_line1, self.width - 4, self.attr_dim
-            )
-        if len(hint_line2) < self.width - 2:
-            self.win.addnstr(self.height - 1, 2, hint_line2, self.attr_dim)
+        for n, entry in enumerate(self.entries[top : top + viewport_h]):
+            gi = top + n
+            row_y = list_top + n
+            is_selected = gi == self.idx
+            is_dir = self._is_dir(entry)
+            name, size_str, mtime_str = self._entry_meta(entry)
+            gchar, gkey = self._git_marker(entry)
 
-        self.win.noutrefresh()
+            row_bg = sel_attr if is_selected else file_attr
+            name_attr = sel_attr if is_selected else (dir_attr if is_dir else file_attr)
+            meta_attr = sel_attr if is_selected else dim_attr
+            git_attr = sel_attr if is_selected else d.attr(gkey, dim_attr)
+            try:
+                self.win.addnstr(row_y, 1, " " * inner, inner, row_bg)  # full-row
+                self.win.addnstr(row_y, 1, gchar, 1, git_attr)
+                self.win.addnstr(row_y, name_x, name, name_w, name_attr)
+                if size_w:
+                    self.win.addnstr(
+                        row_y, size_x, size_str.rjust(size_w)[:size_w], size_w, meta_attr
+                    )
+                if mod_w:
+                    self.win.addnstr(row_y, mod_x, mtime_str[:mod_w], mod_w, meta_attr)
+            except curses.error:
+                pass
 
-    def _draw_frame(self, is_focused: bool) -> None:
-        """Draws the panel's border and title.
+        self._draw_status_line(self.height - 2, inner, d)
+        self._draw_action_bar(self.height - 1, inner, d)
+        self._present(self.win)  # touchwin + noutrefresh: opaque, no ghosting
 
-        The border style is intensified if the panel currently has focus. The
-        title displays the current working directory, truncating it if necessary
-        to fit the panel's width.
+    def _draw_status_line(self, y: int, inner: int, d: TuiDesign) -> None:
+        """Metadata line for the selected entry (name · type · size · modified)."""
+        attr = d.attr("panel_dim", self.attr_dim)
+        entry = (
+            self.entries[self.idx]
+            if self.entries and 0 <= self.idx < len(self.entries)
+            else None
+        )
+        name, size_str, mtime_str = self._entry_meta(entry)
+        kind = "dir" if self._is_dir(entry) else "file"
+        parts = [name.rstrip("/")]
+        parts.append(kind)
+        if size_str and size_str != "<DIR>":
+            parts.append(size_str)
+        if mtime_str and mtime_str != "—":
+            parts.append(mtime_str)
+        line = " " + " · ".join(parts)
+        try:
+            self.win.addnstr(y, 1, " " * inner, inner, attr)
+            self.win.addnstr(y, 1, line, inner, attr)
+        except curses.error:
+            pass
 
-        Args:
-            is_focused: True if the panel is the active input target.
-        """
+    def _draw_action_bar(self, y: int, inner: int, d: TuiDesign) -> None:
+        """Bottom action bar with compact, themed function-key hints."""
+        bar = d.attr("panel_bg", self.attr_dim)
+        key = d.attr("panel_accent", curses.A_BOLD)
+        try:
+            self.win.addnstr(y, 1, " " * inner, inner, bar)
+        except curses.error:
+            pass
+        hints = [
+            ("F2", "New"),
+            ("F3", "Dir"),
+            ("F5", "Copy"),
+            ("F6", "Ren"),
+            ("Del", "Del"),
+            ("Enter", "Open"),
+            ("F10", "Close"),
+        ]
+        x = 1
+        for k, label in hints:
+            seg = f"{k} {label} "
+            if x + wcswidth(seg) >= inner + 1:
+                break
+            try:
+                self.win.addnstr(y, x, k, len(k), key)
+                self.win.addnstr(y, x + len(k), f" {label} ", len(label) + 2, bar)
+            except curses.error:
+                break
+            x += wcswidth(seg)
+
+    def _draw_frame(self, is_focused: bool, d: TuiDesign | None = None) -> None:
+        """Draw the panel border with the current directory embedded as title."""
         assert self.win is not None, "self.win should not be None when drawing frame"
+        if d is None:
+            d = TuiDesign(self.editor.colors)
+        border_attr = d.border(is_focused)
+        title_attr = d.attr("panel_title", border_attr)
 
-        border_attr = self.attr_border
-        if is_focused:
-            border_attr |= curses.A_BOLD
+        # Breadcrumb: shortened current directory path.
+        path = str(self.cwd)
+        max_title = max(3, self.width - 6)
+        if wcswidth(path) > max_title:
+            path = "…" + path[-(max_title - 1) :]
+        title_display = f" {path} "
 
-        title_text = str(self.cwd)
-        title_len = wcswidth(title_text)
-        if title_len > self.width - 4:
-            title_text = "..." + title_text[-(self.width - 7) :]
-        title_display = f" {title_text} "
         self.win.attron(border_attr)
         self.win.border()
-        if wcswidth(title_display) < self.width - 2:
-            self.win.addstr(
-                0, max(1, (self.width - wcswidth(title_display)) // 2), title_display
-            )
         self.win.attroff(border_attr)
+        if wcswidth(title_display) <= self.width - 2:
+            try:
+                self.win.addnstr(0, 2, title_display, self.width - 4, title_attr)
+            except curses.error:
+                pass
 
     def _enter_selected(self) -> None:
         """Handles the 'Enter' key press on the currently selected item.
@@ -1391,35 +1691,33 @@ class _ReadOnlyRightPanel(BasePanel):
     """Shared right-side panel chrome for read-only service views."""
 
     title = " Service Panel "
+    panel_kind = "services"
     close_key = getattr(curses, "KEY_F8", 272)
 
     def __init__(
         self, stdscr: CursesWindow, main_editor_instance: Ecli, **kwargs: Any
     ) -> None:
         super().__init__(stdscr, main_editor_instance, **kwargs)
-        self.width = int(self.term_width * 0.45)
-        self.height = self.term_height - 1
-        self.start_x = self.term_width - self.width
-        self.win = curses.newwin(self.height, self.width, 0, self.start_x)
-        self.win.keypad(True)
+        self._layout_window()  # right 40% work area; no global-chrome overlap
         self.scroll = 0
         self.registry = kwargs.get("registry")
-        self.attr_border = self.editor.colors.get("status", curses.A_BOLD)
-        self.attr_title = self.editor.colors.get("function", curses.A_BOLD)
-        self.attr_text = self.editor.colors.get("default", curses.A_NORMAL)
-        self.attr_dim = self.editor.colors.get("comment", curses.A_DIM)
-        self.attr_selected = curses.A_REVERSE | curses.A_BOLD
-        self.attr_warning = self.editor.colors.get("warning", curses.A_BOLD)
-        self.attr_error = self.editor.colors.get("error", curses.A_BOLD)
+        # Panel chrome uses the solid panel-surface colour roles so the modal is
+        # opaque and themed (no transparent overlay, no ghosting).
+        self.attr_panel = self.editor.colors.get("ui_panel", curses.A_REVERSE)
+        self.attr_border = self.editor.colors.get("ui_panel_border", self.attr_panel)
+        self.attr_title = self.editor.colors.get("ui_panel_title", curses.A_BOLD)
+        self.attr_text = self.attr_panel
+        self.attr_dim = self.editor.colors.get("ui_panel_dim", self.attr_panel)
+        self.attr_selected = self.editor.colors.get(
+            "ui_panel_selected", curses.A_REVERSE | curses.A_BOLD
+        )
+        self.attr_warning = self.editor.colors.get("ui_panel_warning", curses.A_BOLD)
+        self.attr_error = self.editor.colors.get("ui_panel_error", curses.A_BOLD)
 
     def resize(self) -> None:
         """Handle terminal resize by recreating the backing panel window."""
         super().resize()
-        self.width = int(self.term_width * 0.45)
-        self.height = self.term_height - 1
-        self.start_x = self.term_width - self.width
-        self.win = curses.newwin(self.height, self.width, 0, self.start_x)
-        self.win.keypad(True)
+        self._layout_window()
 
     def open(self) -> None:
         """Open the read-only panel and hide the editor cursor."""
@@ -1498,13 +1796,8 @@ class _ReadOnlyRightPanel(BasePanel):
         return False
 
     def _refresh_window(self) -> None:
-        try:
-            if hasattr(self.win, "noutrefresh"):
-                self.win.noutrefresh()
-            else:
-                self.win.refresh()
-        except curses.error:
-            pass
+        # touchwin forces a full re-copy so the editor never bleeds through.
+        self._present(self.win)
 
     def _service_registry(self) -> Any:
         if self.registry is not None:
@@ -1521,6 +1814,7 @@ class SystemDoctorPanel(_ReadOnlyRightPanel):
     """Read-only right-side panel for structured SystemDoctor findings."""
 
     title = " System Doctor "
+    panel_kind = "system_doctor"
 
     def __init__(
         self, stdscr: CursesWindow, main_editor_instance: Ecli, **kwargs: Any
@@ -1654,6 +1948,7 @@ class CommandPlanPanel(_ReadOnlyRightPanel):
     """Preview-only right-side panel for draft CommandPlan objects."""
 
     title = " Command Plans "
+    panel_kind = "command_plan"
 
     def __init__(
         self, stdscr: CursesWindow, main_editor_instance: Ecli, **kwargs: Any
@@ -1869,12 +2164,9 @@ class GitPanel(BasePanel):
         """Initialize GitPanel with given curseswindow and editor instance."""
         super().__init__(stdscr, main_editor_instance, **kwargs)
         logger.debug("GitPanel: Initializing...")
+        self.panel_kind = "git_control"
 
-        self.width = int(self.term_width * 0.50)
-        self.height = self.term_height - 1
-        self.start_x = self.term_width - self.width
-        self.win = curses.newwin(self.height, self.width, 0, self.start_x)
-        self.win.keypad(True)
+        self._layout_window()  # right 40% work area; no global-chrome overlap
 
         if main_editor_instance.git is None:
             raise ValueError(
@@ -1935,11 +2227,7 @@ class GitPanel(BasePanel):
     def resize(self) -> None:
         """Handle terminal resize by recalculating dimensions and recreating the window."""
         super().resize()
-        self.width = int(self.term_width * 0.50)
-        self.height = self.term_height - 1
-        self.start_x = self.term_width - self.width
-        self.win = curses.newwin(self.height, self.width, 0, self.start_x)
-        self.win.keypad(True)
+        self._layout_window()  # right 40% work area; no global-chrome overlap
 
     def _init_colors(self) -> None:
         """Uses centralized colors from the editor."""
@@ -2570,7 +2858,7 @@ class GitPanel(BasePanel):
             # 7. Finalize Frame
             # Stage all the drawing changes to the virtual screen (buffer).
             # The physical terminal screen will be updated in the main loop's `curses.doupdate()`.
-            self.win.noutrefresh()
+            self._present(self.win)
 
         except curses.error as e:
             # Catch any other unexpected curses errors during the draw cycle to prevent a crash.

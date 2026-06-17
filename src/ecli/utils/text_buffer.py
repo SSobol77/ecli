@@ -17,11 +17,19 @@ from __future__ import annotations
 
 import codecs
 import logging
+import re
 
 import chardet
 
 
 MIN_DETECTOR_CONFIDENCE = 0.80
+
+# Logical line terminators recognised by the editor. Deliberately restricted to
+# the three real end-of-line conventions (CRLF / CR / LF). ``str.splitlines()``
+# additionally breaks on form-feed, vertical-tab, NEL and the Unicode line/para
+# separators, which would silently split a single logical source line in two and
+# corrupt the buffer (e.g. a ``.py`` file containing a ``\f`` page break).
+_LINE_TERMINATOR_RE = re.compile(r"\r\n|\r|\n")
 RISKY_LEGACY_ENCODINGS = frozenset(
     {
         "mac",
@@ -37,19 +45,26 @@ RISKY_LEGACY_ENCODINGS = frozenset(
 
 
 def split_text_preserving_content(raw: str) -> list[str]:
-    """Preserve every character except line terminators."""
+    r"""Split file text into logical lines, preserving every non-terminator byte.
+
+    Only ``\r\n``, ``\r`` and ``\n`` are treated as line boundaries. Any other
+    character that ``str.splitlines()`` would treat as a break (form-feed,
+    vertical-tab, NEL, U+2028/U+2029, ...) is preserved inside the logical line so
+    that a single source line never collapses or splits unexpectedly.
+
+    A trailing terminator does not produce an extra empty line; that final-newline
+    state is tracked separately by the caller.
+    """
     if raw == "":
         return [""]
 
-    lines = raw.splitlines(keepends=True)
     result: list[str] = []
-    for line in lines:
-        if line.endswith("\r\n"):
-            result.append(line[:-2])
-        elif line.endswith("\n") or line.endswith("\r"):
-            result.append(line[:-1])
-        else:
-            result.append(line)
+    position = 0
+    for match in _LINE_TERMINATOR_RE.finditer(raw):
+        result.append(raw[position : match.start()])
+        position = match.end()
+    if position < len(raw):
+        result.append(raw[position:])
     return result
 
 
