@@ -169,6 +169,9 @@ class FakeEditor:
     def toggle_file_browser(self) -> bool:
         return self._record("toggle_file_browser")
 
+    def toggle_terminal_panel(self) -> bool:
+        return self._record("toggle_terminal_panel")
+
     def toggle_focus(self) -> bool:
         return self._record("toggle_focus")
 

@@ -169,7 +169,9 @@ def test_panel_labels_and_titles_remain_stable() -> None:
     source = Path("src/ecli/ui/panels.py").read_text(encoding="utf-8")
     assert 'self.title: str = kwargs.get("title", "AI Response")' in source
     assert 'title = " Git Control "' in source
-    assert "F10/q:Close F12:Focus Enter:Open" in source
+    # File Manager now uses an MC-style action bar (F2/F3/F5/F6/Del/Enter/F10).
+    assert '("F10", "Close")' in source
+    assert '("Enter", "Open")' in source
     assert "^C:Copy | Shift+arr:Select | F7:Close | F12:Focus" in source
 
 

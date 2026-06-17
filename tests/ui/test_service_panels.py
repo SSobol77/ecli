@@ -38,12 +38,17 @@ class FakeWindow:
         """Initialize a fake curses window."""
         self.keypad_values: list[bool] = []
         self.drawn_text: list[str] = []
+        self.bkgd_calls: list[tuple[str, int]] = []
+        self.touch_count = 0
 
     def getmaxyx(self) -> tuple[int, int]:
         return (32, 120)
 
     def keypad(self, value: bool) -> None:
         self.keypad_values.append(value)
+
+    def bkgd(self, ch: str, attr: int = 0) -> None:
+        self.bkgd_calls.append((ch, attr))
 
     def erase(self) -> None:
         self.drawn_text.clear()
@@ -53,6 +58,9 @@ class FakeWindow:
 
     def addnstr(self, _y: int, _x: int, text: str, _width: int, _attr: int = 0) -> None:
         self.drawn_text.append(text)
+
+    def touchwin(self) -> None:
+        self.touch_count += 1
 
     def refresh(self) -> None:
         return None
@@ -181,6 +189,57 @@ def test_system_doctor_panel_renders_structured_findings() -> None:
     assert "DOCTOR-CONFIG-001" in text
     assert "Repository logs directory is missing" in text
     assert "remediation=yes" in text
+
+
+def test_panel_applies_opaque_background_and_touches_window() -> None:
+    # Opaque background + full re-copy each frame => no editor text bleeds
+    # through the panel (no ghosting overlay).
+    registry = FakeRegistry([finding()])
+    editor = FakeEditor(registry)
+    panel = SystemDoctorPanel(editor.stdscr, editor, registry=registry)
+
+    panel.open()
+    panel.draw()
+
+    assert panel.win.bkgd_calls, "panel must paint an opaque themed background"
+    assert panel.win.touch_count >= 1, "panel must touch its window before refresh"
+
+
+def test_side_panel_occupies_work_area_not_global_chrome() -> None:
+    # FakeWindow is 32x120: editor 60% / panel 40%, work-area rows only.
+    from ecli.ui.geometry import compute_layout
+
+    registry = FakeRegistry([finding()])
+    editor = FakeEditor(registry)
+    panel = SystemDoctorPanel(editor.stdscr, editor, registry=registry)
+
+    geo = compute_layout(120, 32, active_panel=True)
+    assert geo.split is True
+    assert panel.start_y == geo.panel.y == 1  # below the global header
+    assert panel.start_x == geo.panel.x == geo.editor.width  # 60% split
+    assert panel.start_x + panel.width == 120  # ends at the right edge
+    # The panel must stop before the global status/footer rows (no overlap).
+    status_y = 32 - 2
+    assert panel.start_y + panel.height <= status_y
+    assert panel._rendered_as_modal is False
+
+
+class NarrowWindow(FakeWindow):
+    def getmaxyx(self) -> tuple[int, int]:
+        return (6, 20)
+
+
+def test_panel_narrow_terminal_does_not_crash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("ecli.ui.panels.curses.newwin", lambda *args: NarrowWindow())
+    registry = FakeRegistry([finding()])
+    editor = FakeEditor(registry)
+    editor.stdscr = NarrowWindow()
+    panel = SystemDoctorPanel(editor.stdscr, editor, registry=registry)
+
+    panel.open()
+    panel.draw()  # must not raise on a tiny terminal
 
 
 def test_system_doctor_panel_opens_command_plan_preview_for_finding() -> None:

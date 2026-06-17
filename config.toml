@@ -13,6 +13,13 @@
 
 keybindings = {}
 
+# --- Colour theme -----------------------------------------------------------
+# Pick one of the eight built-in themes by number. Colours (editor surface,
+# syntax highlighting, status bar, diagnostics) all come from the selected theme.
+#   1 = Light Classic    2 = Light Soft    3 = Light High Contrast  4 = Light Solar
+#   5 = Dark Classic     6 = Dark Soft     7 = Dark High Contrast   8 = Dark Neon
+theme = 8
+
 
 [logging]
 file_level = "DEBUG"
@@ -34,40 +41,9 @@ grok = "grok-4-fast"
 huggingface = "meta-llama/Meta-Llama-3.1-405B-Instruct"
 
 
-[colors]
-line_number = "blue"
-cursor = "yellow"
-literal = "magenta"
-decorator = "cyan"
-selector = "magenta"
-property = "cyan"
-punctuation = "white"
-status = "bright_white"
-variable = "white"
-tag = "blue"
-attribute = "cyan"
-magic = "magenta"
-builtin = "yellow"
-exception = "red"
-class = "yellow"
-escape = "cyan"
-background = "#0D1117"
-foreground = "#C9D1D9"
-comment = "#456954"
-keyword = "#D2A8FF"
-string = "#A5D6FF"
-number = "#79C0FF"
-function = "#FFA657"
-constant = "#D29922"
-type = "#F2CC60"
-operator = "#F0F6FC"
-selection_bg = "#264F78"
-search_highlight = "#FF1493"
-status_bg = "#161B22"
-status_fg = "#C9D1D9"
-git_clean = "#79C0FF"
-git_dirty = "#FFAB70"
-error = "#FF7B72"
+# NOTE: Editor colours are now defined by the built-in `theme` selector above.
+# The former free-form [colors] table has been removed; per-colour overrides are
+# no longer read by the editor.
 
 
 [fonts]
@@ -83,24 +59,16 @@ use_spaces = true
 word_wrap = false
 auto_indent = true
 auto_brackets = true
+# Toggle Pygments/custom syntax highlighting on or off.
+syntax_highlighting = true
+# Opt-in mouse support (click to focus/move, wheel to scroll, click to select
+# list rows). Off by default so native terminal text selection still works.
+mouse = false
 
 
 [settings]
 auto_save_interval = 5
 show_git_info = true
-
-
-[theme]
-name = "dark"
-
-
-[theme.ui]
-background = "#252526"
-foreground = "#CCCCCC"
-accent = "#007ACC"
-selection = "#264F78"
-inactive_selection = "#3A3D41"
-cursor = "#AEAFAD"
 
 
 [linter]

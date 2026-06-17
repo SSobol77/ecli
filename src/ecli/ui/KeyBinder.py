@@ -47,9 +47,12 @@ import curses
 import logging
 import re
 from typing import TYPE_CHECKING, Any, Callable, Optional
+
 from wcwidth import wcswidth
 
+from ecli.ui.textops import utf8_continuation_needed
 from ecli.utils.logging_config import log_exception_to_file_handlers
+
 
 if TYPE_CHECKING:
     from ecli.core.Ecli import Ecli
@@ -148,6 +151,130 @@ class KeyBinder:
         # State that now belongs to KeyBinder
         self.keybindings = self._load_keybindings()
         self.action_map = self._setup_action_map()
+
+        # Bracketed-paste payload captured by get_key_input (read by the editor).
+        self.last_paste: str = ""
+
+    # Sentinel returned by get_key_input when a bracketed paste was captured.
+    PASTE_EVENT = "\x00ecli-bracketed-paste\x00"
+    # Bracketed-paste markers (xterm): ESC [ 200 ~  ...  ESC [ 201 ~
+    _PASTE_START = "[200~"
+    _PASTE_END = b"\x1b[201~"
+
+    def _read_bracketed_paste(self, target: Any, initial: str) -> str:
+        """Read a full bracketed-paste payload as one UTF-8 decoded string.
+
+        ``initial`` holds the bytes already read after the ``[200~`` marker
+        (each char is a raw byte in 0..255). Continues reading until the
+        ``ESC [ 201 ~`` end marker, then strips it. Bytes are accumulated and
+        decoded once so multi-byte UTF-8 paste content is preserved.
+        """
+        data = bytearray(initial.encode("latin-1", "ignore"))
+        max_bytes = 8 * 1024 * 1024  # hard cap to avoid runaway reads
+        try:
+            target.nodelay(False)
+            target.timeout(40)
+            idle = 0
+            while self._PASTE_END not in data and len(data) < max_bytes:
+                ch = target.getch()
+                if ch == curses.ERR:
+                    idle += 1
+                    if idle > 6:  # ~240ms with no data: assume the burst ended
+                        break
+                    continue
+                idle = 0
+                if 0 <= ch <= 255:
+                    data.append(ch)
+                # Wide/function-key codes inside a paste are ignored.
+        finally:
+            # Restore the main-loop input cadence.
+            target.nodelay(True)
+            target.timeout(35)
+
+        payload = bytes(data).split(self._PASTE_END, 1)[0]
+        return payload.decode("utf-8", "replace")
+
+    def _drain_text_burst(self, target: Any, first_byte: int) -> str | int | None:
+        """Coalesce an immediate run of text bytes into one paste, if present.
+
+        Reads any bytes already buffered after ``first_byte`` (non-blocking).
+        A control byte or special key code ends the run and is pushed back.
+
+        Returns:
+            * ``PASTE_EVENT`` (with ``self.last_paste`` set) when a multi-character
+              run / newline was collected (a paste);
+            * the decoded character for a single multi-byte UTF-8 keystroke;
+            * ``None`` when only the single ``first_byte`` was available, so the
+              caller keeps its exact fast-path behaviour.
+        """
+        data = bytearray([first_byte])
+        pushed_back: int | None = None
+        target.nodelay(True)
+        try:
+            while True:
+                nx = target.getch()
+                if nx == curses.ERR:
+                    break
+                if 0 <= nx <= 255 and (nx >= 0x20 or nx in (0x09, 0x0A, 0x0D)):
+                    data.append(nx)
+                else:
+                    pushed_back = nx
+                    break
+        finally:
+            target.nodelay(False)
+
+        if pushed_back is not None:
+            try:
+                curses.ungetch(pushed_back)
+            except (curses.error, OverflowError):
+                pass
+
+        # Reassemble a multi-byte UTF-8 character whose continuation bytes had not
+        # arrived yet (split across reads). Without this, a lead byte like 0xE2
+        # ("→") would fall through to chr(byte) and be mis-decoded as Latin-1
+        # U+00E2 — the mojibake reported on paste/typing of Unicode.
+        self._complete_trailing_utf8(target, data)
+
+        if len(data) == 1 and data[0] < 0x80:
+            return None  # plain ASCII keystroke: keep exact fast-path behaviour
+
+        payload = bytes(data).decode("utf-8", "replace")
+        if len(payload) >= 2 or "\n" in payload or "\r" in payload:
+            self.last_paste = payload
+            logging.debug("get_key_input: coalesced %d-char paste burst", len(payload))
+            return self.PASTE_EVENT
+        return payload  # single multi-byte character
+
+    def _complete_trailing_utf8(self, target: Any, data: bytearray) -> None:
+        """Read the continuation bytes needed to finish a trailing UTF-8 char.
+
+        Blocks briefly (per the curses timeout) for each missing continuation
+        byte so a multi-byte character split across reads is decoded as one
+        Unicode code point instead of a run of Latin-1 bytes. Stops early on a
+        non-continuation byte (pushed back) or when no byte arrives.
+        """
+        needed = utf8_continuation_needed(bytes(data))
+        if not needed:
+            return
+        target.nodelay(False)
+        target.timeout(20)
+        try:
+            for _ in range(needed):
+                nx = target.getch()
+                if nx == curses.ERR:
+                    break
+                if 0x80 <= nx <= 0xBF:
+                    data.append(nx)
+                    continue
+                # Not a continuation byte: it belongs to the next key — push back.
+                try:
+                    curses.ungetch(nx)
+                except (curses.error, OverflowError):
+                    pass
+                break
+        finally:
+            target.nodelay(True)
+            target.timeout(35)
 
     def _handle_printable_character(self, key: str | int) -> bool:
         """Handles insertion of a printable character into the buffer."""
@@ -325,6 +452,8 @@ class KeyBinder:
             "select_to_end": [curses.KEY_SEND],
             "handle_backspace": ["backspace", *get_backspace_code()],
             "toggle_file_browser": ["f10", 274],
+            # F11 is reserved for the future Terminal Panel (not implemented yet).
+            "toggle_terminal_panel": ["f11", getattr(curses, "KEY_F11", 275)],
             "toggle_focus": ["f12", 276],
 
             # Selection extensions (Shift/Alt variants)
@@ -723,6 +852,7 @@ class KeyBinder:
             "help": self.editor.show_help,
             "cancel_operation": self.editor.handle_escape,
             "toggle_file_browser": self.editor.toggle_file_browser,
+            "toggle_terminal_panel": self.editor.toggle_terminal_panel,
             "toggle_focus": self.editor.toggle_focus,
             "toggle_system_doctor_panel": self.editor.toggle_system_doctor_panel,
             # --- Git ---
@@ -817,7 +947,15 @@ class KeyBinder:
         try:
             ch = target.getch()
             if ch != 27:
-                return ch  # fast path
+                # Fast path. If this is a text byte and more text is already
+                # buffered, it is almost certainly a paste burst (works even when
+                # the terminal does not support bracketed paste): drain it and
+                # route the whole run through the single paste transaction.
+                if 0x20 <= ch <= 0xFF or ch in (0x09, 0x0A, 0x0D):
+                    drained = self._drain_text_burst(target, ch)
+                    if drained is not None:
+                        return drained
+                return ch  # single keystroke
 
             # ESC received: lone ESC, Alt chord, or an escape sequence
             seq = ""
@@ -839,6 +977,19 @@ class KeyBinder:
             if not seq:
                 logging.debug("get_key_input: standalone ESC")
                 return 27
+
+            # Bracketed paste: ESC [ 200 ~ <payload> ESC [ 201 ~. Capture the whole
+            # payload here so it is inserted as one transaction instead of being
+            # replayed as individual keystrokes (which is slow and auto-indents).
+            if seq.startswith(self._PASTE_START):
+                self.last_paste = self._read_bracketed_paste(
+                    target, seq[len(self._PASTE_START) :]
+                )
+                logging.debug(
+                    "get_key_input: captured bracketed paste (%d chars)",
+                    len(self.last_paste),
+                )
+                return self.PASTE_EVENT
 
             # Some terminals deliver ESC-prefixed sequences: strip any leading ESC.
             if seq and seq[0] == "\x1b":

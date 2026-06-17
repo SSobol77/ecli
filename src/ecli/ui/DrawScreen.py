@@ -36,6 +36,7 @@ import time
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 from wcwidth import wcwidth
+from ecli.ui.geometry import compute_layout
 from ecli.utils.utils import CALM_BG_IDX, WHITE_FG_IDX, get_file_icon
 
 
@@ -131,6 +132,41 @@ class DrawScreen:
     MIN_WINDOW_HEIGHT = 5
     DEFAULT_TAB_WIDTH = 4
 
+    # --- Professional chrome layout ------------------------------------
+    HEADER_HEIGHT = 1
+    STATUS_HEIGHT = 1
+    FOOTER_HEIGHT = 1
+    # Below this window height the header and footer are dropped (status only)
+    # so very small terminals keep the maximum number of editable rows.
+    MIN_HEIGHT_FOR_FULL_CHROME = 8
+
+    @classmethod
+    def chrome_heights(cls, height: int) -> tuple[int, int, int]:
+        """Return ``(header_h, status_h, footer_h)`` for a window height."""
+        if height < cls.MIN_HEIGHT_FOR_FULL_CHROME:
+            return 0, cls.STATUS_HEIGHT, 0
+        return cls.HEADER_HEIGHT, cls.STATUS_HEIGHT, cls.FOOTER_HEIGHT
+
+    @classmethod
+    def content_height(cls, height: int) -> int:
+        """Number of editor text rows available for a window height."""
+        header_h, status_h, footer_h = cls.chrome_heights(height)
+        return max(1, height - header_h - status_h - footer_h)
+
+    # Below this width the vertical viewport borders are dropped.
+    MIN_WIDTH_FOR_BORDERS = 40
+
+    @classmethod
+    def border_cols(cls, height: int, width: int) -> tuple[int, int]:
+        """Return ``(left, right)`` vertical-border widths for the window size.
+
+        Borders only appear alongside the full header/footer chrome and on wide
+        enough terminals; otherwise they degrade to ``(0, 0)``.
+        """
+        if height < cls.MIN_HEIGHT_FOR_FULL_CHROME or width < cls.MIN_WIDTH_FOR_BORDERS:
+            return 0, 0
+        return 1, 1
+
     # Constructor / colour-initialisation
     def __init__(self, editor: "Ecli", config: dict[str, Any]) -> None:
         self.editor = editor
@@ -139,14 +175,19 @@ class DrawScreen:
         self.colors = editor.colors
         self._text_start_x: int = 0
 
-        # panel offsets
-        self.content_area_y_offset = 0
-        self.content_area_x_offset = 0
-
-        # visible line count initially = window height − 2 (numbers + status bar)
+        # Initial chrome geometry; draw() recomputes this every frame from the
+        # live terminal size so resize is always correct.
+        h, w = self.stdscr.getmaxyx()
+        header_h, _status_h, _footer_h = self.chrome_heights(h)
+        left_b, right_b = self.border_cols(h, w)
+        self.content_area_y_offset = header_h
+        self.content_area_x_offset = left_b
+        self._content_right_x = w - right_b
+        self.editor._content_area_y_offset = header_h
+        self.editor._content_area_x_offset = left_b
+        self.editor._content_right_x = self._content_right_x
         if not hasattr(self.editor, "visible_lines"):
-            h, _ = self.stdscr.getmaxyx()
-            self.editor.visible_lines = h - 2
+            self.editor.visible_lines = self.content_height(h)
 
         # ensure calm-dark status colour pairs exist
         self._init_status_colors()
@@ -173,7 +214,12 @@ class DrawScreen:
         except curses.error:
             pass
 
-        pair_norm, pair_err = 15, 16  # pair numbers can remain the same
+        # High pair ids that never collide with the sequential pairs allocated
+        # by Ecli.init_colors (syntax + chrome ~1..45). Previously these were
+        # 15/16, which silently overwrote the 'builtin' and 'error' syntax pairs.
+        max_pairs = curses.COLOR_PAIRS
+        pair_norm = max(1, min(250, max_pairs - 2))
+        pair_err = max(1, min(251, max_pairs - 1))
         max_colors = curses.COLORS
 
         if max_colors >= 256:
@@ -342,10 +388,11 @@ class DrawScreen:
                 logging.warning(f"Curses error clearing text area (no content): {e}")
             return
 
-        # Get the window width once
+        # Clip text to the content right-edge (inside the right border).
         _h, window_width = self.stdscr.getmaxyx()
+        content_right = getattr(self, "_content_right_x", 0) or window_width
 
-        # The padding is now handled by the offset, so we can simplify this.
+        # The left border is accounted for by the x offset.
         text_area_start_x = self._text_start_x + self.content_area_x_offset
 
         logging.debug(
@@ -359,15 +406,28 @@ class DrawScreen:
             self._draw_single_line(
                 screen_row + self.content_area_y_offset,
                 line_data_tuple,
-                window_width,
+                content_right,
                 text_area_start_x,
             )
+
+    @staticmethod
+    def _apply_current_line_variant(token_attr: int, variant_map: dict[int, int]) -> int:
+        """Return *token_attr* remapped to its current-line background variant.
+
+        Keeps the foreground colour and text attributes (bold/dim/...), swapping
+        only the colour pair to the pre-allocated current-line variant. Returns
+        the attribute unchanged when no variant exists for the token's pair.
+        """
+        variant = variant_map.get(curses.pair_number(token_attr))
+        if variant:
+            return curses.color_pair(variant) | (token_attr & ~curses.A_COLOR)
+        return token_attr
 
     def _draw_single_line(
         self,
         screen_row: int,
         line_data: tuple[int, list[tuple[str, int]]],
-        window_width: int,
+        right_edge: int,
         text_area_start_x: int,
     ) -> None:
         """Draw a single logical line of source text on the given screen row,
@@ -377,15 +437,26 @@ class DrawScreen:
         Args:
             screen_row: Absolute Y position in the curses window.
             line_data:  (buffer_index, [(lexeme, attr), ...]).
-            window_width: Current terminal width (in cells).
+            right_edge: Exclusive right boundary for content (inside any border).
             text_area_start_x: The screen column where the text area begins.
         """
         _line_index, tokens_for_this_line = line_data
+        is_current_line = _line_index == self.editor.cursor_y
+        current_line_attr = self.colors.get("ui_current_line", curses.A_NORMAL)
+        variant_map = getattr(self.editor, "_current_line_variant", {})
 
         # Clear the target area first.
         try:
             self.stdscr.move(screen_row, text_area_start_x)
             self.stdscr.clrtoeol()
+            if is_current_line:
+                # Tint the whole active row (incl. the empty tail) up to the
+                # content edge; tokens are repainted over it next.
+                tint_w = max(0, right_edge - text_area_start_x)
+                if tint_w:
+                    self.stdscr.chgat(
+                        screen_row, text_area_start_x, tint_w, current_line_attr
+                    )
         except curses.error as e:
             logging.error("Curses error while clearing line %d: %s", screen_row, e)
             return
@@ -405,8 +476,8 @@ class DrawScreen:
             if ideal_x < text_area_start_x:
                 cells_cut_left = text_area_start_x - ideal_x
 
-            draw_x = max(self._text_start_x, ideal_x)
-            avail_screen_w = window_width - draw_x
+            draw_x = max(text_area_start_x, ideal_x)
+            avail_screen_w = right_edge - draw_x
             if avail_screen_w <= 0:
                 # Nothing further on this line is visible.
                 break
@@ -424,9 +495,17 @@ class DrawScreen:
                 self.editor.get_char_width,
             )
 
+            # On the active row, swap each token's background to the current-line
+            # colour while keeping its foreground and text attributes.
+            draw_attr = (
+                self._apply_current_line_variant(token_attr, variant_map)
+                if is_current_line
+                else token_attr
+            )
+
             if text_to_draw:
                 try:
-                    self.stdscr.addstr(screen_row, draw_x, text_to_draw, token_attr)
+                    self.stdscr.addstr(screen_row, draw_x, text_to_draw, draw_attr)
                 except curses.error as e:
                     # Fallback: draw char-by-char if addstr fails (rare, but safe).
                     logging.debug(
@@ -437,10 +516,10 @@ class DrawScreen:
                     )
                     cx = draw_x
                     for ch in text_to_draw:
-                        if cx >= window_width:
+                        if cx >= right_edge:
                             break
                         try:
-                            self.stdscr.addch(screen_row, cx, ch, token_attr)
+                            self.stdscr.addch(screen_row, cx, ch, draw_attr)
                         except curses.error:
                             break
                         cx += self.editor.get_char_width(ch)
@@ -448,7 +527,7 @@ class DrawScreen:
             logical_col_abs += token_disp_width
 
             # Early exit if we've reached the right edge.
-            if draw_x + visible_w >= window_width:
+            if draw_x + visible_w >= right_edge:
                 break
 
     def draw(self) -> None:
@@ -461,28 +540,49 @@ class DrawScreen:
                 # last_window_size is now correctly set by the handle_resize method
                 return
 
+            # Recompute chrome geometry every frame so resize is always correct
+            # and the single source of truth stays in sync.
+            header_h, status_h, footer_h = self.chrome_heights(height)
+            left_b, right_b = self.border_cols(height, width)
+
+            # When a side panel is open the work area splits ~60/40: clip the
+            # editor content to the editor region and drop the editor's own right
+            # border (the panel's left border is the divider). The global
+            # header/status/footer keep their full-width rows untouched.
+            editor_right = self._side_panel_editor_width(width, height)
+            if editor_right is not None:
+                right_b = 0
+                content_right = editor_right
+            else:
+                content_right = width - right_b
+
+            self.content_area_y_offset = header_h
+            self.content_area_x_offset = left_b
+            self._content_right_x = content_right
+            self.editor._content_area_y_offset = header_h
+            self.editor._content_area_x_offset = left_b
+            self.editor._content_right_x = self._content_right_x
+            self.editor.visible_lines = self.content_height(height)
+
             if self._needs_full_redraw():
                 self.stdscr.erase()
                 self.editor._force_full_redraw = False
             else:
                 self._clear_invalidated_lines()
 
+            if header_h:
+                self._draw_header(width)
+
             self._draw_line_numbers()
             self._draw_text_with_syntax_highlighting()
             self._draw_search_highlights()
             self._draw_selection()
             self.editor.highlight_matching_brackets()
-
-            separator_y = height - 2
-            try:
-                char_with_attr = curses.ACS_HLINE | self.colors.get(
-                    "comment", curses.A_DIM
-                )
-                self.stdscr.hline(separator_y, 0, char_with_attr, width)
-            except curses.error:
-                pass
+            self._draw_borders(height, width, header_h, self.editor.visible_lines)
 
             self._draw_status_bar()
+            if footer_h:
+                self._draw_footer(width)
             self._draw_lint_panel()
 
             # This logic should happen within the try block and before noutrefresh
@@ -498,22 +598,20 @@ class DrawScreen:
             self.editor._set_status_message(f"Draw error: {str(e)[:80]}...")
 
     def _clear_invalidated_lines(self) -> None:
-        """Clears the rows that will be redrawn in this frame.
-        Avoiding global clear()
+        """Clears the editor content rows that will be redrawn in this frame.
+
+        Chrome rows (header/status/footer) are repainted in full every frame, so
+        only the text area is cleared here. Avoids a global clear() to prevent
+        flicker.
         """
+        offset = self.content_area_y_offset
+        text_start = self._text_start_x + self.content_area_x_offset
         for row in range(self.editor.visible_lines):
             try:
-                self.stdscr.move(row, self._text_start_x)
+                self.stdscr.move(row + offset, text_start)
                 self.stdscr.clrtoeol()
             except curses.error:
                 pass
-        # status bar
-        try:
-            h, _ = self.stdscr.getmaxyx()
-            self.stdscr.move(h - 1, 0)
-            self.stdscr.clrtoeol()
-        except curses.error:
-            pass
 
     def _keep_lint_panel_alive(self, hold_ms: int = 400) -> None:
         """Pin the lint-panel open for a minimum time window.
@@ -601,33 +699,43 @@ class DrawScreen:
             return
         # Saving the starting position for text drawing
         self._text_start_x = line_num_width
+        offset = self.content_area_y_offset
+        gutter_x = self.content_area_x_offset  # leave room for the left border
         line_num_color = self.colors.get("line_number", curses.color_pair(7))
+        # Current line gets an emphasised gutter (accent + highlighted background).
+        current_num_color = self.colors.get(
+            "ui_current_line_number", line_num_color | curses.A_BOLD
+        )
+        cursor_y = self.editor.cursor_y
         # Iterating over visible lines on the screen
         for screen_row in range(self.editor.visible_lines):
             # Calculating the line index in self.text
             line_idx = self.editor.scroll_top + screen_row
+            draw_y = screen_row + offset
             # Checking if this line exists in self.text
             if line_idx < len(self.editor.text):
+                is_current = line_idx == cursor_y
+                color = current_num_color if is_current else line_num_color
                 # Formatting the line number (1-based)
                 line_num_str = (
                     f"{line_idx + 1:>{max_line_num_digits}} "  # Right-aligning + space
                 )
                 try:
                     # Drawing the line number
-                    self.stdscr.addstr(screen_row, 0, line_num_str, line_num_color)
+                    self.stdscr.addstr(draw_y, gutter_x, line_num_str, color)
                 except curses.error as e:
                     logging.error(
-                        f"Curses error drawing line number at ({screen_row}, 0): {e}"
+                        f"Curses error drawing line number at ({draw_y}, {gutter_x}): {e}"
                     )
                     # If an error occurs, skip drawing this line and continue
             else:
                 # Drawing empty lines with the desired background in the line number area
                 empty_num_str = " " * line_num_width
                 try:
-                    self.stdscr.addstr(screen_row, 0, empty_num_str, line_num_color)
+                    self.stdscr.addstr(draw_y, gutter_x, empty_num_str, line_num_color)
                 except curses.error as e:
                     logging.error(
-                        f"Curses error drawing empty line number background at ({screen_row}, 0): {e}"
+                        f"Curses error drawing empty line number background at ({draw_y}, {gutter_x}): {e}"
                     )
 
     def _draw_lint_panel(self) -> None:
@@ -645,19 +753,30 @@ class DrawScreen:
         start_y = max(1, (h - panel_height) // 2)
         start_x = max(2, (w - panel_width) // 2)
 
-        # Framing the window
+        # Themed, opaque panel: solid surface + title embedded in the border.
+        border = self.colors.get("ui_panel_border", curses.A_BOLD)
+        fill = self.colors.get("ui_panel", curses.A_NORMAL)
+        dim = self.colors.get("ui_panel_dim", curses.A_DIM)
+        title = " Diagnostics "
+        inner = panel_width - 2
         try:
             for i in range(panel_height):
-                line = ""
                 if i == 0:
-                    line = "┌" + "─" * (panel_width - 2) + "┐"
+                    label = title[: max(0, inner - 2)]
+                    rest = inner - len(label) - 1
+                    line = "┌─" + label + "─" * max(0, rest) + "┐"
                 elif i == panel_height - 1:
-                    line = "└" + "─" * (panel_width - 2) + "┘"
+                    line = "└" + "─" * inner + "┘"
                 else:
-                    line = "│" + " " * (panel_width - 2) + "│"
-                self.stdscr.addstr(start_y + i, start_x, line, curses.A_BOLD)
+                    line = "│" + " " * inner + "│"
+                self.stdscr.addnstr(start_y + i, start_x, line, panel_width, border)
+                # Repaint the hollow interior with the solid panel surface.
+                if 0 < i < panel_height - 1:
+                    self.stdscr.addnstr(
+                        start_y + i, start_x + 1, " " * inner, inner, fill
+                    )
 
-            # Message split into lines
+            # Message split into lines (on the solid surface).
             msg_lines = msg.splitlines()
             for idx, line in enumerate(msg_lines[: panel_height - 3]):
                 self.stdscr.addnstr(
@@ -665,16 +784,16 @@ class DrawScreen:
                     start_x + 2,
                     line.strip(),
                     panel_width - 4,
-                    curses.A_NORMAL,
+                    fill,
                 )
             # Footer
-            footer = "Press Esc to close"
+            footer = "Esc: close"
             self.stdscr.addnstr(
                 start_y + panel_height - 2,
                 start_x + 2,
                 footer,
                 panel_width - 4,
-                curses.A_DIM,
+                dim,
             )
         except curses.error as e:
             logging.error(f"Curses error drawing linter panel: {e}")
@@ -702,6 +821,9 @@ class DrawScreen:
         line_num_width = (
             len(str(max(1, len(self.editor.text)))) + 1
         )  # Width for line numbers plus space
+        # Text starts after the gutter and the left border; clip to the right edge.
+        text_start = line_num_width + self.content_area_x_offset
+        content_right = getattr(self, "_content_right_x", 0) or width
 
         # Iterate through all matches to be highlighted
         for (
@@ -716,7 +838,9 @@ class DrawScreen:
             ):
                 continue
 
-            screen_y = match_row - self.editor.scroll_top  # Screen row for this match
+            screen_y = (
+                match_row - self.editor.scroll_top + self.content_area_y_offset
+            )  # Screen row for this match
             line = self.editor.text[
                 match_row
             ]  # The text of the line containing the match
@@ -726,7 +850,7 @@ class DrawScreen:
                 line[:match_start_idx]
             )
             match_screen_start_x = (
-                line_num_width
+                text_start
                 + match_screen_start_x_before_scroll
                 - self.editor.scroll_left
             )
@@ -735,14 +859,14 @@ class DrawScreen:
                 line[:match_end_idx]
             )
             match_screen_end_x = (
-                line_num_width
+                text_start
                 + match_screen_end_x_before_scroll
                 - self.editor.scroll_left
             )
 
             # Clamp drawing area to the visible screen boundaries
-            draw_start_x = max(line_num_width, match_screen_start_x)
-            draw_end_x = min(width, match_screen_end_x)
+            draw_start_x = max(text_start, match_screen_start_x)
+            draw_end_x = min(content_right, match_screen_end_x)
 
             # Calculate the actual width of the highlight to draw
             highlight_width_on_screen = max(0, draw_end_x - draw_start_x)
@@ -752,7 +876,7 @@ class DrawScreen:
                 try:
                     # Iterate over characters in the line to accurately highlight wide characters
                     current_char_screen_x = (
-                        line_num_width - self.editor.scroll_left
+                        text_start - self.editor.scroll_left
                     )  # Initial X for first char
                     for char_idx, char in enumerate(line):
                         char_width = self.editor.get_char_width(char)
@@ -761,11 +885,11 @@ class DrawScreen:
                         # If this character falls within the match range and is visible
                         if (
                             match_start_idx <= char_idx < match_end_idx
-                            and current_char_screen_x < width
-                            and char_screen_end_x > line_num_width
+                            and current_char_screen_x < content_right
+                            and char_screen_end_x > text_start
                         ):
-                            draw_char_x = max(line_num_width, current_char_screen_x)
-                            draw_char_width = min(char_width, width - draw_char_x)
+                            draw_char_x = max(text_start, current_char_screen_x)
+                            draw_char_width = min(char_width, content_right - draw_char_x)
 
                             if draw_char_width > 0:
                                 try:
@@ -809,8 +933,10 @@ class DrawScreen:
         end_y, end_x = end_coords
 
         _height, width = self.stdscr.getmaxyx()
-        text_area_start_x = self._text_start_x
-        selection_attr = curses.A_REVERSE
+        text_area_start_x = self._text_start_x + self.content_area_x_offset
+        content_right = getattr(self, "_content_right_x", 0) or width
+        offset = self.content_area_y_offset
+        selection_attr = self.colors.get("ui_selection", curses.A_REVERSE)
 
         # Initial log for the selection action
         logging.debug(
@@ -837,7 +963,7 @@ class DrawScreen:
                 )
 
                 draw_start_x = max(text_area_start_x, x_left)
-                draw_end_x = min(width, x_right)
+                draw_end_x = min(content_right, x_right)
                 highlight_w = max(0, draw_end_x - draw_start_x)
 
                 # Logging for single-line highlight
@@ -850,7 +976,7 @@ class DrawScreen:
                 if highlight_w > 0:
                     try:
                         self.stdscr.chgat(
-                            screen_y, draw_start_x, highlight_w, selection_attr
+                            screen_y + offset, draw_start_x, highlight_w, selection_attr
                         )
                     except curses.error as e:
                         logging.error(f"Curses error on single-line chgat: {e}")
@@ -882,7 +1008,7 @@ class DrawScreen:
                 highlight_end_on_screen = highlight_start_on_screen + max_visual_width
 
                 draw_start_x = max(text_area_start_x, highlight_start_on_screen)
-                draw_end_x = min(width, highlight_end_on_screen)
+                draw_end_x = min(content_right, highlight_end_on_screen)
                 highlight_w = max(0, draw_end_x - draw_start_x)
 
                 # Detailed log for each line in the multi-line block
@@ -895,7 +1021,7 @@ class DrawScreen:
                 if highlight_w > 0:
                     try:
                         self.stdscr.chgat(
-                            screen_y, draw_start_x, highlight_w, selection_attr
+                            screen_y + offset, draw_start_x, highlight_w, selection_attr
                         )
                     except curses.error as e:
                         logging.error(
@@ -935,6 +1061,150 @@ class DrawScreen:
 
         return "".join(result)
 
+    # --- Professional chrome: header / footer ---------------------------
+    def _fill_bar(self, y: int, width: int, attr: int) -> None:
+        """Paint a full-width horizontal bar at row *y* without scrolling."""
+        if width <= 0:
+            return
+        try:
+            self.stdscr.addstr(y, 0, " " * (width - 1), attr)
+            # Fill the final cell with insch so the cursor never wraps/scrolls.
+            self.stdscr.insch(y, width - 1, ord(" "), attr)
+        except curses.error:
+            pass
+
+    def _put(self, y: int, x: int, text: str, attr: int, width: int) -> int:
+        """Draw *text* at (y, x), clipped to the window width. Returns next x."""
+        if not text or x >= width:
+            return x
+        max_w = max(0, width - 1 - x)
+        clipped = self.truncate_string(text, max_w)
+        if not clipped:
+            return x
+        try:
+            self.stdscr.addstr(y, x, clipped, attr)
+        except curses.error:
+            pass
+        return x + self.editor.get_string_width(clipped)
+
+    def _shorten_path(self, path: str, max_width: int) -> str:
+        """Shorten *path* to fit *max_width* cells, keeping the basename."""
+        if self.editor.get_string_width(path) <= max_width:
+            return path
+        base = os.path.basename(path)
+        if self.editor.get_string_width(base) + 2 >= max_width:
+            return "…" + self.truncate_string(base, max(1, max_width - 1))
+        head_budget = max_width - self.editor.get_string_width(base) - 2
+        head = self.truncate_string(path, max(0, head_budget))
+        return f"{head}…/{base}"
+
+    def _draw_header(self, width: int) -> None:
+        """Top application header bar: app name, file, modified state, theme."""
+        if self.editor.is_lightweight:
+            return
+        try:
+            bar = self.colors.get("ui_header", curses.A_REVERSE)
+            accent = self.colors.get("ui_header_accent", bar | curses.A_BOLD)
+            dim = self.colors.get("ui_header_dim", bar)
+
+            self._fill_bar(0, width, bar)
+
+            # Right segment: active theme indicator.
+            theme = getattr(self.editor, "active_theme", None)
+            right = f" theme {theme.theme_id} · {theme.name} " if theme else ""
+            right_w = self.editor.get_string_width(right)
+
+            # Left segment: app badge + file name + modified marker.
+            x = self._put(0, 0, " ECLI ", accent, width)
+            fname = self.editor.filename or "No Name"
+            avail = max(8, width - right_w - x - 3)
+            shown = self._shorten_path(fname, avail)
+            marker = " ●" if self.editor.modified else ""
+            x = self._put(0, x, f" {shown}{marker} ", bar, width)
+
+            if right and width - right_w - 1 > x:
+                self._put(0, width - right_w - 1, right, dim, width)
+        except curses.error:
+            pass
+
+    def _draw_footer(self, width: int) -> None:
+        """Bottom shortcut/action strip with compact key hints."""
+        if self.editor.is_lightweight:
+            return
+        height, _ = self.stdscr.getmaxyx()
+        y = height - 1
+        try:
+            bar = self.colors.get("ui_footer", curses.A_REVERSE)
+            key = self.colors.get("ui_footer_key", bar | curses.A_BOLD)
+
+            self._fill_bar(y, width, bar)
+
+            hints = [
+                ("Ctrl+S", "Save"),
+                ("Ctrl+O", "Open"),
+                ("Ctrl+F", "Find"),
+                ("F1", "Help"),
+                ("Ctrl+Q", "Quit"),
+            ]
+            x = 1
+            for k, label in hints:
+                segment_w = self.editor.get_string_width(f"{k} {label}  ")
+                if x + segment_w >= width:
+                    break
+                x = self._put(y, x, f" {k}", key, width)
+                x = self._put(y, x, f" {label} ", bar, width)
+        except curses.error:
+            pass
+
+    def _side_panel_editor_width(self, width: int, height: int) -> int | None:
+        """Editor content width when a non-modal side panel splits the work area.
+
+        Returns ``None`` when no side panel is active (or it is a centered
+        modal), so the editor keeps its normal full width.
+        """
+        pm = getattr(self.editor, "panel_manager", None)
+        is_active = getattr(pm, "is_panel_active", None)
+        if pm is None or not callable(is_active) or not is_active():
+            return None
+        panel = getattr(pm, "active_panel", None)
+        if panel is None or getattr(panel, "_rendered_as_modal", False):
+            return None
+        geo = compute_layout(width, height, active_panel=True)
+        return geo.editor.width if geo.split else None
+
+    def _draw_borders(
+        self, height: int, width: int, content_top: int, content_height: int
+    ) -> None:
+        """Draw the left/right vertical viewport borders on the content rows.
+
+        The header bar forms the top edge and the status/footer bars the bottom
+        edge, so only the verticals are drawn here. Degrades to nothing when
+        ``border_cols`` returns zero (small/narrow terminals).
+        """
+        if self.editor.is_lightweight:
+            return
+        left_b, right_b = self.border_cols(height, width)
+        if self._side_panel_editor_width(width, height) is not None:
+            right_b = 0  # the panel's left border is the divider
+        if not left_b and not right_b:
+            return
+        attr = self.colors.get("ui_border", curses.A_DIM)
+        glyph = "│"
+        for row in range(content_top, content_top + content_height):
+            if row >= height:
+                break
+            if left_b:
+                try:
+                    self.stdscr.addstr(row, 0, glyph, attr)
+                except curses.error:
+                    pass
+            if right_b and width >= 1:
+                try:
+                    # insstr never advances the cursor past the last cell.
+                    self.stdscr.insstr(row, width - 1, glyph, attr)
+                except curses.error:
+                    pass
+
     def _draw_status_bar(self) -> None:
         """Single-line status bar (bottom of the screen).
 
@@ -954,13 +1224,21 @@ class DrawScreen:
             if height <= 2:
                 return  # not enough space
 
-            y = height - 1  # last line
+            # Status sits just above the footer shortcut strip (or on the last
+            # line when chrome is degraded on tiny terminals).
+            _header_h, status_h, footer_h = self.chrome_heights(height)
+            y = height - footer_h - status_h
 
-            # -- colours ----------------------------------------------
-            c_norm = self.colors["status"]  # white on calm-dark
-            c_err = self.colors["status_error"]  # bold white on calm-dark
-            c_git = self.colors.get("git_info", c_norm)
-            c_dirty = self.colors.get("git_dirty", c_norm | curses.A_BOLD)
+            # -- colours (themed status bar) --------------------------
+            c_norm = self.colors.get(
+                "ui_status", self.colors.get("status", curses.A_REVERSE)
+            )
+            c_err = self.colors.get(
+                "ui_error",
+                self.colors.get("status_error", curses.A_REVERSE | curses.A_BOLD),
+            )
+            c_git = self.colors.get("ui_success", c_norm)
+            c_dirty = self.colors.get("ui_warning", c_norm | curses.A_BOLD)
 
             # -- left part --------------------------------------------
             icon = get_file_icon(self.editor.filename, self.config)
@@ -1042,12 +1320,13 @@ class DrawScreen:
         if height <= 2:
             return
 
-        text_area_start_x = self._text_start_x
+        text_area_start_x = self._text_start_x + self.content_area_x_offset
+        content_right = getattr(self, "_content_right_x", 0) or width
 
         # Explicit calculation of the text area height ---
         # Instead of self.editor.visible_lines, which can be 0 during initialization,
-        # we use the actual window dimensions.
-        text_area_height = max(1, height - 2)
+        # we derive it from the live window size and chrome layout.
+        text_area_height = self.content_height(height)
 
         if self.editor.cursor_y >= len(self.editor.text):
             cursor_display_width = 0
@@ -1066,7 +1345,7 @@ class DrawScreen:
             self.editor.scroll_top = self.editor.cursor_y - max_screen_row
 
         # 3. Adjust Horizontal Scroll
-        text_area_width = max(1, width - text_area_start_x)
+        text_area_width = max(1, content_right - text_area_start_x)
         if cursor_display_width < self.editor.scroll_left:
             self.editor.scroll_left = cursor_display_width
         elif cursor_display_width >= self.editor.scroll_left + text_area_width:
@@ -1084,7 +1363,9 @@ class DrawScreen:
             self.content_area_y_offset,
             min(final_screen_y, max_screen_row + self.content_area_y_offset),
         )
-        final_screen_x = max(text_area_start_x, min(final_screen_x, width - 1))
+        final_screen_x = max(
+            text_area_start_x, min(final_screen_x, content_right - 1)
+        )
 
         # 5. Move the Physical Cursor
         try:
@@ -1117,7 +1398,7 @@ class DrawScreen:
             None. All adjustments are logged.
         """
         height, _width = self.stdscr.getmaxyx()
-        text_area_height = max(1, height - 2)
+        text_area_height = self.content_height(height)
 
         # If the total number of lines fits on the screen, always show from the top.
         if len(self.editor.text) <= text_area_height:
