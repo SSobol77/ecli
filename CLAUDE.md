@@ -597,6 +597,8 @@ Rendering stability has priority over feature work.
 
 Do not route new feature work into UI/rendering areas while the target area has known rendering instability, direct curses leakage, or no regression coverage.
 
+For ECLI 0.2.x, do not implement a full PTY terminal emulator. F11 must be treated as an ECLI-owned PySH Console Panel direction. PySH is a command execution backend only. Do not migrate PySH source into ECLI and do not mix this work with VMLab/QEMU/QMP scope.
+
 Rendering risk is likely concentrated around:
 
 1. multiple code paths mutating curses or terminal state,

@@ -173,6 +173,8 @@ the existing canonical command surfaces.
 
 Rendering work is Stage-2-locked unless the maintainer explicitly approves a narrow Stage 1b fix.
 
+For ECLI 0.2.x, do not implement a full PTY terminal emulator. F11 must be treated as an ECLI-owned PySH Console Panel direction. PySH is a command execution backend only. Do not migrate PySH source into ECLI and do not mix this work with VMLab/QEMU/QMP scope.
+
 During Stage 1, Codex may only:
 
 * inventory direct curses usage,

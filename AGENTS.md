@@ -465,6 +465,10 @@ In Stage 1, `len()`-based column, cursor, width, clipping, wrap, or status-line 
 
 Feature work must not proceed in rendering-sensitive areas while the base is unstable.
 
+### ECLI 0.2.x panel-console rule
+
+For ECLI 0.2.x, do not implement a full PTY terminal emulator. F11 must be treated as an ECLI-owned PySH Console Panel direction. PySH is a command execution backend only. Do not migrate PySH source into ECLI and do not mix this work with VMLab/QEMU/QMP scope.
+
 ### Tester and harness separation
 
 Tester and test-harness-builder are separate roles.

@@ -54,6 +54,10 @@ During Stage 1, this agent must not:
 
 Broad implementation work is allowed only after AUD-001, AUD-002, and AUD-003 are closed or explicitly waived by the maintainer.
 
+## ECLI 0.2.x panel-console rule
+
+For ECLI 0.2.x, do not implement a full PTY terminal emulator. F11 must be treated as an ECLI-owned PySH Console Panel direction. PySH is a command execution backend only. Do not migrate PySH source into ECLI and do not mix this work with VMLab/QEMU/QMP scope.
+
 ## Working hypothesis
 
 The current rendering risk is likely concentrated around two structural problems:
