@@ -452,7 +452,7 @@ class KeyBinder:
             "select_to_end": [curses.KEY_SEND],
             "handle_backspace": ["backspace", *get_backspace_code()],
             "toggle_file_browser": ["f10", 274],
-            # F11 is reserved for the future Terminal Panel (not implemented yet).
+            # F11 opens or focuses the ECLI-owned PySH Console Panel.
             "toggle_terminal_panel": ["f11", getattr(curses, "KEY_F11", 275)],
             "toggle_focus": ["f12", 276],
 

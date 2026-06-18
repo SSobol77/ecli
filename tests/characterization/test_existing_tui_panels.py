@@ -32,6 +32,7 @@ from ecli.ui.panels import (
     ServicesPanel,
     SystemDoctorPanel,
 )
+from ecli.ui.pysh_console_panel import PySHConsolePanel
 
 
 class FakeWindow:
@@ -125,6 +126,7 @@ def test_panel_manager_default_registry_preserves_existing_panel_names() -> None
 
     assert manager.registered_panels["ai_response"] is AiResponsePanel
     assert manager.registered_panels["file_browser"] is FileBrowserPanel
+    assert manager.registered_panels["pysh_console"] is PySHConsolePanel
     assert manager.registered_panels["system_doctor"] is SystemDoctorPanel
     assert manager.registered_panels["command_plan"] is CommandPlanPanel
     assert manager.registered_panels["services_status"] is ServicesPanel

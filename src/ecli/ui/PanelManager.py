@@ -35,6 +35,7 @@ from .panels import (
     ServicesPanel,
     SystemDoctorPanel,
 )
+from .pysh_console_panel import PySHConsolePanel
 
 
 if TYPE_CHECKING:
@@ -87,6 +88,7 @@ class PanelManager:
             "ai_response": AiResponsePanel,
             "command_plan": CommandPlanPanel,
             "file_browser": FileBrowserPanel,
+            "pysh_console": PySHConsolePanel,
             "services_status": ServicesPanel,
             "system_doctor": SystemDoctorPanel,
         }
