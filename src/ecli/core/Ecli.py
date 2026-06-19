@@ -7473,6 +7473,8 @@ class Ecli:
             "toggle_comment_block": "Ctrl+\\",
             "ai_assist": "F7",
             "file_manager": "F10",
+            "toggle_terminal_panel": "F11",
+            "toggle_focus": "F12",
         }
         return [
             "                 ──  Ecli Help  ──  ",
@@ -7484,6 +7486,8 @@ class Ecli:
             f"    {_kb('help', defaults['help']):<22}: This help screen",
             f"    {_kb('ai_assist', defaults['ai_assist']):<22}: AI Code Assistant",
             f"    {_kb('toggle_system_doctor_panel', defaults['toggle_system_doctor_panel']):<22}: System Doctor",
+            f"    {_kb('toggle_terminal_panel', defaults['toggle_terminal_panel']):<22}: Open/focus PySH Console Panel",
+            f"    {_kb('toggle_focus', defaults['toggle_focus']):<22}: Switch focus between editor and panels",
             f"    {_kb('cancel_operation', defaults['cancel_operation']):<22}: Cancel / Close Panel",
             "    Insert Key            : Toggle Insert/Replace mode",
             "",
@@ -7520,9 +7524,9 @@ class Ecli:
             "",
             "              Press any key to close help",  # Changed
             "",
-            "               Licensed under the GPL-2.0-only ",
+            "             Licensed under the GPL-2.0-only ",
             "",
-            "               © 2025 Siergej Sobolewski",
+            "               © 2026 Siergej Sobolewski",
         ]
 
     def show_help(self) -> bool:  # noqa: python:S3516
