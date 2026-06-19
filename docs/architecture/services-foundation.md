@@ -782,7 +782,7 @@ Required repository files:
 
 ```text
 logs/.gitkeep
-logs/README.md
+logs/README-logs.md
 scripts/check-log-invariant.sh
 ```
 
@@ -1054,7 +1054,7 @@ Phase 1 deliverables:
 | Initial command plan schema | `CommandPlan`, `CommandStep` typed models |
 | Audit log format | Structured JSON with redaction rules |
 | `logs/.gitkeep` | Ensures repository-level development log root exists |
-| `logs/README.md` | Documents what may and may not be written under `logs/` |
+| `logs/README-logs.md` | Documents what may and may not be written under `logs/` |
 | `scripts/check-log-invariant.sh` | CI/check script that fails when generated development artifacts are written outside `logs/` |
 | Service-level tests | Unit + integration tests for each service |
 | Reduced `Ecli.py` footprint | ≥30% LOC reduction, clearer responsibilities |

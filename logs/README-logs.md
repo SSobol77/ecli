@@ -25,4 +25,4 @@ live outside `logs/`.
 Tracked files allowed in this directory:
 
 - `logs/.gitkeep`
-- `logs/README.md`
+- `logs/README-logs.md`

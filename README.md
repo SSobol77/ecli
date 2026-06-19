@@ -53,7 +53,7 @@ See the LICENSE file in the project root for full license text.
 
 **ECLI** (Editor CLI) is a terminal-first engineering operations workbench. It combines a curses-based editor with right-side workflow panels and a typed service foundation for configuration, project discovery, command-plan previews,policy checks, audit logging, privileged-action refusal paths, and read-only system diagnostics.
 
-The v0.2.2 release keeps the Services Foundation editor surface intact and hardens packaged/frozen runtime startup, release packaging, source-text preservation, and cross-platform install paths. It does not execute remediation, apply command plans, launch VMLab runtimes, or perform real privileged operations.
+The v0.2.3 release is a Panel Console Stabilization layer on top of the Services Foundation. It keeps the Services Foundation editor behavior intact, rejects full PTY terminal emulation for ECLI 0.2.x, and replaces the fragile F11 terminal experiment with an ECLI-owned PySH Console Panel. PySH is used as a command execution backend only; this release does not execute remediation, apply command plans, launch VMLab runtimes, add QEMU/QMP runtime scope, migrate PySH source, or perform real privileged operations.
 
 ### ✨ Key Features
 
@@ -458,11 +458,12 @@ Master ECLI with these essential keyboard shortcuts. Press `F1` anytime inside t
 | `F7` | AI Assistant panel |
 | `F8` | System Doctor |
 | `F1` | Show Keyboard Shortcuts |
+| `F11` | Open/focus PySH Console Panel |
 | `Esc` | Close current panel |
 | `Insert` | Toggle Insert / Overwrite mode |
-| `F12` | Switch focus between editor windows and panels |
+| `F12` | Switch focus between editor and panels |
 
-The right side of the editor hosts workflow panels. The v0.2.2 service panels are read-only or preview-only: System Doctor does not mutate host state, Command Plan previews do not execute, and the Services panel reports composition status.
+The right side of the editor hosts workflow panels. The v0.2.3 panel-console stabilization keeps service panels read-only or preview-only: System Doctor does not mutate host state, Command Plan previews do not execute, the Services panel reports composition status, F11 opens or focuses the PySH Console Panel, and F12 switches focus between the editor and panels.
 
 ### Minimal Service CLI
 
@@ -519,13 +520,13 @@ Complete documentation is organized by audience:
 
 * [Build from Source](https://github.com/SSobol77/ecli/blob/main/docs/contributor/build-from-source.md) - Local build commands
 
-* [Contributor Guide](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md) - Contributing to ECLI
+* [Contributor Guide](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README-contributor.md) - Contributing to ECLI
 
 ### For System Administrators
 
 * [Supported Platforms](https://github.com/SSobol77/ecli/blob/main/docs/product/supported-platforms.md) - Platform matrix
 
-* [Configuration Guide](https://github.com/SSobol77/ecli/blob/main/docs/config/README.md) - Configuration options
+* [Configuration Guide](https://github.com/SSobol77/ecli/blob/main/docs/config/README-config.md) - Configuration options
 
 * [Deployment Guide](https://github.com/SSobol77/ecli/blob/main/docs/release/packaging-flows.md) - Production deployment
 
@@ -533,21 +534,23 @@ Complete documentation is organized by audience:
 
 * [API Documentation](https://github.com/SSobol77/ecli/blob/main/docs/extensions/plugin-api.md) - Plugin development
 
-* [Architecture Details](https://github.com/SSobol77/ecli/blob/main/docs/architecture/README.md) - System internals
+* [Architecture Details](https://github.com/SSobol77/ecli/blob/main/docs/architecture/README-architecture.md) - System internals
 
 * [Release Process](https://github.com/SSobol77/ecli/blob/main/docs/release/release-process.md) - Release management
 
-* [Quality Standards](https://github.com/SSobol77/ecli/blob/main/docs/quality/README.md) - Testing and quality gates
+* [Quality Standards](https://github.com/SSobol77/ecli/blob/main/docs/quality/README-quality.md) - Testing and quality gates
 
 ---
 
 ## 🏗️ Architecture
 
-ECLI v0.2.2 keeps the existing editor/TUI behavior and introduces the Services Foundation as typed, testable service-layer infrastructure:
+ECLI v0.2.3 keeps the existing editor/TUI behavior and Services Foundation infrastructure, then adds Panel Console Stabilization for the ECLI-owned PySH Console Panel:
 
 * **Core Editor**: curses-based terminal editor with async task integration
 
 * **Right-Side Panels**: Help, Diagnostics/Lint, AI Code Assistant, System Doctor, Git, File Manager, Services, and Command Plan previews
+
+* **PySH Console Panel**: F11 opens or focuses an ECLI-owned command console panel backed by PySH subprocess execution
 
 * **ConfigService**: typed layered configuration loading
 
@@ -565,7 +568,7 @@ ECLI v0.2.2 keeps the existing editor/TUI behavior and introduces the Services F
 
 * **ServiceRegistry**: explicit composition root without global service-locator state
 
-**Safety boundaries for v0.2.2:**
+**Safety boundaries for v0.2.3:**
 
 * SystemDoctor is read-only.
 
@@ -575,7 +578,11 @@ ECLI v0.2.2 keeps the existing editor/TUI behavior and introduces the Services F
 
 * Service panels are visible in the UI but do not execute remediation.
 
-* VMLab runtime behavior is not included in v0.2.2.
+* Full PTY terminal emulation, VT parsing, xterm behavior, and raw interactive PySH inside curses are not included.
+
+* PySH is used as a command execution backend only; PySH source migration and monorepo conversion are not included.
+
+* VMLab runtime behavior, QEMU runtime scope, and QMP runtime scope are not included in v0.2.3.
 
 For detailed architecture information, see [Architecture Overview](https://github.com/SSobol77/ecli/blob/main/docs/architecture/current-architecture.md).
 
@@ -601,7 +608,7 @@ We welcome contributions! Here's how to get started:
 
 8. **Open** a Pull Request
 
-For detailed contribution guidelines, see [CONTRIBUTING](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md).
+For detailed contribution guidelines, see [CONTRIBUTING](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README-contributor.md).
 
 ---
 
@@ -720,7 +727,7 @@ See the [LICENSE](https://github.com/SSobol77/ecli/blob/main/LICENSE) file for t
 
 * **Bugs**: GitHub Issues
 
-* **Development**: See [Contributing](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README.md)
+* **Development**: See [Contributing](https://github.com/SSobol77/ecli/blob/main/docs/contributor/README-contributor.md)
 
 ---
 

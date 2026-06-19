@@ -2,7 +2,7 @@
 SPDX-License-Identifier: GPL-2.0-only
 
 Project: Ecli
-File: docs/README.md
+File: docs/README-docs.md
 Website: https://www.ecli.io
 Repository: https://github.com/SSobol77/ecli
 PyPI: https://pypi.org/project/ecli-editor/0.0.1/
@@ -18,7 +18,7 @@ This documentation is organized as an engineering subsystem with explicit author
 
 ## How to Navigate
 
-- Start with this file, then read category `README.md` files.
+- Start with this file, then read category `README-<folder>.md` files.
 - Use `architecture/` for system structure and contracts.
 - Use `release/` for packaging and artifact rules.
 - Use `contributor/` for setup and local workflows.

@@ -2,7 +2,7 @@
 SPDX-License-Identifier: GPL-2.0-only
 
 Project: Ecli
-File: docs/release/README.md
+File: docs/release/README-release.md
 Website: https://www.ecli.io
 Repository: https://github.com/SSobol77/ecli
 PyPI: https://pypi.org/project/ecli-editor/0.0.1/
@@ -23,6 +23,7 @@ Authoritative files:
 - `release-process.md`
 - `release-checklist.md`
 - `artifact-verification.md`
+- `v0.2.3.md`
 - `v0.2.2.md`
 - `v0.2.1.md`
 - `v0.2.0.md`

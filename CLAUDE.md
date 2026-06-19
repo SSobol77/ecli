@@ -85,7 +85,7 @@ Before performing any work, read:
 
 1. `CLAUDE.md`
 2. `AGENTS.md`
-3. `.claude/README.md`
+3. `.claude/README-claude.md`
 4. `.claude/project-context.md`
 5. `.claude/validation-runbook.md`
 6. `.claude/drift-register.md`

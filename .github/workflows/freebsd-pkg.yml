@@ -17,7 +17,7 @@ name: FreeBSD 14 .pkg
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Optional release tag (e.g. v0.2.2). When set, the built .pkg is attached to that GitHub Release out-of-band via 'gh release upload --clobber'."
+        description: "Optional release tag (e.g. v0.2.3). When set, the built .pkg is attached to that GitHub Release out-of-band via 'gh release upload --clobber'."
         required: false
         default: ""
   push:

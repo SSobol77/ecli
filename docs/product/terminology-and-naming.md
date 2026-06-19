@@ -28,4 +28,6 @@ See the LICENSE file in the project root for full license text.
 ## File Naming Policy for Docs
 
 - Lowercase kebab-case filenames.
-- Category readme always named `README.md`.
+- The repository root keeps the only global `README.md`.
+- Non-root folder overview files use `README-<folder>.md` to avoid path
+  ambiguity in agent workflows and release review.
