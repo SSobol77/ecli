@@ -15,10 +15,16 @@
 
 from __future__ import annotations
 
+import tomllib
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def _project_version() -> str:
+    with (ROOT / "pyproject.toml").open("rb") as handle:
+        return tomllib.load(handle)["project"]["version"]
 
 
 def test_linux_packaging_support_files_exist() -> None:
@@ -67,6 +73,24 @@ def test_packaging_metadata_documents_expected_artifact_names() -> None:
     assert "{PACKAGE_NAME}_{version}_slackware_{arch}.txz" in slackware_script
     assert '"RPM_PLATFORM_LABEL", "opensuse"' in opensuse_script
     assert 'systems = [ "x86_64-linux" "aarch64-linux" ];' in flake
+
+
+def test_nix_metadata_tracks_project_version_and_gpl_license() -> None:
+    """Nix surfaces must not drift from the release version or the GPL-2.0-only license."""
+    version = _project_version()
+    flake = (ROOT / "flake.nix").read_text(encoding="utf-8")
+    package = (ROOT / "packaging/nix/package.nix").read_text(encoding="utf-8")
+
+    # Version pins must track [project].version, with no stale 0.2.2 drift.
+    assert f'version = "{version}";' in flake, flake
+    assert f'version ? "{version}"' in package, package
+    assert "0.2.2" not in flake
+    assert "0.2.2" not in package
+
+    # License metadata must be GPL-2.0-only, never Apache-2.0 / asl20.
+    assert "gpl2Only" in package
+    assert "asl20" not in package
+    assert "apache" not in package.lower()
 
 
 def test_release_docs_use_normalized_linux_package_names() -> None:
