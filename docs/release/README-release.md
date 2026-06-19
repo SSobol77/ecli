@@ -16,6 +16,13 @@ See the LICENSE file in the project root for full license text.
 
 Defines canonical artifact contracts and release engineering process.
 
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. Release publication is blocked unless the exact
+21 assets are present under `releases/<version>/` and verified by
+`scripts/verify_release_assets.py`. Checksum sidecars are mandatory verification
+evidence, but they are not GitHub Release assets and must not increase the
+GitHub Release asset count.
+
 Authoritative files:
 - `artifact-contract.md`
 - `build-matrix.md`

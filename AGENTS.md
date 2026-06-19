@@ -545,6 +545,7 @@ checksum format, exit-code contracts). The migration is **complete**.
 
 * Active shell wrappers under `scripts/` have been removed. Canonical Python implementations include:
   * `scripts/verify_artifact.py` — artifact SHA256 sidecar verifier (exit codes `0`–`5`).
+  * `scripts/verify_release_assets.py` — exact 21 physical GitHub Release asset verifier.
   * `scripts/sign_checksums.py` — writes basename-only `<artifact>.sha256` sidecars (SHA256 only; not GPG signing).
   * `scripts/check_log_invariant.py` — read-only development log-location invariant.
   * `scripts/verify_runtime.py` — cross-artifact launcher validation.
@@ -564,6 +565,10 @@ checksum format, exit-code contracts). The migration is **complete**.
   `pathlib.Path`, and `subprocess.run(..., check=True)` with explicit command
   arrays. They must never publish, upload, sign with external keys, tag, push, or
   trigger workflows.
+* Every official ECLI release must publish exactly 21 physical GitHub Release
+  assets, one per canonical matrix entry. Checksum sidecars are mandatory
+  verification evidence but are not GitHub Release assets. Release publication
+  is blocked unless `scripts/verify_release_assets.py` passes.
 * The migration contract is enforced by
   `tests/packaging/test_scripts_python_migration_contract.py` and documented in
   `docs/release/artifact-contract.md` under `Shell-to-Python Script Migration`.

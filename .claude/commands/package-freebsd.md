@@ -39,6 +39,18 @@ Packaging Artifact Matrix` in `docs/release/artifact-contract.md`:
 - FreeBSD `.pkg`
 - FreeBSD ports/chroot build path
 
+## Exact official release asset gate
+
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. No reduced or subset official release is
+allowed. The FreeBSD `.pkg` asset and FreeBSD ports/chroot evidence asset are
+mandatory; the standalone FreeBSD workflow is validation evidence only.
+
+Release readiness is blocked unless `scripts/verify_release_assets.py` verifies
+the exact top-level asset set under `releases/<version>/`. Checksum sidecars are
+verification evidence under `.checksums/` or workflow artifacts; they are not
+GitHub Release assets.
+
 ## Required reading
 
 Before FreeBSD packaging analysis, read:
@@ -82,7 +94,7 @@ You may:
 * inspect artifact naming,
 * inspect checksum policy,
 * report release-path ambiguity,
-* report whether FreeBSD release is standalone, workflow-attached, or out-of-band.
+* report whether FreeBSD evidence flows through the aggregate exact 21-asset release workflow.
 
 ## Forbidden Stage 1 work
 
@@ -124,7 +136,7 @@ Release workflow path:
 Expected artifact:
 Expected checksum:
 Version source:
-Out-of-band release risk:
+Exact 21 release evidence:
 Publishing attempted: no
 Drift:
 Recommended next step:
@@ -146,7 +158,7 @@ FreeBSD packaging prepare-only summary:
 - Paths inspected:
 - Artifact contract:
 - Checksum contract:
-- Release path ambiguity:
+- Release path evidence:
 - Commands blocked:
 - Recommended next step:
 ```

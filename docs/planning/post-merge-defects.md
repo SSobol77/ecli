@@ -216,26 +216,18 @@ Implicated source lines:
    - Tee'd the in-VM stdout to `freebsd-build.log` and added an
      `if: failure()` upload step (`freebsd-build-log-<run_id>`) so future
      SSH disconnects cannot lose the in-VM trace.
-   - Marked `build-freebsd` as `continue-on-error: true` and removed it from
-     the success criteria of `publish-github-release`. FreeBSD now lives in
-     `needs:` for ordering only.
-   - The publisher injects a `freebsd_note` line into the release body when
-     `needs.build-freebsd.result != 'success'`, explicitly stating that the
-     `.pkg` is attached out-of-band.
+   - Superseded by Issue #92: official release publication now waits for the
+     FreeBSD assets and the exact 21-asset verifier.
 4. `.github/workflows/freebsd-pkg.yml`: mirrored vmactions SHA pin, added
-   build-log capture on failure, raised resources, and added a
-   workflow_dispatch input `release_tag` that uploads the freshly built
-   `.pkg` + `.sha256` to that GitHub Release via
-   `gh release upload --clobber`.
+   build-log capture on failure, and raised resources. Superseded by Issue #92:
+   the standalone workflow is validation evidence only and no longer uploads
+   assets to a published GitHub Release.
 
 ### Follow-Up Actions
 
-- Re-run `Release` workflow (`gh workflow run release.yml --ref main \
-   -f build_assets=true -f publish_pypi=false -f publish_github_release=true`)
-  to publish v0.2.2 GitHub Release with non-FreeBSD assets.
-- If FreeBSD leg lands green in that rerun, the `.pkg` is included
-  automatically. If it fails again, dispatch `FreeBSD 14 .pkg` with
-  `release_tag=v0.2.2` to attach the `.pkg` out-of-band.
+- Superseded by Issue #92: official release publication waits for the aggregate
+  exact 21-asset workflow and `scripts/verify_release_assets.py`; FreeBSD
+  standalone runs are validation evidence only.
 - Track migration of FreeBSD leg from `vmactions/freebsd-vm` (qemu-on-Linux)
   to native Cirrus CI as a stretch reliability improvement; see
   `docs/release/build-matrix.md`.

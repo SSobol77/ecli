@@ -39,6 +39,18 @@ Packaging Artifact Matrix` in `docs/release/artifact-contract.md`:
 - Nix flake
 - Nix/NixOS package expression
 
+## Exact official release asset gate
+
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. No reduced or subset official release is
+allowed. Nix flake evidence and NixOS package evidence are mandatory entries in
+the exact asset set.
+
+Release readiness is blocked unless `scripts/verify_release_assets.py` verifies
+the exact top-level asset set under `releases/<version>/`. Checksum sidecars are
+verification evidence under `.checksums/` or workflow artifacts; they are not
+GitHub Release assets.
+
 ## Required reading
 
 Before Nix packaging analysis, read:

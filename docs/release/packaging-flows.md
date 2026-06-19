@@ -17,11 +17,44 @@ See the LICENSE file in the project root for full license text.
 The active platform/package set is contract-bound by
 `docs/release/artifact-contract.md` under the `Canonical 21-Item Platform &
 Packaging Artifact Matrix` (summarized by the `Platform & Packaging Release
-Contract Matrix`). That canonical matrix has exactly 21 entries. Release
-readiness is blocked if any active packaging surface is absent from docs, agent
-contracts, build/release runbooks, or validation tests under
-`tests/packaging/`. Empty, stale, decorative, or unused packaging files are
-forbidden.
+Contract Matrix`). That canonical matrix defines exactly 21 physical GitHub
+Release assets. Every official ECLI release publishes exactly those 21 assets,
+one per canonical matrix entry; release publication is blocked unless
+`scripts/verify_release_assets.py` verifies the exact set under
+`releases/<version>/`. Release readiness is blocked if any active packaging
+surface is absent from docs, agent contracts, build/release runbooks, or
+validation tests under `tests/packaging/`. Empty, stale, decorative, or unused
+packaging files are forbidden.
+
+Checksum sidecars are mandatory verification evidence under
+`releases/<version>/.checksums/` or workflow validation artifacts, not GitHub
+Release assets.
+
+## Mandatory GitHub Release Assets
+
+```text
+01_pypi_wheel__ecli_editor-<version>-py3-none-any.whl
+02_pypi_sdist__ecli_editor-<version>.tar.gz
+03_linux_pyinstaller__ecli_<version>_linux_x86_64.bin
+04_linux_tarball__ecli_<version>_linux_x86_64.tar.gz
+05_debian__ecli_<version>_linux_x86_64.deb
+06_rpm__ecli_<version>_linux_x86_64.rpm
+07_opensuse__ecli_<version>_opensuse_x86_64.rpm
+08_arch__ecli_<version>_arch_x86_64.pkg.tar.zst
+09_slackware__ecli_<version>_slackware_x86_64.txz
+10_appimage__ecli_<version>_linux_x86_64.AppImage
+11_freebsd_pkg__ecli_<version>_freebsd_x86_64.pkg
+12_freebsd_ports_chroot__ecli_<version>_freebsd_ports_chroot_evidence.tar.gz
+13_macos_app__ecli_<version>_macos_universal2_app_evidence.tar.gz
+14_macos_dmg__ecli_<version>_macos_universal2.dmg
+15_windows_portable__ecli_<version>_win_x86_64.exe
+16_windows_nsis__ecli_<version>_win_x86_64_setup.exe
+17_nix_flake__ecli_<version>_nix_flake_evidence.tar.gz
+18_nixos_package__ecli_<version>_nixos_package_evidence.tar.gz
+19_docker_deb_helper__ecli_<version>_docker_deb_helper_evidence.tar.gz
+20_docker_rpm_helper__ecli_<version>_docker_rpm_helper_evidence.tar.gz
+21_workflow_contract__ecli_<version>_workflow_contract_evidence.tar.gz
+```
 
 ## Shell-to-Python Script Migration
 
@@ -40,8 +73,9 @@ list and migration rules live in `docs/release/artifact-contract.md` under
 
 Canonical Python entrypoints include `scripts/sign_checksums.py`,
 `scripts/check_log_invariant.py`, `scripts/verify_artifact.py`,
-`scripts/verify_runtime.py`, `scripts/build_pyinstaller_linux.py`,
-`scripts/build_and_package_deb.py`, `scripts/build_and_package_rpm.py`,
+`scripts/verify_release_assets.py`, `scripts/verify_runtime.py`,
+`scripts/build_pyinstaller_linux.py`, `scripts/build_and_package_deb.py`,
+`scripts/build_and_package_rpm.py`,
 `scripts/build_and_package_opensuse_rpm.py`, `scripts/build_and_package_arch.py`,
 `scripts/build_and_package_slackware.py`, `scripts/package_appimage.py`,
 `scripts/build_and_package_macos.py`, `scripts/build_and_package_freebsd.py`,
@@ -63,6 +97,10 @@ Use `make help` for the short workflow, `make help-full` for the complete target
 map, `make list-targets` for public target discovery, `make doctor` for local
 tool availability, and `make sysinfo` for configured package variables.
 Maintainer-owned release/upload targets require `ECLI_ALLOW_RELEASE=1`.
+Legacy per-platform `release-*` targets fail closed because partial GitHub
+Release uploads are incompatible with the exact 21-asset contract. The aggregate
+`publish-all` target is the guarded GitHub Release asset publisher and must run
+the exact asset verifier first.
 
 `Taskfile.yml` is an optional developer convenience wrapper. It may expose
 developer-friendly commands such as `task help`, `task validate-packaging`, and
@@ -107,6 +145,8 @@ Supported paths:
 Governance rule:
 
 - FreeBSD outputs must be treated as release artifacts, not source-history payload by default.
+- Official release publication is blocked until the FreeBSD `.pkg` asset and
+  FreeBSD ports/chroot evidence asset are present in the exact 21-asset set.
 
 ## macOS
 

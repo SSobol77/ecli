@@ -89,6 +89,13 @@ define assert_current_release_file
 	esac
 endef
 
+define block_partial_release
+	@echo "Blocked partial GitHub Release upload target: $@"
+	@echo "Official ECLI releases require exactly 21 canonical top-level assets."
+	@echo "Run 'make validate-release-assets' and use 'make publish-all' for the aggregate GitHub Release asset set."
+	@exit 64
+endef
+
 # =============================================================================
 # 0. Project metadata and tool configuration
 # =============================================================================
@@ -133,8 +140,8 @@ help:
 	@echo ""
 	@echo "Maintainer-owned release/publish targets"
 	@echo "  make publish-pypi             Guarded PyPI publish helper"
-	@echo "  make publish-all              Guarded aggregate publisher"
-	@echo "  make release-<platform>       Guarded GitHub release upload targets"
+	@echo "  make publish-all              Guarded exact-21 GitHub Release publisher"
+	@echo "  make release-<platform>       Blocked legacy partial-release targets"
 	@echo ""
 	@echo "Discovery"
 	@echo "  make list-targets             Print all public targets"
@@ -152,6 +159,7 @@ help-full: help
 	@echo "  make validate-full            Ruff, mypy, full pytest, runtime imports"
 	@echo "  make validate-packaging       Packaging contract suite"
 	@echo "  make validate-release-contract Release/package matrix contract checks"
+	@echo "  make validate-release-assets  Exact 21 GitHub Release asset gate"
 	@echo "  make validate-version-consistency"
 	@echo "  make validate-runtime-imports"
 	@echo "  make validate-pypi-contract"
@@ -399,8 +407,8 @@ _confirm-release-action:
 #  `make package-deb`            # or: make package-deb-docker
 #  `make show-deb-artifacts`
 #
-# Publish to GitHub Release (creates tag v<ver> if missing)
-#  `make release-deb`
+# Partial GitHub Release upload is blocked by the exact 21-asset release rule.
+# Use `make publish-all` after `make validate-release-assets`.
 # ---------------------------
 
 # Resolve version once to match [project].version in pyproject.toml.
@@ -441,36 +449,10 @@ show-deb-artifacts:
 	@echo "Version: $(DEB_PKG_VERSION)"
 	@ls -l $(DEB_PKG_DIR)/ecli_*_linux_*.deb* 2>/dev/null || echo "(no artifacts yet)"
 
-# --- Release publisher: upload DEB to GitHub Release --------------------------
-# Requires: GitHub CLI 'gh' (gh auth login) or GH_TOKEN/GITHUB_TOKEN in env.
-# Steps:
-#   1) Assert artifacts exist under releases/<version>/.
-#   2) Ensure tag v<version> exists (create & push if missing).
-#   3) Create release if missing (title, notes).
-#   4) Upload .deb and .sha256 to the release (with --clobber).
+# --- Legacy partial release target: blocked by exact 21-asset rule ------------
 .PHONY: release-deb
-release-deb: _confirm-release-action package-deb-assert
-	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required. Install: https://cli.github.com/"; exit 1)
-	@$(MAKE) _ensure-tag VERSION="$(DEB_PKG_VERSION)"
-	@echo "--> Creating GitHub Release if missing..."
-	@tmpfile="$$(mktemp)"; \
-	trap 'rm -f "$$tmpfile"' EXIT; \
-	printf '%s\n' \
-		"Debian/Ubuntu package for ECLI v$(DEB_PKG_VERSION)." \
-		"" \
-		"Artifacts:" \
-		"- $$(basename "$(DEB_PKG_FILE)")" \
-		"- $$(basename "$(DEB_SHA_FILE)")" > "$$tmpfile"; \
-	gh release view "v$(DEB_PKG_VERSION)" >/dev/null 2>&1 || \
-	gh release create "v$(DEB_PKG_VERSION)" \
-		--title "ECLI v$(DEB_PKG_VERSION)" \
-		--notes-file "$$tmpfile"
-	@echo "--> Uploading DEB artifacts to GitHub Release..."
-	@gh release upload "v$(DEB_PKG_VERSION)" \
-		"$(DEB_PKG_FILE)" \
-		"$(DEB_SHA_FILE)" \
-		--clobber
-	@echo "--> Release v$(DEB_PKG_VERSION) updated with DEB artifacts."
+release-deb: _confirm-release-action
+	$(call block_partial_release)
 
 
 # ---------------------------
@@ -481,8 +463,8 @@ release-deb: _confirm-release-action package-deb-assert
 #  `make package-rpm`            # or: make package-rpm-docker
 #  `make show-rpm-artifacts`
 #
-# Publish to GitHub Release (creates tag v<ver> if missing)
-#  `make release-rpm`
+# Partial GitHub Release upload is blocked by the exact 21-asset release rule.
+# Use `make publish-all` after `make validate-release-assets`.
 # ---------------------------
 
 # Resolve version once to match [project].version in pyproject.toml.
@@ -562,36 +544,10 @@ package-slackware: clean validate-runtime-imports
 	@echo "--> OK: $(SLACKWARE_PKG_FILE)"
 	@echo "--> OK: $(SLACKWARE_SHA_FILE)"
 
-# --- Release publisher: upload RPM to GitHub Release --------------------------
-# Requires: GitHub CLI 'gh' (gh auth login) or GH_TOKEN/GITHUB_TOKEN in env.
-# Steps:
-#   1) Assert artifacts exist under releases/<version>/.
-#   2) Ensure tag v<version> exists (create & push if missing).
-#   3) Create release if missing (title, notes).
-#   4) Upload .rpm and .sha256 to the release (with --clobber).
+# --- Legacy partial release target: blocked by exact 21-asset rule ------------
 .PHONY: release-rpm
-release-rpm: _confirm-release-action package-rpm-assert
-	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required. Install: https://cli.github.com/"; exit 1)
-	@$(MAKE) _ensure-tag VERSION="$(RPM_PKG_VERSION)"
-	@echo "--> Creating GitHub Release if missing..."
-	@tmpfile="$$(mktemp)"; \
-	trap 'rm -f "$$tmpfile"' EXIT; \
-	printf '%s\n' \
-		"RHEL/AlmaLinux/Rocky/Fedora package for ECLI v$(RPM_PKG_VERSION)." \
-		"" \
-		"Artifacts:" \
-		"- $$(basename "$(RPM_PKG_FILE)")" \
-		"- $$(basename "$(RPM_SHA_FILE)")" > "$$tmpfile"; \
-	gh release view "v$(RPM_PKG_VERSION)" >/dev/null 2>&1 || \
-	gh release create "v$(RPM_PKG_VERSION)" \
-		--title "ECLI v$(RPM_PKG_VERSION)" \
-		--notes-file "$$tmpfile"
-	@echo "--> Uploading RPM artifacts to GitHub Release..."
-	@gh release upload "v$(RPM_PKG_VERSION)" \
-		"$(RPM_PKG_FILE)" \
-		"$(RPM_SHA_FILE)" \
-		--clobber
-	@echo "--> Release v$(RPM_PKG_VERSION) updated with RPM artifacts."
+release-rpm: _confirm-release-action
+	$(call block_partial_release)
 
 
 # =============================================================================
@@ -604,8 +560,8 @@ release-rpm: _confirm-release-action package-rpm-assert
 # Verify produced artifacts
 #  `make show-appimage-artifacts`
 #
-# Publish to GitHub Release
-#  `make release-appimage`
+# Partial GitHub Release upload is blocked by the exact 21-asset release rule.
+# Use `make publish-all` after `make validate-release-assets`.
 # ---------------------------
 
 APPIMAGE_VERSION ?= $(PACKAGE_VERSION)
@@ -640,23 +596,8 @@ show-appimage-artifacts:
 	@ls -lh $(APPIMAGE_PKG_DIR)/ecli_*_linux_*.AppImage* 2>/dev/null || echo "(no artifacts yet)"
 
 .PHONY: release-appimage
-release-appimage: _confirm-release-action package-appimage-assert
-	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required"; exit 1)
-	@$(MAKE) _ensure-tag VERSION="$(APPIMAGE_VERSION)"
-	@tmpfile="$$(mktemp)"; \
-	trap 'rm -f "$$tmpfile"' EXIT; \
-	printf '%s\n' \
-		"AppImage package for Linux $(LINUX_ARCH) - ECLI v$(APPIMAGE_VERSION)." \
-		"" \
-		"Artifacts:" \
-		"- $$(basename "$(APPIMAGE_FILE)")" \
-		"- $$(basename "$(APPIMAGE_SHA_FILE)")" > "$$tmpfile"; \
-	gh release view "v$(APPIMAGE_VERSION)" >/dev/null 2>&1 || \
-	gh release create "v$(APPIMAGE_VERSION)" \
-		--title "ECLI v$(APPIMAGE_VERSION)" \
-		--notes-file "$$tmpfile"
-	@gh release upload "v$(APPIMAGE_VERSION)" "$(APPIMAGE_FILE)" "$(APPIMAGE_SHA_FILE)" --clobber
-	@echo "--> Release v$(APPIMAGE_VERSION) updated with AppImage artifacts."
+release-appimage: _confirm-release-action
+	$(call block_partial_release)
 
 
 # Optional Linux Snap package surface.
@@ -779,8 +720,8 @@ show-tar-artifacts:
 # Verify produced artifacts:
 #   make show-freebsd-artifacts
 #
-# Publish to GitHub Release (creates tag v<version> if missing, then uploads):
-#   make release-freebsd
+# Partial GitHub Release upload is blocked by the exact 21-asset release rule.
+# Use `make publish-all` after `make validate-release-assets`.
 # ---------------------------
 
 # Resolve version once (fallback to parsing pyproject.toml if not set above).
@@ -856,36 +797,10 @@ package-freebsd-docker:
 	@echo "  - make package-freebsd-port"
 	@exit 125
 
-# --- Release publisher: upload FreeBSD pkg to GitHub Release ------------------
-# Requires: GitHub CLI 'gh' (gh auth login) and access to push tags/releases.
-# Steps:
-#   1) Assert artifacts exist under releases/<version>/.
-#   2) Ensure tag v<version> exists (create & push if missing).
-#   3) Create release if missing (title, notes).
-#   4) Upload .pkg and .sha256 to the release (with --clobber).
+# --- Legacy partial release target: blocked by exact 21-asset rule ------------
 .PHONY: release-freebsd
-release-freebsd: _confirm-release-action package-freebsd-assert
-	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required. Install: https://cli.github.com/"; exit 1)
-	@$(MAKE) _ensure-tag VERSION="$(FREEBSD_PKG_VERSION)"
-	@echo "--> Creating GitHub Release if missing..."
-	@tmpfile="$$(mktemp)"; \
-	trap 'rm -f "$$tmpfile"' EXIT; \
-	printf '%s\n' \
-		"FreeBSD package for ECLI v$(FREEBSD_PKG_VERSION)." \
-		"" \
-		"Artifacts:" \
-		"- $$(basename "$(FREEBSD_PKG_FILE)")" \
-		"- $$(basename "$(FREEBSD_SHA_FILE)")" > "$$tmpfile"; \
-	gh release view "v$(FREEBSD_PKG_VERSION)" >/dev/null 2>&1 || \
-	gh release create "v$(FREEBSD_PKG_VERSION)" \
-		--title "ECLI v$(FREEBSD_PKG_VERSION)" \
-		--notes-file "$$tmpfile"
-	@echo "--> Uploading artifacts to GitHub Release..."
-	@gh release upload "v$(FREEBSD_PKG_VERSION)" \
-		"$(FREEBSD_PKG_FILE)" \
-		"$(FREEBSD_SHA_FILE)" \
-		--clobber
-	@echo "--> Release v$(FREEBSD_PKG_VERSION) updated with FreeBSD artifacts."
+release-freebsd: _confirm-release-action
+	$(call block_partial_release)
 
 
 # =============================================================================
@@ -900,8 +815,8 @@ release-freebsd: _confirm-release-action package-freebsd-assert
 # Verify produced artifacts (strict naming & location):
 #   `make show-macos-artifacts`
 #
-# Publish to GitHub Release (creates tag v<version> if missing, then uploads):
-#   `make release-macos`
+# Partial GitHub Release upload is blocked by the exact 21-asset release rule.
+# Use `make publish-all` after `make validate-release-assets`.
 #
 # Notes:
 #  - Output files (strict):
@@ -948,25 +863,9 @@ show-macos-artifacts:
 	@echo "Version: $(MACOS_PKG_VERSION) Arch: $(MACOS_ARCH)"
 	@ls -l $(MACOS_PKG_DIR)/ecli_*_macos_* 2>/dev/null || echo "(no artifacts yet)"
 
-# Publish to GitHub Release
 .PHONY: release-macos
-release-macos: _confirm-release-action package-macos-assert
-	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' required"; exit 1)
-	@$(MAKE) _ensure-tag VERSION="$(MACOS_PKG_VERSION)"
-	@tmpfile="$$(mktemp)"; \
-	trap 'rm -f "$$tmpfile"' EXIT; \
-	printf '%s\n' \
-		"macOS package (DMG) for ECLI v$(MACOS_PKG_VERSION)." \
-		"" \
-		"Artifacts:" \
-		"- $$(basename "$(MACOS_PKG_FILE)")" \
-		"- $$(basename "$(MACOS_SHA_FILE)")" > "$$tmpfile"; \
-	gh release view "v$(MACOS_PKG_VERSION)" >/dev/null 2>&1 || \
-	gh release create "v$(MACOS_PKG_VERSION)" \
-		--title "ECLI v$(MACOS_PKG_VERSION)" \
-		--notes-file "$$tmpfile"
-	@gh release upload "v$(MACOS_PKG_VERSION)" "$(MACOS_PKG_FILE)" "$(MACOS_SHA_FILE)" --clobber
-	@echo "--> Release v$(MACOS_PKG_VERSION) updated with macOS artifacts."
+release-macos: _confirm-release-action
+	$(call block_partial_release)
 
 
 # =============================================================================
@@ -980,8 +879,8 @@ release-macos: _confirm-release-action package-macos-assert
 # Verify produced artifacts (strict naming & location):
 #   `make show-windows-artifacts`
 #
-# Publish to GitHub Release (creates tag v<version> if missing, then uploads):
-#   `make release-windows`
+# Partial GitHub Release upload is blocked by the exact 21-asset release rule.
+# Use `make publish-all` after `make validate-release-assets`.
 #
 # Notes:
 #  - Output files (strict):
@@ -1031,27 +930,9 @@ show-windows-artifacts:
 	@echo "Version: $(WIN_PKG_VERSION)"
 	@ls -l $(WIN_PKG_DIR)/ecli_*_win_*.exe* 2>/dev/null || echo "(no artifacts yet)"
 
-# Publish to GitHub Release
 .PHONY: release-windows
-release-windows: _confirm-release-action package-windows-assert
-	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' required"; exit 1)
-	@$(MAKE) _ensure-tag VERSION="$(WIN_PKG_VERSION)"
-	@tmpfile="$$(mktemp)"; \
-	trap 'rm -f "$$tmpfile"' EXIT; \
-	printf '%s\n' \
-		"Windows x86_64 portable executable and unsigned NSIS installer for ECLI v$(WIN_PKG_VERSION)." \
-		"" \
-		"Artifacts:" \
-		"- $$(basename "$(WIN_PORTABLE_FILE)")" \
-		"- $$(basename "$(WIN_PORTABLE_SHA_FILE)")" \
-		"- $$(basename "$(WIN_INSTALLER_FILE)")" \
-		"- $$(basename "$(WIN_INSTALLER_SHA_FILE)")" > "$$tmpfile"; \
-	gh release view "v$(WIN_PKG_VERSION)" >/dev/null 2>&1 || \
-	gh release create "v$(WIN_PKG_VERSION)" \
-		--title "ECLI v$(WIN_PKG_VERSION)" \
-		--notes-file "$$tmpfile"
-	@gh release upload "v$(WIN_PKG_VERSION)" "$(WIN_PORTABLE_FILE)" "$(WIN_PORTABLE_SHA_FILE)" "$(WIN_INSTALLER_FILE)" "$(WIN_INSTALLER_SHA_FILE)" --clobber
-	@echo "--> Release v$(WIN_PKG_VERSION) updated with Windows artifacts."
+release-windows: _confirm-release-action
+	$(call block_partial_release)
 
 
 # =============================================================================
@@ -1131,47 +1012,32 @@ package-linux: package-deb-docker package-rpm-docker package-opensuse-rpm packag
 package-desktop: package-macos package-windows
 	@echo "--> All desktop packages built."
 
-# Publish artifacts that already exist; skip absent platform artifacts.
+# Publish exactly the 21 canonical GitHub Release assets.
+# Checksum sidecars remain verification evidence and are not uploaded here.
 .PHONY: publish-all
-publish-all: _confirm-release-action
-	@if [ -f "$(DEB_PKG_FILE)" ]; then \
-		$(MAKE) release-deb; \
-	else \
-		echo "SKIP: DEB artifact not found: $(DEB_PKG_FILE)"; \
-	fi
-	@if [ -f "$(RPM_PKG_FILE)" ]; then \
-		$(MAKE) release-rpm; \
-	else \
-		echo "SKIP: RPM artifact not found: $(RPM_PKG_FILE)"; \
-	fi
-	@if [ -f "$(APPIMAGE_FILE)" ]; then \
-		$(MAKE) release-appimage; \
-	else \
-		echo "SKIP: AppImage artifact not found: $(APPIMAGE_FILE)"; \
-	fi
-	@if [ -f "$(FREEBSD_PKG_FILE)" ]; then \
-		$(MAKE) release-freebsd; \
-	else \
-		echo "SKIP: FreeBSD artifact not found: $(FREEBSD_PKG_FILE)"; \
-	fi
-	@if [ -f "$(MACOS_PKG_FILE)" ]; then \
-		$(MAKE) release-macos; \
-	else \
-		echo "SKIP: macOS artifact not found: $(MACOS_PKG_FILE)"; \
-	fi
-	@if [ -f "$(WIN_PKG_FILE)" ]; then \
-		$(MAKE) release-windows; \
-	else \
-		echo "SKIP: Windows artifact not found: $(WIN_PKG_FILE)"; \
-	fi
-	@if [ -f "$(PYPI_WHEEL_FILE)" ] && [ -f "$(PYPI_SDIST_FILE)" ]; then \
-		$(MAKE) publish-pypi; \
-	else \
-		echo "SKIP: PyPI artifacts not found under $(PYPI_PKG_DIR)"; \
-	fi
+publish-all: _confirm-release-action validate-release-assets
+	@test -n "$$(command -v gh)" || (echo "GitHub CLI 'gh' is required"; exit 1)
+	@$(MAKE) _ensure-tag VERSION="$(PACKAGE_VERSION)"
+	@tmpfile="$$(mktemp)"; \
+	trap 'rm -f "$$tmpfile"' EXIT; \
+	printf '%s\n' \
+		"ECLI v$(PACKAGE_VERSION) official release assets." \
+		"" \
+		"This release publishes exactly 21 physical GitHub Release assets." \
+		"Checksum sidecars are verification evidence and are not uploaded as GitHub Release assets." > "$$tmpfile"; \
+	gh release view "v$(PACKAGE_VERSION)" >/dev/null 2>&1 || \
+	gh release create "v$(PACKAGE_VERSION)" \
+		--title "ECLI v$(PACKAGE_VERSION)" \
+		--notes-file "$$tmpfile"
+	@assets="$$(find "$(RELEASE_DIR)" -maxdepth 1 -type f | sort)"; \
+	count="$$(printf '%s\n' "$$assets" | sed '/^$$/d' | wc -l)"; \
+	test "$$count" = "21" || (echo "Expected exactly 21 assets, found $$count"; exit 3); \
+	echo "--> Uploading exactly 21 GitHub Release assets"; \
+	printf '%s\n' "$$assets"; \
+	gh release upload "v$(PACKAGE_VERSION)" $$assets --clobber
 	@echo ""
 	@echo "╔═══════════════════════════════════════════════════════════════════════╗"
-	@echo "║             AVAILABLE ARTIFACTS PUBLISH FLOW COMPLETED                ║"
+	@echo "║          EXACT 21 GITHUB RELEASE ASSETS PUBLISH FLOW COMPLETED         ║"
 	@echo "╚═══════════════════════════════════════════════════════════════════════╝"
 
 
@@ -1206,7 +1072,13 @@ validate-release-contract:
 	@$(UV) run pytest -q tests/packaging/test_packaging_release_contract.py
 	@$(UV) run pytest -q tests/packaging/test_packaging_workflows_contract.py
 	@$(UV) run pytest -q tests/packaging/test_scripts_python_migration_contract.py
+	@$(UV) run pytest -q tests/packaging/test_release_asset_count_gate.py
 	@echo "--> OK: release contract tests"
+
+.PHONY: validate-release-assets
+validate-release-assets:
+	@$(PYTHON) scripts/verify_release_assets.py
+	@echo "--> OK: exact 21 GitHub Release asset gate"
 
 .PHONY: validate-version-consistency
 validate-version-consistency:
@@ -1273,6 +1145,7 @@ validate-gate2: validate-version-consistency validate-runtime-imports
 	$(call validate_if_present,$(FREEBSD_PKG_FILE),validate-freebsd-contract,FreeBSD)
 	$(call validate_if_present,$(MACOS_PKG_FILE),validate-macos-contract,macOS)
 	$(call validate_if_present,$(WIN_PKG_FILE),validate-windows-contract,Windows)
+	$(MAKE) validate-release-assets
 	@echo "--> OK: Gate 2 validation completed for built artifacts"
 
 

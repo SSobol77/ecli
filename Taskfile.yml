@@ -52,6 +52,11 @@ tasks:
     cmds:
       - make validate-packaging
 
+  validate-release-assets:
+    desc: Run the exact 21 GitHub Release asset gate.
+    cmds:
+      - make validate-release-assets
+
   doctor:
     desc: Inspect local tool availability.
     cmds:
@@ -103,29 +108,29 @@ tasks:
       - make publish-pypi
 
   publish-all:
-    desc: Run the existing guarded aggregate publish target.
+    desc: Run the guarded exact-21 GitHub Release publish target.
     cmds:
       - make publish-all
 
   release-linux:
-    desc: Run existing guarded Linux GitHub release upload targets.
+    desc: Blocked legacy Linux partial GitHub Release upload targets.
     cmds:
       - make release-deb
       - make release-rpm
       - make release-appimage
 
   release-freebsd:
-    desc: Run the existing guarded FreeBSD release upload target.
+    desc: Blocked legacy FreeBSD partial GitHub Release upload target.
     cmds:
       - make release-freebsd
 
   release-macos:
-    desc: Run the existing guarded macOS release upload target.
+    desc: Blocked legacy macOS partial GitHub Release upload target.
     cmds:
       - make release-macos
 
   release-windows:
-    desc: Run the existing guarded Windows release upload target.
+    desc: Blocked legacy Windows partial GitHub Release upload target.
     cmds:
       - make release-windows
 

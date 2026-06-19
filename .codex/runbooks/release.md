@@ -56,6 +56,10 @@ Inspect:
 * checksum/signing expectations;
 * generated metadata expectations;
 * tracked descriptor mutation risks.
+* exact 21 physical GitHub Release asset gate:
+  `scripts/verify_release_assets.py` must pass before publication, and
+  checksum sidecars must remain verification evidence rather than extra GitHub
+  Release assets.
 
 Use:
 
@@ -75,6 +79,7 @@ Prepare a checklist covering:
 * package metadata;
 * release notes and manual upload steps;
 * maintainer-owned commands still required.
+* whether the exact 21 GitHub Release assets are present and verified.
 
 Do not execute checklist items that publish, upload, tag, push, or trigger workflows.
 

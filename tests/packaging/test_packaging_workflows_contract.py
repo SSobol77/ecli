@@ -23,7 +23,7 @@ from conftest import PathAssertion, RepoReader, TokenAssertion
 WORKFLOW_CONTRACT = {
     "ci.yml": {
         "classification": "Global quality gate",
-        "tokens": ["CI", "validate-gate2", "main.py", "ruff", "pytest"],
+        "tokens": ["CI", "validate-release-contract", "main.py", "ruff", "pytest"],
         "surface_docs": [
             "docs/release/artifact-contract.md",
             "docs/release/build-matrix.md",
@@ -40,7 +40,7 @@ WORKFLOW_CONTRACT = {
             "FreeBSD",
             ".pkg",
             "build_and_package_freebsd.py",
-            "gh release upload",
+            "Official GitHub Release publication waits",
         ],
         "surface_docs": [
             "docs/release/artifact-contract.md",
@@ -129,6 +129,7 @@ WORKFLOW_CONTRACT = {
             "Build Python distributions",
             "Build Linux packages",
             "Build Windows artifacts",
+            "verify_release_assets.py",
         ],
         "surface_docs": [
             "docs/release/artifact-contract.md",

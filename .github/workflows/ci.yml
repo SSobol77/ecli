@@ -23,6 +23,7 @@ name: CI
       - "main.py"
       - "pyproject.toml"
       - "scripts/check_runtime_imports.py"
+      - "scripts/verify_release_assets.py"
       - "scripts/verify_runtime.py"
       - "src/**"
       - "tests/**"
@@ -34,6 +35,7 @@ name: CI
       - "main.py"
       - "pyproject.toml"
       - "scripts/check_runtime_imports.py"
+      - "scripts/verify_release_assets.py"
       - "scripts/verify_runtime.py"
       - "src/**"
       - "tests/**"
@@ -90,8 +92,8 @@ jobs:
         if: ${{ hashFiles('tests/**') != '' }}
         run: uv run pytest --cov -q
 
-      - name: Gate 2 contract validation
-        run: uv run make PYTHON="uv run python" validate-gate2
+      - name: Release contract validation
+        run: uv run make PYTHON="uv run python" validate-release-contract
 
       - name: SonarQube Scan
         if: ${{ env.SONAR_TOKEN != '' && env.SONAR_HOST_URL != '' && hashFiles('coverage.xml') != '' }}

@@ -118,12 +118,32 @@ jobs:
         run: |
           set -euo pipefail
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends rpm cpio
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cpio \
+            file \
+            libfuse2 \
+            pacman-package-manager \
+            rpm \
+            ruby \
+            ruby-dev
+          sudo gem install --no-document fpm
           python3 -m pip install --upgrade pip
-          python3 -m pip install -e ".[dev]"
+          python3 -m pip install -e ".[dev]" appimage-builder
+          curl -fsSL \
+            -o appimagetool \
+            https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x appimagetool
+          sudo mv appimagetool /usr/local/bin/appimagetool
 
       - name: Build Linux archive
-        run: make package-tar-linux
+        run: |
+          set -euo pipefail
+          make package-tar-linux
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          release_dir="releases/${version}"
+          install -m 0755 dist/ecli "${release_dir}/ecli_${version}_linux_x86_64.bin"
+          (cd "${release_dir}" && sha256sum "ecli_${version}_linux_x86_64.bin" > "ecli_${version}_linux_x86_64.bin.sha256")
 
       - name: Build Debian package in Docker
         run: make package-deb-docker
@@ -141,11 +161,30 @@ jobs:
       - name: Build RPM package in Docker
         run: make package-rpm-docker
 
+      - name: Reset ownership after Docker RPM build
+        run: |
+          set -euo pipefail
+          if [ -d build ]; then sudo chown -R "$(id -u):$(id -g)" build/; fi
+          if [ -d dist ]; then sudo chown -R "$(id -u):$(id -g)" dist/; fi
+
+      - name: Build openSUSE RPM
+        run: make package-opensuse-rpm
+
+      - name: Build Arch package
+        run: make package-arch
+
+      - name: Build Slackware package
+        run: make package-slackware
+
+      - name: Build AppImage
+        run: make package-appimage
+
       - name: Verify package contract
         run: |
           set -euo pipefail
           make package-deb-assert
           make package-rpm-assert
+          make validate-appimage-contract
           make show-artifacts
           shopt -s globstar nullglob
           for sha in releases/**/*.sha256; do
@@ -161,10 +200,18 @@ jobs:
         with:
           name: linux-packages
           path: |
+            releases/**/*.bin
+            releases/**/*.bin.sha256
             releases/**/*.deb
             releases/**/*.deb.sha256
             releases/**/*.rpm
             releases/**/*.rpm.sha256
+            releases/**/*.pkg.tar.zst
+            releases/**/*.pkg.tar.zst.sha256
+            releases/**/*.txz
+            releases/**/*.txz.sha256
+            releases/**/*.AppImage
+            releases/**/*.AppImage.sha256
             releases/**/*.tar.gz
             releases/**/*.tar.gz.sha256
           if-no-files-found: error
@@ -173,9 +220,6 @@ jobs:
     name: Build FreeBSD package
     if: ${{ github.event_name == 'push' || github.event.inputs.build_assets != 'false' }}
     runs-on: ubuntu-latest
-    # FreeBSD is intentionally best-effort; the publish-github-release job
-    # tolerates failure here and notes the deferral in the release body.
-    continue-on-error: true
     permissions:
       contents: read
     steps:
@@ -234,6 +278,28 @@ jobs:
           test "$actual" = "$expected"
           echo "Verified ${pkgs[0]}"
 
+      - name: Build FreeBSD ports/chroot evidence asset
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          evidence_dir="build/evidence/freebsd_ports_chroot"
+          release_dir="releases/${version}"
+          mkdir -p "$evidence_dir" "$release_dir"
+          cp Makefile "$evidence_dir/"
+          cp scripts/build_freebsd_port.py "$evidence_dir/"
+          cp tools/freebsd-chroot-build.sh "$evidence_dir/"
+          cp .github/workflows/freebsd-pkg.yml "$evidence_dir/"
+          if [ -f freebsd-build.log ]; then cp freebsd-build.log "$evidence_dir/"; fi
+          printf '%s\n' \
+            "FreeBSD ports/chroot evidence for ECLI ${version}" \
+            "Official release publication waits for this evidence asset." \
+            "Standalone FreeBSD workflow output is validation evidence only." \
+            > "$evidence_dir/README.txt"
+          tar -czf "${release_dir}/ecli_${version}_freebsd_ports_chroot_evidence.tar.gz" \
+            -C "build/evidence" freebsd_ports_chroot
+          (cd "$release_dir" && sha256sum "ecli_${version}_freebsd_ports_chroot_evidence.tar.gz" > "ecli_${version}_freebsd_ports_chroot_evidence.tar.gz.sha256")
+
       - name: Upload FreeBSD package
         uses: actions/upload-artifact@v4
         with:
@@ -241,6 +307,8 @@ jobs:
           path: |
             releases/**/*.pkg
             releases/**/*.pkg.sha256
+            releases/**/*freebsd_ports_chroot_evidence.tar.gz
+            releases/**/*freebsd_ports_chroot_evidence.tar.gz.sha256
           if-no-files-found: error
 
   build-macos:
@@ -263,20 +331,33 @@ jobs:
         run: softwareupdate --install-rosetta --agree-to-license
 
       - name: Build DMG
-        run: make package-macos
+        run: ECLI_BUILD_MACOS_APP=1 make package-macos
 
       - name: Verify DMG
         run: |
           make package-macos-assert MACOS_ASSERT_MODE=structural
           make show-macos-artifacts
 
-      - name: Upload macOS DMG
+      - name: Build macOS app evidence asset
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          release_dir="releases/${version}"
+          app_path="$(find build/macos_dmg -name ECLI.app -type d | head -n 1)"
+          test -n "$app_path"
+          tar -czf "${release_dir}/ecli_${version}_macos_universal2_app_evidence.tar.gz" \
+            -C "$(dirname "$app_path")" "$(basename "$app_path")"
+          (cd "$release_dir" && shasum -a 256 "ecli_${version}_macos_universal2_app_evidence.tar.gz" > "ecli_${version}_macos_universal2_app_evidence.tar.gz.sha256")
+
+      - name: Upload macOS DMG and app evidence
         uses: actions/upload-artifact@v4
         with:
           name: macos-dmg
           path: |
             releases/**/*.dmg
             releases/**/*.dmg.sha256
+            releases/**/*macos_universal2_app_evidence.tar.gz
+            releases/**/*macos_universal2_app_evidence.tar.gz.sha256
           if-no-files-found: error
 
   build-windows:
@@ -354,8 +435,19 @@ jobs:
   publish-pypi:
     name: Publish to PyPI
     runs-on: ubuntu-latest
-    needs: [build-python]
-    if: ${{ always() && needs.build-python.result == 'success' }}
+    needs:
+      - build-python
+      - build-linux
+      - build-freebsd
+      - build-macos
+      - build-windows
+    if: |
+      always() &&
+      needs.build-python.result == 'success' &&
+      needs.build-linux.result == 'success' &&
+      needs.build-freebsd.result == 'success' &&
+      needs.build-macos.result == 'success' &&
+      needs.build-windows.result == 'success'
     permissions:
       contents: read
     steps:
@@ -429,11 +521,6 @@ jobs:
   publish-github-release:
     name: Publish GitHub release
     runs-on: ubuntu-latest
-    # FreeBSD is intentionally kept in `needs` for ordering only. The `if:`
-    # below requires Linux / macOS / Windows / Python to be green but tolerates
-    # FreeBSD failure or skip — a single-platform vmactions flake must not
-    # block GitHub Release publication. The FreeBSD .pkg is attached
-    # out-of-band by the standalone "FreeBSD 14 .pkg" workflow when needed.
     needs:
       - build-python
       - build-linux
@@ -445,6 +532,7 @@ jobs:
       (github.event_name == 'push' || github.event.inputs.publish_github_release != 'false') &&
       needs.build-python.result == 'success' &&
       needs.build-linux.result == 'success' &&
+      needs.build-freebsd.result == 'success' &&
       needs.build-macos.result == 'success' &&
       needs.build-windows.result == 'success'
     permissions:
@@ -463,20 +551,99 @@ jobs:
           version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag=v${version}" >> "$GITHUB_OUTPUT"
-          if [ "${{ needs.build-freebsd.result }}" = "success" ]; then
-            echo "freebsd_note=" >> "$GITHUB_OUTPUT"
-          else
-            echo "freebsd_note=> Note: FreeBSD 14 .pkg asset is not included in this release; it will be attached out-of-band via the standalone FreeBSD workflow." >> "$GITHUB_OUTPUT"
-          fi
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: release-assets
+          path: release-inputs
           merge-multiple: true
 
-      - name: List release assets
-        run: find release-assets -maxdepth 4 -type f -print | sort
+      - name: Assemble and verify exact 21 GitHub Release assets
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          version="${{ steps.release_meta.outputs.version }}"
+          release_dir="releases/${version}"
+          rm -rf "$release_dir"
+          mkdir -p "$release_dir/.checksums"
+
+          copy_one() {
+            local pattern="$1"
+            local dest="$2"
+            local matches=( $pattern )
+            if (( ${#matches[@]} != 1 )); then
+              echo "::error::Expected exactly one match for $pattern, found ${#matches[@]}"
+              printf '%s\n' "${matches[@]}"
+              exit 3
+            fi
+            cp "${matches[0]}" "$dest"
+          }
+
+          copy_one "release-inputs/**/ecli_editor-${version}-py3-none-any.whl" \
+            "${release_dir}/01_pypi_wheel__ecli_editor-${version}-py3-none-any.whl"
+          copy_one "release-inputs/**/ecli_editor-${version}.tar.gz" \
+            "${release_dir}/02_pypi_sdist__ecli_editor-${version}.tar.gz"
+          copy_one "release-inputs/**/ecli_${version}_linux_x86_64.bin" \
+            "${release_dir}/03_linux_pyinstaller__ecli_${version}_linux_x86_64.bin"
+          copy_one "release-inputs/**/ecli_${version}_linux_x86_64.tar.gz" \
+            "${release_dir}/04_linux_tarball__ecli_${version}_linux_x86_64.tar.gz"
+          copy_one "release-inputs/**/ecli_${version}_linux_x86_64.deb" \
+            "${release_dir}/05_debian__ecli_${version}_linux_x86_64.deb"
+          copy_one "release-inputs/**/ecli_${version}_linux_x86_64.rpm" \
+            "${release_dir}/06_rpm__ecli_${version}_linux_x86_64.rpm"
+          copy_one "release-inputs/**/ecli_${version}_opensuse_x86_64.rpm" \
+            "${release_dir}/07_opensuse__ecli_${version}_opensuse_x86_64.rpm"
+          copy_one "release-inputs/**/ecli_${version}_arch_x86_64.pkg.tar.zst" \
+            "${release_dir}/08_arch__ecli_${version}_arch_x86_64.pkg.tar.zst"
+          copy_one "release-inputs/**/ecli_${version}_slackware_x86_64.txz" \
+            "${release_dir}/09_slackware__ecli_${version}_slackware_x86_64.txz"
+          copy_one "release-inputs/**/ecli_${version}_linux_x86_64.AppImage" \
+            "${release_dir}/10_appimage__ecli_${version}_linux_x86_64.AppImage"
+          copy_one "release-inputs/**/ecli_${version}_freebsd_x86_64.pkg" \
+            "${release_dir}/11_freebsd_pkg__ecli_${version}_freebsd_x86_64.pkg"
+          copy_one "release-inputs/**/ecli_${version}_freebsd_ports_chroot_evidence.tar.gz" \
+            "${release_dir}/12_freebsd_ports_chroot__ecli_${version}_freebsd_ports_chroot_evidence.tar.gz"
+          copy_one "release-inputs/**/ecli_${version}_macos_universal2_app_evidence.tar.gz" \
+            "${release_dir}/13_macos_app__ecli_${version}_macos_universal2_app_evidence.tar.gz"
+          copy_one "release-inputs/**/ecli_${version}_macos_universal2.dmg" \
+            "${release_dir}/14_macos_dmg__ecli_${version}_macos_universal2.dmg"
+          copy_one "release-inputs/**/ecli_${version}_win_x86_64.exe" \
+            "${release_dir}/15_windows_portable__ecli_${version}_win_x86_64.exe"
+          copy_one "release-inputs/**/ecli_${version}_win_x86_64_setup.exe" \
+            "${release_dir}/16_windows_nsis__ecli_${version}_win_x86_64_setup.exe"
+
+          mkdir -p build/evidence/nix_flake build/evidence/nixos_package
+          mkdir -p build/evidence/docker_deb_helper build/evidence/docker_rpm_helper
+          mkdir -p build/evidence/workflow_contract
+          cp flake.nix build/evidence/nix_flake/
+          cp packaging/nix/package.nix build/evidence/nixos_package/
+          cp docker/build-linux-deb.Dockerfile build/evidence/docker_deb_helper/
+          cp docker/build-linux-rpm.Dockerfile build/evidence/docker_rpm_helper/
+          cp -R .github/workflows build/evidence/workflow_contract/
+          cp docs/release/artifact-contract.md build/evidence/workflow_contract/
+          cp scripts/verify_release_assets.py build/evidence/workflow_contract/
+          find release-inputs -maxdepth 5 -type f -print | sort \
+            > build/evidence/workflow_contract/downloaded-workflow-artifacts.txt
+
+          tar -czf "${release_dir}/17_nix_flake__ecli_${version}_nix_flake_evidence.tar.gz" \
+            -C build/evidence nix_flake
+          tar -czf "${release_dir}/18_nixos_package__ecli_${version}_nixos_package_evidence.tar.gz" \
+            -C build/evidence nixos_package
+          tar -czf "${release_dir}/19_docker_deb_helper__ecli_${version}_docker_deb_helper_evidence.tar.gz" \
+            -C build/evidence docker_deb_helper
+          tar -czf "${release_dir}/20_docker_rpm_helper__ecli_${version}_docker_rpm_helper_evidence.tar.gz" \
+            -C build/evidence docker_rpm_helper
+          tar -czf "${release_dir}/21_workflow_contract__ecli_${version}_workflow_contract_evidence.tar.gz" \
+            -C build/evidence workflow_contract
+
+          for asset in "$release_dir"/*; do
+            test -f "$asset" || continue
+            (cd "$release_dir" && sha256sum "$(basename "$asset")" > ".checksums/$(basename "$asset").sha256")
+          done
+
+          python3 scripts/verify_release_assets.py --version "$version"
+          find "$release_dir" -maxdepth 1 -type f -print | sort
+          find "$release_dir/.checksums" -maxdepth 1 -type f -print | sort
 
       - name: Create or update GitHub Release
         uses: softprops/action-gh-release@v2
@@ -485,18 +652,12 @@ jobs:
           draft: false
           prerelease: ${{ contains(steps.release_meta.outputs.tag, '-') }}
           overwrite_files: true
-          # FreeBSD assets may be absent on best-effort runs; tolerate missing
-          # globs rather than failing the publisher. softprops/action-gh-release
-          # treats fail_on_unmatched_files=false as "skip missing globs".
-          fail_on_unmatched_files: false
+          fail_on_unmatched_files: true
           body: |
             ECLI release artifacts for ${{ steps.release_meta.outputs.tag }}.
 
-            This release includes a CycloneDX SBOM for the Python distribution:
-            `ecli-editor-<version>.cdx.json`, plus a SHA256 sidecar.
-
-            The SBOM is generated by the `cyclonedx-bom` package through the
-            `cyclonedx_py` module in CycloneDX JSON schema version 1.5.
-
-            ${{ steps.release_meta.outputs.freebsd_note }}
-          files: release-assets/**/*
+            This official release publishes exactly 21 physical GitHub Release
+            assets, one per canonical matrix entry. Checksum sidecars are
+            mandatory verification evidence under `.checksums/` during CI, but
+            are not uploaded as GitHub Release assets.
+          files: releases/${{ steps.release_meta.outputs.version }}/[0-9][0-9]_*

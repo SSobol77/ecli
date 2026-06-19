@@ -23,6 +23,18 @@ Packaging Artifact Matrix` in `docs/release/artifact-contract.md`:
 - macOS `.app`
 - macOS `.dmg`
 
+## Exact official release asset gate
+
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. No reduced or subset official release is
+allowed. macOS app evidence and the macOS DMG are mandatory entries in the exact
+asset set.
+
+Release readiness is blocked unless `scripts/verify_release_assets.py` verifies
+the exact top-level asset set under `releases/<version>/`. Checksum sidecars are
+verification evidence under `.checksums/` or workflow artifacts; they are not
+GitHub Release assets.
+
 Use with:
 
 ```sh

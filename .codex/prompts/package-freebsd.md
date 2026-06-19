@@ -23,6 +23,18 @@ Packaging Artifact Matrix` in `docs/release/artifact-contract.md`:
 - FreeBSD `.pkg`
 - FreeBSD ports/chroot build path
 
+## Exact official release asset gate
+
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. No reduced or subset official release is
+allowed. The FreeBSD `.pkg` asset and FreeBSD ports/chroot evidence asset are
+mandatory; the standalone FreeBSD workflow is validation evidence only.
+
+Release readiness is blocked unless `scripts/verify_release_assets.py` verifies
+the exact top-level asset set under `releases/<version>/`. Checksum sidecars are
+verification evidence under `.checksums/` or workflow artifacts; they are not
+GitHub Release assets.
+
 Use with:
 
 ```sh

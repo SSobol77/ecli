@@ -35,41 +35,86 @@ prepare fixes for this drift, but release execution remains maintainer-owned.
 
 - All release artifacts must be emitted under `releases/<version>/`.
 
+## Permanent Official Release Asset Rule
+
+Every official ECLI release publishes exactly 21 physical GitHub Release
+assets, one per canonical matrix entry. Release publication is blocked unless
+the exact 21 top-level asset files are present and verified by
+`scripts/verify_release_assets.py`.
+
+This rule applies to every official release version. Versioned filenames derive
+from `pyproject.toml`; hard-coded version-specific release gates are forbidden
+outside test fixtures. No reduced, subset, deferred, or partial official
+GitHub Release is allowed.
+
+Checksum sidecars are mandatory verification evidence, but they are not GitHub
+Release assets. The release asset directory may contain
+`releases/<version>/.checksums/` for sidecars; the top level of
+`releases/<version>/` must contain exactly the 21 files listed below and no
+additional files.
+
+Mandatory GitHub Release asset names for each `<version>`:
+
+```text
+01_pypi_wheel__ecli_editor-<version>-py3-none-any.whl
+02_pypi_sdist__ecli_editor-<version>.tar.gz
+03_linux_pyinstaller__ecli_<version>_linux_x86_64.bin
+04_linux_tarball__ecli_<version>_linux_x86_64.tar.gz
+05_debian__ecli_<version>_linux_x86_64.deb
+06_rpm__ecli_<version>_linux_x86_64.rpm
+07_opensuse__ecli_<version>_opensuse_x86_64.rpm
+08_arch__ecli_<version>_arch_x86_64.pkg.tar.zst
+09_slackware__ecli_<version>_slackware_x86_64.txz
+10_appimage__ecli_<version>_linux_x86_64.AppImage
+11_freebsd_pkg__ecli_<version>_freebsd_x86_64.pkg
+12_freebsd_ports_chroot__ecli_<version>_freebsd_ports_chroot_evidence.tar.gz
+13_macos_app__ecli_<version>_macos_universal2_app_evidence.tar.gz
+14_macos_dmg__ecli_<version>_macos_universal2.dmg
+15_windows_portable__ecli_<version>_win_x86_64.exe
+16_windows_nsis__ecli_<version>_win_x86_64_setup.exe
+17_nix_flake__ecli_<version>_nix_flake_evidence.tar.gz
+18_nixos_package__ecli_<version>_nixos_package_evidence.tar.gz
+19_docker_deb_helper__ecli_<version>_docker_deb_helper_evidence.tar.gz
+20_docker_rpm_helper__ecli_<version>_docker_rpm_helper_evidence.tar.gz
+21_workflow_contract__ecli_<version>_workflow_contract_evidence.tar.gz
+```
+
 ## Canonical 21-Item Platform & Packaging Artifact Matrix
 
 This is the normative, complete list of active ECLI release-contract artifacts.
-It contains exactly 21 entries. Coverage in tests under `tests/packaging/`,
-Claude commands under `.claude/commands/`, Codex prompts under `.codex/prompts/`,
-and GitHub workflows under `.github/workflows/` must never be smaller than this
-matrix. If an artifact exists here but lacks a test, a Claude command mapping, a
-Codex prompt mapping, or (where relevant) a workflow mapping, release readiness
-is blocked. Do not add a packaging file, workflow, script, or platform descriptor
-unless it is wired into this matrix, agent contracts, build/release runbooks, and
-validation tests. Do not invent unsupported package types.
+It defines exactly 21 physical GitHub Release assets. Coverage in tests under
+`tests/packaging/`, Claude commands under `.claude/commands/`, Codex prompts
+under `.codex/prompts/`, and GitHub workflows under `.github/workflows/` must
+never be smaller than this matrix. If an artifact exists here but lacks a test,
+a Claude command mapping, a Codex prompt mapping, or (where relevant) a workflow
+mapping, release readiness is blocked. Do not add a packaging file, workflow,
+script, or platform descriptor unless it is wired into this matrix, agent
+contracts, build/release runbooks, and validation tests. Do not invent
+unsupported package types.
 
 | # | Package / artifact | Platform / system | Repository source files | Expected artifact / output | Related GitHub workflow | Required test file | Required Claude command coverage | Required Codex prompt coverage | Release-readiness condition |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | PyPI wheel | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.py` | `ecli_editor-<version>-py3-none-any.whl` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_wheel_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Wheel builds, `twine check --strict` passes, checksum sidecar present |
-| 2 | PyPI source distribution | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.py` | `ecli_editor-<version>.tar.gz` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_sdist_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Sdist builds, `twine check --strict` passes, checksum sidecar present |
-| 3 | Linux generic PyInstaller executable | Linux | `packaging/pyinstaller/ecli.spec`; `packaging/pyinstaller/rthooks/force_imports.py`; `scripts/build_pyinstaller_linux.py`; root `main.py` compatibility shim | `dist/ecli` PyInstaller binary | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_pyinstaller_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Runtime import check passes; spec uses root `main.py`; binary smoke-runs |
-| 4 | Linux release tarball | Linux | `scripts/build_pyinstaller_linux.py`; `scripts/verify_runtime.py`; `Makefile` targets `package-tar-linux`, `validate-tar-linux-contract` | `ecli_<version>_linux_<arch>.tar.gz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_tarball_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Tarball artifact and SHA256 sidecar validated; runtime smoke check passes |
-| 5 | Debian / Ubuntu `.deb` | Linux (Debian/Ubuntu) | `scripts/build_and_package_deb.py`; `docker/build-linux-deb.Dockerfile`; `Makefile` target `package-deb` | `ecli_<version>_linux_<arch>.deb` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_deb_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | DEB artifact naming and SHA256 checks pass; package metadata inspected when toolchain present |
-| 6 | generic RPM `.rpm` | Linux (RPM family) | `scripts/build_and_package_rpm.py`; `docker/build-linux-rpm.Dockerfile`; `Makefile` target `package-rpm` | `ecli_<version>_linux_<arch>.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | RPM artifact naming and SHA256 checks pass; FPM/RPM metadata inspected when toolchain present |
-| 7 | openSUSE / SUSE RPM | Linux (openSUSE/SUSE) | `scripts/build_and_package_opensuse_rpm.py`; shared RPM flow | `ecli_<version>_opensuse_<arch>.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_opensuse_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | openSUSE/SUSE artifact naming and SHA256 checks pass through the shared RPM contract |
-| 8 | Arch Linux `PKGBUILD` | Linux (Arch) | `packaging/arch/PKGBUILD` (never root `PKGBUILD`); `scripts/build_and_package_arch.py` | `ecli_<version>_arch_<arch>.pkg.tar.zst` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_arch_pkgbuild_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Raw `makepkg` output normalized; SHA256 sidecar present; no active root `PKGBUILD` alias |
-| 9 | Slackware `.txz` | Linux (Slackware) | `scripts/build_and_package_slackware.py`; Linux PyInstaller helper | `ecli_<version>_slackware_<arch>.txz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_slackware_txz_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Slackware `.txz` artifact naming and SHA256 checks pass |
-| 10 | AppImage | Linux (cross-distro) | `packaging/linux/appimage/appimage-builder.yml`; `scripts/package_appimage.py`; `Makefile` target `package-appimage` | `ecli_<version>_linux_<arch>.AppImage` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_appimage_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | AppImage artifact naming and SHA256 checks pass; descriptor mutation is AUD-003 drift |
-| 11 | FreeBSD `.pkg` | FreeBSD | `scripts/build_and_package_freebsd.py`; `scripts/build_freebsd_pkg.py`; `.github/workflows/freebsd-pkg.yml` | `ecli_<version>_freebsd_<arch>.pkg` | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_pkg_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Native/VM `.pkg` naming and SHA256 checks pass; vmactions log and checksum evidence captured |
-| 12 | FreeBSD ports/chroot build path | FreeBSD | `scripts/build_freebsd_port.py`; `tools/freebsd-chroot-build.sh`; `Makefile` targets `package-freebsd-port`, `package-freebsd-chroot` | Native `.pkg` from local `package-freebsd-port` / `package-freebsd-chroot` paths | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_ports_chroot_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Local port and chroot paths produce a normalized `.pkg`; not source-history payload by default |
-| 13 | macOS `.app` | macOS | `scripts/build_and_package_macos.py`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `ECLI.app` bundle | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_app_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | `.app` bundle built from shared PyInstaller spec using root `main.py`; Universal2 layout |
-| 14 | macOS `.dmg` | macOS | `scripts/build_and_package_macos.py`; `.github/workflows/macos-dmg.yml`; `.github/workflows/macos-validate.yml`; `docs/install/macos.md` | `ecli_<version>_macos_universal2.dmg` | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_dmg_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | macOS Contract Validate passes; DMG artifact and SHA256 structural validation |
-| 15 | Windows portable `.exe` | Windows | `scripts/build-and-package-windows.ps1`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `ecli_<version>_win_<arch>.exe` | `.github/workflows/windows-installer.yml` | `tests/packaging/test_packaging_windows_portable_exe_contract.py` | `.claude/commands/package-windows.md` | `.codex/prompts/package-windows.md` | Portable EXE help/version smoke passes; checksum sidecar present |
-| 16 | Windows NSIS installer `.exe` | Windows | `packaging/windows/nsis/ecli.nsi`; `scripts/build-and-package-windows.ps1`; `.github/workflows/windows-installer.yml`; `.github/workflows/windows-validate.yml`; `docs/install/windows.md` | `ecli_<version>_win_<arch>_setup.exe` | `.github/workflows/windows-installer.yml` | `tests/packaging/test_packaging_windows_nsis_installer_contract.py` | `.claude/commands/package-windows.md` | `.codex/prompts/package-windows.md` | Windows Contract Validate passes; NSIS installer and checksum validation |
-| 17 | Nix flake | Nix / NixOS | `flake.nix` | `nix run .` app / `nix build .` package | _local build path; no release workflow_ | `tests/packaging/test_packaging_nix_flake_contract.py` | `.claude/commands/package-nix.md` | `.codex/prompts/package-nix.md` | Flake exposes default package/app for declared systems; version drift reported against `pyproject.toml` |
-| 18 | Nix/NixOS package expression | Nix / NixOS | `packaging/nix/package.nix` | `result/bin/ecli` derivation output | _local build path; no release workflow_ | `tests/packaging/test_packaging_nixos_package_contract.py` | `.claude/commands/package-nix.md` | `.codex/prompts/package-nix.md` | Package expression builds `ecli` with `mainProgram`; hard-coded version/license drift (e.g. `asl20`) reported against `pyproject.toml` |
-| 19 | Docker DEB build helper | Linux build helper | `docker/build-linux-deb.Dockerfile`; `Makefile` targets `package-deb-docker`, `package-docker` | Containerized `.deb` build helper image (not itself a release artifact) | _build helper; no release workflow_ | `tests/packaging/test_packaging_docker_deb_helper_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Helper builds the DEB inside a container and must not publish or upload artifacts |
-| 20 | Docker RPM build helper | Linux build helper | `docker/build-linux-rpm.Dockerfile`; `Makefile` targets `package-rpm-docker`, `package-docker` | Containerized `.rpm` build helper image (not itself a release artifact) | _build helper; no release workflow_ | `tests/packaging/test_packaging_docker_rpm_helper_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Helper builds the RPM inside a container and must not publish or upload artifacts |
-| 21 | GitHub Actions release/workflow contract map | CI / release automation | `.github/workflows/release.yml`; `.github/workflows/ci.yml`; the GitHub Actions Workflow Contract Map below | Aggregate release artifact matrix orchestration | `.github/workflows/release.yml` | `tests/packaging/test_packaging_workflows_contract.py` | `.claude/commands/release.md` | `.codex/prompts/release.md` | Every workflow on disk is documented and mapped; aggregate release matrix gated by `validate-gate2` |
+| 1 | PyPI wheel | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.py` | `01_pypi_wheel__ecli_editor-<version>-py3-none-any.whl` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_wheel_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Wheel builds, `twine check --strict` passes, checksum evidence present outside the GitHub Release asset set |
+| 2 | PyPI source distribution | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.py` | `02_pypi_sdist__ecli_editor-<version>.tar.gz` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_sdist_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Sdist builds, `twine check --strict` passes, checksum evidence present outside the GitHub Release asset set |
+| 3 | Linux generic PyInstaller executable | Linux | `packaging/pyinstaller/ecli.spec`; `packaging/pyinstaller/rthooks/force_imports.py`; `scripts/build_pyinstaller_linux.py`; root `main.py` compatibility shim | `03_linux_pyinstaller__ecli_<version>_linux_x86_64.bin` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_pyinstaller_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Runtime import check passes; spec uses root `main.py`; binary smoke-runs |
+| 4 | Linux release tarball | Linux | `scripts/build_pyinstaller_linux.py`; `scripts/verify_runtime.py`; `Makefile` targets `package-tar-linux`, `validate-tar-linux-contract` | `04_linux_tarball__ecli_<version>_linux_x86_64.tar.gz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_tarball_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Tarball artifact and checksum evidence validated; runtime smoke check passes |
+| 5 | Debian / Ubuntu `.deb` | Linux (Debian/Ubuntu) | `scripts/build_and_package_deb.py`; `docker/build-linux-deb.Dockerfile`; `Makefile` target `package-deb` | `05_debian__ecli_<version>_linux_x86_64.deb` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_deb_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | DEB artifact naming and checksum checks pass; package metadata inspected when toolchain present |
+| 6 | generic RPM `.rpm` | Linux (RPM family) | `scripts/build_and_package_rpm.py`; `docker/build-linux-rpm.Dockerfile`; `Makefile` target `package-rpm` | `06_rpm__ecli_<version>_linux_x86_64.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | RPM artifact naming and checksum checks pass; FPM/RPM metadata inspected when toolchain present |
+| 7 | openSUSE / SUSE RPM | Linux (openSUSE/SUSE) | `scripts/build_and_package_opensuse_rpm.py`; shared RPM flow | `07_opensuse__ecli_<version>_opensuse_x86_64.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_opensuse_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | openSUSE/SUSE artifact naming and checksum checks pass through the shared RPM contract |
+| 8 | Arch Linux `PKGBUILD` | Linux (Arch) | `packaging/arch/PKGBUILD` (never root `PKGBUILD`); `scripts/build_and_package_arch.py` | `08_arch__ecli_<version>_arch_x86_64.pkg.tar.zst` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_arch_pkgbuild_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Raw `makepkg` output normalized; checksum evidence present; no active root `PKGBUILD` alias |
+| 9 | Slackware `.txz` | Linux (Slackware) | `scripts/build_and_package_slackware.py`; Linux PyInstaller helper | `09_slackware__ecli_<version>_slackware_x86_64.txz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_slackware_txz_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Slackware `.txz` artifact naming and checksum checks pass |
+| 10 | AppImage | Linux (cross-distro) | `packaging/linux/appimage/appimage-builder.yml`; `scripts/package_appimage.py`; `Makefile` target `package-appimage` | `10_appimage__ecli_<version>_linux_x86_64.AppImage` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_appimage_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | AppImage artifact naming and checksum checks pass; descriptor mutation is AUD-003 drift |
+| 11 | FreeBSD `.pkg` | FreeBSD | `scripts/build_and_package_freebsd.py`; `scripts/build_freebsd_pkg.py`; `.github/workflows/freebsd-pkg.yml` | `11_freebsd_pkg__ecli_<version>_freebsd_x86_64.pkg` | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_pkg_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Native/VM `.pkg` naming and checksum checks pass; vmactions log and checksum evidence captured |
+| 12 | FreeBSD ports/chroot build path | FreeBSD | `scripts/build_freebsd_port.py`; `tools/freebsd-chroot-build.sh`; `Makefile` targets `package-freebsd-port`, `package-freebsd-chroot` | `12_freebsd_ports_chroot__ecli_<version>_freebsd_ports_chroot_evidence.tar.gz` | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_ports_chroot_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Local port and chroot paths are preserved as required release evidence |
+| 13 | macOS `.app` | macOS | `scripts/build_and_package_macos.py`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `13_macos_app__ecli_<version>_macos_universal2_app_evidence.tar.gz` | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_app_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | `.app` bundle built from shared PyInstaller spec using root `main.py`; Universal2 evidence captured |
+| 14 | macOS `.dmg` | macOS | `scripts/build_and_package_macos.py`; `.github/workflows/macos-dmg.yml`; `.github/workflows/macos-validate.yml`; `docs/install/macos.md` | `14_macos_dmg__ecli_<version>_macos_universal2.dmg` | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_dmg_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | macOS Contract Validate passes; DMG artifact and checksum structural validation |
+| 15 | Windows portable `.exe` | Windows | `scripts/build-and-package-windows.ps1`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `15_windows_portable__ecli_<version>_win_x86_64.exe` | `.github/workflows/windows-installer.yml` | `tests/packaging/test_packaging_windows_portable_exe_contract.py` | `.claude/commands/package-windows.md` | `.codex/prompts/package-windows.md` | Portable EXE help/version smoke passes; checksum evidence present |
+| 16 | Windows NSIS installer `.exe` | Windows | `packaging/windows/nsis/ecli.nsi`; `scripts/build-and-package-windows.ps1`; `.github/workflows/windows-installer.yml`; `.github/workflows/windows-validate.yml`; `docs/install/windows.md` | `16_windows_nsis__ecli_<version>_win_x86_64_setup.exe` | `.github/workflows/windows-installer.yml` | `tests/packaging/test_packaging_windows_nsis_installer_contract.py` | `.claude/commands/package-windows.md` | `.codex/prompts/package-windows.md` | Windows Contract Validate passes; NSIS installer and checksum validation |
+| 17 | Nix flake | Nix / NixOS | `flake.nix` | `17_nix_flake__ecli_<version>_nix_flake_evidence.tar.gz` | _local build path; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_nix_flake_contract.py` | `.claude/commands/package-nix.md` | `.codex/prompts/package-nix.md` | Flake exposes default package/app for declared systems; version drift reported against `pyproject.toml` |
+| 18 | Nix/NixOS package expression | Nix / NixOS | `packaging/nix/package.nix` | `18_nixos_package__ecli_<version>_nixos_package_evidence.tar.gz` | _local build path; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_nixos_package_contract.py` | `.claude/commands/package-nix.md` | `.codex/prompts/package-nix.md` | Package expression builds `ecli` with `mainProgram`; hard-coded version/license drift reported against `pyproject.toml` |
+| 19 | Docker DEB build helper | Linux build helper | `docker/build-linux-deb.Dockerfile`; `Makefile` targets `package-deb-docker`, `package-docker` | `19_docker_deb_helper__ecli_<version>_docker_deb_helper_evidence.tar.gz` | _build helper; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_docker_deb_helper_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Helper builds the DEB inside a container; the helper image is not itself a release artifact and must not publish or upload artifacts |
+| 20 | Docker RPM build helper | Linux build helper | `docker/build-linux-rpm.Dockerfile`; `Makefile` targets `package-rpm-docker`, `package-docker` | `20_docker_rpm_helper__ecli_<version>_docker_rpm_helper_evidence.tar.gz` | _build helper; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_docker_rpm_helper_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Helper builds the RPM inside a container; the helper image is not itself a release artifact and must not publish or upload artifacts |
+| 21 | GitHub Actions release/workflow contract map | CI / release automation | `.github/workflows/release.yml`; `.github/workflows/ci.yml`; the GitHub Actions Workflow Contract Map below | `21_workflow_contract__ecli_<version>_workflow_contract_evidence.tar.gz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_workflows_contract.py` | `.claude/commands/release.md` | `.codex/prompts/release.md` | Every workflow on disk is documented and mapped; aggregate release matrix gated by `validate-release-assets` |
 
 ## Platform & Packaging Release Contract Matrix
 
@@ -103,29 +148,26 @@ agent contract, release documentation, and repository-local packaging test.
 
 | Workflow | Classification | Contract role |
 |---|---|---|
-| `.github/workflows/ci.yml` | Global quality gate | Runs the global CI quality gate and `validate-gate2`; keeps root `main.py` compatibility in the CI path filters. |
-| `.github/workflows/freebsd-pkg.yml` | Packaging workflow | FreeBSD `.pkg` package path covering native package, port, chroot, checksum, artifact upload, and out-of-band attach mechanics. |
+| `.github/workflows/ci.yml` | Global quality gate | Runs the global CI quality gate and release contract tests; keeps root `main.py` compatibility in the CI path filters. |
+| `.github/workflows/freebsd-pkg.yml` | Packaging workflow | FreeBSD `.pkg` package path covering native package, port, chroot, checksum, and workflow-artifact evidence. Official GitHub Release publication waits for the aggregate release workflow and exact 21-asset verifier. |
 | `.github/workflows/macos-dmg.yml` | Packaging workflow | macOS `.app` / `.dmg` package path using the shared PyInstaller spec and DMG artifact contract. |
 | `.github/workflows/macos-validate.yml` | Packaging validation workflow | macOS package validation for the `.app` / `.dmg` contract. |
 | `.github/workflows/project-automation.yml` | Repository automation, non-packaging | Moves issues and pull requests between project columns. It is not a release artifact workflow and must not be counted as package coverage. |
 | `.github/workflows/pypi-validate.yml` | Packaging validation workflow | PyPI wheel and source distribution validation for `ecli-editor`. |
-| `.github/workflows/release.yml` | Aggregate release workflow | Builds and publishes the aggregate release artifact matrix after maintainer-controlled release triggers. |
+| `.github/workflows/release.yml` | Aggregate release workflow | Builds, assembles, verifies, and publishes exactly 21 canonical GitHub Release assets after maintainer-controlled release triggers. |
 | `.github/workflows/windows-installer.yml` | Packaging workflow | Windows portable EXE and NSIS installer package path. |
 | `.github/workflows/windows-validate.yml` | Packaging validation workflow | Windows package validation for portable EXE and NSIS installer contracts. |
 
 ## Canonical Naming Rules
 
-Final GitHub Release artifact names must use this normalized ECLI schema:
+Final GitHub Release artifact names are the 21 prefixed filenames in
+`Permanent Official Release Asset Rule`. Builder outputs may use package-native
+names while they are being verified, but the publication directory must be
+normalized to the exact prefixed names before `scripts/verify_release_assets.py`
+passes.
 
-`ecli_<version>_<platform>_<arch>.<extension>`
-
-Short form: `ecli_<v>_<platform>_<arch>.<extension>`
-
-Windows installer artifacts use this installer-specific extension of the same schema:
-
-`ecli_<version>_win_<arch>_setup.exe`
-
-Short form: `ecli_<v>_win_<arch>_setup.exe`
+Raw package builder output must never be uploaded as a substitute for the
+canonical prefixed release asset name.
 
 Allowed `<platform>` tokens:
 
@@ -143,7 +185,7 @@ Allowed `<arch>` tokens:
 - `arm64`
 - `universal2` (macOS DMG only)
 
-Current artifact forms:
+Current builder output forms before release normalization:
 
 - DEB: `ecli_<version>_linux_<arch>.deb`
 - Generic RPM: `ecli_<version>_linux_<arch>.rpm`
@@ -174,13 +216,15 @@ Arch Linux packaging has two valid filename domains. `PKGBUILD` and raw `makepkg
 `ecli-editor-<version>-1-<arch>.pkg.tar.zst`.
 
 The ECLI release script must normalize that package to `ecli_<version>_arch_<arch>.pkg.tar.zst` before it is
-published as a GitHub Release artifact.
+copied to `08_arch__ecli_<version>_arch_x86_64.pkg.tar.zst` for GitHub Release publication.
 
-Slackware packages use the traditional `.txz` format. The ECLI GitHub Release artifact must be named `ecli_<version>_slackware_<arch>.txz`.
+Slackware packages use the traditional `.txz` builder output format. The ECLI
+GitHub Release artifact must be copied to
+`09_slackware__ecli_<version>_slackware_x86_64.txz`.
 
-For each artifact, a checksum file must exist:
+For each official GitHub Release asset, checksum evidence must exist:
 
-- `<artifact>.sha256`
+- `releases/<version>/.checksums/<asset>.sha256`
 
 Checksum sidecars use coreutils-compatible format:
 
@@ -190,17 +234,28 @@ Checksum sidecars use coreutils-compatible format:
 
 The artifact basename must not include a directory component.
 
+Top-level sidecar files with a `.sha256` suffix make
+`scripts/verify_release_assets.py` fail as extra files. Sidecars belong under
+`.checksums/`.
+
 ## SBOM Artifacts
 
-Release builds emit a CycloneDX SBOM alongside the Python distribution artifacts. SBOM filenames follow the PyPI distribution naming convention (hyphens, no platform/arch tokens) because they describe the Python distribution, not a native platform package:
+Release builds may emit a CycloneDX SBOM alongside the Python distribution
+artifacts for workflow validation. SBOM filenames follow the PyPI distribution
+naming convention (hyphens, no platform/arch tokens) because they describe the
+Python distribution, not a native platform package:
 
 - `releases/<version>/ecli-editor-<version>.cdx.json`
 - `releases/<version>/ecli-editor-<version>.cdx.json.sha256`
 
-This is intentional inconsistency with native release artifacts (which use `ecli_<v>_<platform>_<arch>.<ext>` underscore convention). SBOMs apply to the Python wheel and sdist, both of which use PEP 427 / PEP 625 hyphen naming. The SBOM tracks the same convention.
+This is intentional inconsistency with native package builder outputs. SBOMs
+apply to the Python wheel and sdist, both of which use PEP 427 / PEP 625 hyphen
+naming. The SBOM tracks the same convention.
 
-The SBOM and its SHA256 sidecar are attached to the GitHub Release
-alongside the wheel and sdist. They are NOT uploaded to PyPI (PyPI does not accept arbitrary attachments).
+The SBOM and its SHA256 sidecar are verification evidence only. They are not
+GitHub Release assets and must not be uploaded as additional GitHub Release
+files. If SBOM evidence is needed for release review, include it in workflow
+artifacts or in the `21_workflow_contract__..._evidence.tar.gz` asset.
 
 Format requirements:
 
@@ -288,6 +343,7 @@ scripts and release contract tests.
 | `scripts/sign_checksums.py` | Writes coreutils basename-only `<artifact>.sha256` sidecars (SHA256 only; not GPG signing) |
 | `scripts/check_log_invariant.py` | Read-only `git ls-files` log-location invariant |
 | `scripts/verify_artifact.py` | Structural SHA256 sidecar verifier; exit-code contract `0`-`5` preserved |
+| `scripts/verify_release_assets.py` | Read-only exact 21 GitHub Release asset verifier; ignores `.checksums/` only when it is a directory |
 | `scripts/verify_runtime.py` | Cross-artifact launcher validation; exit codes (`0`/`2`/`3`/`4`/`5`/`6`) preserved |
 | `scripts/build_pyinstaller_linux.py` | Linux PyInstaller build; prefers `packaging/pyinstaller/ecli.spec` |
 | `scripts/build_and_package_deb.py` | `ecli_<version>_linux_<arch>.deb` via FPM; dependency set preserved |

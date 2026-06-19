@@ -35,9 +35,15 @@ See the LICENSE file in the project root for full license text.
 ## Canonical 21-Item Artifact Coverage
 
 The normative artifact list is the `Canonical 21-Item Platform & Packaging
-Artifact Matrix` in `docs/release/artifact-contract.md`. Every entry below must
-remain covered by tests under `tests/packaging/`, by `.claude/commands/`, by
-`.codex/prompts/`, and (where relevant) by a GitHub workflow:
+Artifact Matrix` in `docs/release/artifact-contract.md`. Every official ECLI
+release publishes exactly 21 physical GitHub Release assets, one per canonical
+matrix entry. Release publication is blocked unless `scripts/verify_release_assets.py`
+verifies the exact top-level asset set under `releases/<version>/`. Checksum
+sidecars are verification evidence, not GitHub Release assets.
+
+Every entry below must remain covered by tests under `tests/packaging/`, by
+`.claude/commands/`, by `.codex/prompts/`, and (where relevant) by a GitHub
+workflow:
 
 1. PyPI wheel
 2. PyPI source distribution
@@ -61,6 +67,32 @@ remain covered by tests under `tests/packaging/`, by `.claude/commands/`, by
 20. Docker RPM build helper
 21. GitHub Actions release/workflow contract map
 
+Mandatory GitHub Release asset names for each `<version>`:
+
+```text
+01_pypi_wheel__ecli_editor-<version>-py3-none-any.whl
+02_pypi_sdist__ecli_editor-<version>.tar.gz
+03_linux_pyinstaller__ecli_<version>_linux_x86_64.bin
+04_linux_tarball__ecli_<version>_linux_x86_64.tar.gz
+05_debian__ecli_<version>_linux_x86_64.deb
+06_rpm__ecli_<version>_linux_x86_64.rpm
+07_opensuse__ecli_<version>_opensuse_x86_64.rpm
+08_arch__ecli_<version>_arch_x86_64.pkg.tar.zst
+09_slackware__ecli_<version>_slackware_x86_64.txz
+10_appimage__ecli_<version>_linux_x86_64.AppImage
+11_freebsd_pkg__ecli_<version>_freebsd_x86_64.pkg
+12_freebsd_ports_chroot__ecli_<version>_freebsd_ports_chroot_evidence.tar.gz
+13_macos_app__ecli_<version>_macos_universal2_app_evidence.tar.gz
+14_macos_dmg__ecli_<version>_macos_universal2.dmg
+15_windows_portable__ecli_<version>_win_x86_64.exe
+16_windows_nsis__ecli_<version>_win_x86_64_setup.exe
+17_nix_flake__ecli_<version>_nix_flake_evidence.tar.gz
+18_nixos_package__ecli_<version>_nixos_package_evidence.tar.gz
+19_docker_deb_helper__ecli_<version>_docker_deb_helper_evidence.tar.gz
+20_docker_rpm_helper__ecli_<version>_docker_rpm_helper_evidence.tar.gz
+21_workflow_contract__ecli_<version>_workflow_contract_evidence.tar.gz
+```
+
 ## Support Stance
 
 - Current state indicates cross-platform packaging intent.
@@ -74,7 +106,7 @@ remain covered by tests under `tests/packaging/`, by `.claude/commands/`, by
 
 - **Fully supported**: CI workflow passes, artifacts are produced and verified, and platform is recommended for production use.
 - **Failing or unverified**: Build failures, test failures, or absence of CI workflow coverage; artifact may not be available or tested; not recommended for release.
-- **Degraded**: Best-effort support with known issues or limited testing; not recommended for production until issues are resolved.
+- **Degraded**: limited support with known issues or limited testing; not recommended for production until issues are resolved.
 
 ### Platform Status and Incident Management
 

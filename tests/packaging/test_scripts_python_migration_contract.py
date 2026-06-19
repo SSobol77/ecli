@@ -59,6 +59,7 @@ REQUIRED_PYTHON_TARGETS = (
     "scripts/package_appimage.py",
     "scripts/publish_pypi.py",
     "scripts/sign_checksums.py",
+    "scripts/verify_release_assets.py",
     "scripts/verify_runtime.py",
     "scripts/verify_artifact.py",
 )

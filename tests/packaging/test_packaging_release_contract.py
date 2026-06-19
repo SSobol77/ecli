@@ -39,6 +39,7 @@ PACKAGING_SCRIPT_GLOBS = (
     "scripts/publish_pypi.py",
     "scripts/sign_checksums.py",
     "scripts/verify_artifact.py",
+    "scripts/verify_release_assets.py",
     "scripts/verify_runtime.py",
     "scripts/check_log_invariant.py",
 )
