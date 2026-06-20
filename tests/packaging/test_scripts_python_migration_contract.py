@@ -79,6 +79,7 @@ LIVE_REFERENCE_ROOTS = (
     "Makefile",
     "pyproject.toml",
     ".github/workflows",
+    "docker",
     "docs/release",
     "docs/contributor",
     "docs/product",
@@ -99,6 +100,7 @@ ACTIVE_SCRIPT_SHELL_REFERENCE_RE = re.compile(
 TEXT_SUFFIXES = {
     "",
     ".cfg",
+    ".Dockerfile",
     ".ini",
     ".json",
     ".md",

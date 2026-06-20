@@ -257,6 +257,22 @@ def test_project_automation_is_non_packaging_repository_automation(
     )
 
 
+def test_release_workflow_uses_docker_package_targets_not_legacy_shell(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+
+    # The Linux package job must drive the containerized DEB/RPM builds through the
+    # Makefile targets, which now invoke the canonical Python packaging scripts
+    # inside the Docker helpers.
+    assert "make package-deb-docker" in release
+    assert "make package-rpm-docker" in release
+    # No removed shell packaging entrypoint may reappear in the release workflow
+    # (regression guard for #93).
+    assert "build-and-package-deb.sh" not in release
+    assert "build-and-package-rpm.sh" not in release
+
+
 def test_active_packaging_workflows_have_docs_agents_and_tests(
     read_repo_text: RepoReader,
 ) -> None:
