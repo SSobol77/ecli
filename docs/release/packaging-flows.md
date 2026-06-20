@@ -56,6 +56,29 @@ ecli_<version>_docker_rpm_helper_evidence.tar.gz
 ecli_<version>_workflow_contract_evidence.tar.gz
 ```
 
+## Future Extensions Layer Package-Data (planned, #98/#99)
+
+The ECLI Extensions Layer (`docs/architecture/extensions-layer.md`) is an
+architecture contract only in issue #97 and changes no packaging flow here. When
+the imported, data-only asset tree lands under `src/ecli/extensions/` (issue #98)
+and is covered by tests (issue #99), the following packaging rules apply:
+
+- Extension assets must be included in the **PyPI wheel and sdist**. The wheel
+  target already includes the `src/ecli` package, but non-`.py` data files
+  (`package.json`, `*.tmLanguage`/`*.tmLanguage.json`, `*.code-snippets`,
+  `language-configuration.json`, `schemas/*.json`, `themes/*.json`,
+  `package.nls.json`, `cgmanifest.json`) require explicit
+  `[tool.hatch.build.targets.wheel.force-include]` and
+  `[tool.hatch.build.targets.sdist] include` entries, mirroring how
+  `src/ecli/assets/ecli.png` is shipped.
+- **Package-data coverage must be tested** under `tests/packaging/`, asserting the
+  imported extension data files are present in the built wheel and sdist.
+- Imported assets are read-only; packaging must ship them unchanged. Packaging
+  scripts must not mutate, reformat, or regenerate imported extension files.
+- The exact 21-asset GitHub Release contract is unchanged: extension assets ride
+  inside the wheel/sdist and downstream platform artifacts, not as new
+  top-level release assets.
+
 ## Shell-to-Python Script Migration
 
 Active packaging/build/verification scripts under `scripts/` have been migrated

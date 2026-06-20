@@ -38,6 +38,26 @@ The maintainer owns:
 * PyPI publishing,
 * release artifact upload.
 
+## Extensions Layer contract (v0.3.0 Foundation)
+
+The ECLI Extensions Layer is defined normatively in
+`docs/architecture/extensions-layer.md`. It is the imported, data-only,
+VS Code / TextMate-compatible asset tree plus deterministic adapter code.
+Issue #97 is architecture/documentation only.
+
+Codex must obey:
+
+* `src/ecli/extensions/` is the only approved location for imported extension
+  assets. Do not invent `vendor/`, `third_party/`, or `src/ecli/syntax/assets/`.
+* Imported/upstream files are read-only; add behavior through deterministic
+  adapter code, never by editing upstream files.
+* No VS Code extension host, no Node activation, no `activationEvents`
+  execution, no `package.json` scripts, no Copilot runtime, no network/auth side
+  effects, no hidden command execution through extension metadata.
+* Preserve F11 as the PySH Console Panel; no generic PTY terminal emulator.
+* VMLab moved to v0.3.5 and is blocked until the v0.3.0 Extensions Foundation is
+  complete.
+
 ## Recommended Codex execution mode
 
 For Stage 1 inventory and diagnostics:

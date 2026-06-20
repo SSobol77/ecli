@@ -78,6 +78,23 @@ readiness depends on these CI/release surfaces remaining mapped:
   installer path.
 - `.github/workflows/windows-validate.yml`: Windows package validation.
 
+## Future Extensions Layer Package-Data Impact (planned, #98/#99)
+
+The ECLI Extensions Layer (`docs/architecture/extensions-layer.md`) does not yet
+exist on disk and does not change this matrix in issue #97. When the imported
+asset tree lands under `src/ecli/extensions/` (issue #98) and is covered by
+package-data tests (issue #99):
+
+- The 21-asset count is unchanged. Extension assets ship **inside** the existing
+  PyPI wheel/sdist and downstream artifacts, not as new top-level GitHub Release
+  assets.
+- Non-`.py` extension data files (`*.json`, `*.tmLanguage`,
+  `*.code-snippets`, `schemas/*.json`, etc.) require explicit wheel
+  `force-include` and sdist `include` coverage in `pyproject.toml`.
+- Every active platform/package contract above must remain green after the asset
+  tree is added; a `tests/packaging/` test must assert extension data inclusion
+  in the wheel and sdist.
+
 ## Validation State
 
 - Actual flow support is bounded by current CI behavior and script/workflow drift.

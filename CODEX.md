@@ -194,6 +194,35 @@ During Stage 1, Codex may only:
 
 Codex must not implement the rendering rewrite during Stage 1.
 
+## Extensions Layer contract (v0.3.0 Foundation)
+
+The ECLI Extensions Layer is the imported, data-only, VS Code / TextMate-compatible
+asset tree and the deterministic adapter code around it. Its normative contract is
+`docs/architecture/extensions-layer.md`. Until the asset tree is imported in a
+later issue, this is documentation/architecture only.
+
+Codex must obey:
+
+* `src/ecli/extensions/` is the **only** approved location for imported extension
+  assets. Do not invent or use `vendor/`, `third_party/`, or
+  `src/ecli/syntax/assets/`.
+* Imported/upstream files under `src/ecli/extensions/` are **read-only** from the
+  ECLI integration perspective. Do not edit, reformat, or relicense them.
+* Implement ECLI-specific behavior through **deterministic adapter code** that
+  reads those assets, never by modifying upstream files.
+* **No VS Code extension host, no Node/TypeScript activation, no
+  `activationEvents` execution, no `package.json` scripts, no Copilot runtime,
+  no network/auth side effects, no hidden command execution** through extension
+  metadata.
+* Preserve **F11 as the PySH Console Panel**; command execution stays routed
+  through explicit ECLI services / PySH / CommandPlan surfaces.
+* **No generic PTY terminal emulator.** Extensions must not reintroduce terminal
+  execution behavior.
+* Do not import the prepared asset tree in issue #97. Sequencing is #97 contract,
+  #98 import unchanged, #99 package-data tests, #100–#105 adapters.
+* VMLab is out of scope: it moved to v0.3.5 and is blocked until the v0.3.0
+  Extensions Foundation is complete.
+
 ## Expected Codex final response
 
 For non-trivial work, finish with:
