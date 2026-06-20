@@ -179,8 +179,21 @@ jobs:
       - name: Build openSUSE RPM
         run: make package-opensuse-rpm
 
-      - name: Build Arch package
-        run: make package-arch
+      - name: Build Arch package in Docker
+        run: make package-arch-docker
+
+      - name: Reset ownership after Docker Arch build
+        run: |
+          set -euo pipefail
+          # makepkg refuses to run as root, so package-arch-docker builds as a
+          # non-root user inside the Arch base-devel container and leaves
+          # build-user-owned files in build/, dist/, and releases/<version>/. The
+          # next host-side steps run as the runner user (package-slackware runs
+          # 'make clean' over build/dist; package-appimage writes releases/), so
+          # reset ownership of every Docker-touched output path (#93).
+          if [ -d build ]; then sudo chown -R "$(id -u):$(id -g)" build/; fi
+          if [ -d dist ]; then sudo chown -R "$(id -u):$(id -g)" dist/; fi
+          if [ -d releases ]; then sudo chown -R "$(id -u):$(id -g)" releases/; fi
 
       - name: Build Slackware package
         run: make package-slackware

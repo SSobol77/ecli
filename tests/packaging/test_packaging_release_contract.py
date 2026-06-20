@@ -47,6 +47,7 @@ PACKAGING_SCRIPT_GLOBS = (
 PACKAGING_DESCRIPTORS = (
     "docker/build-linux-deb.Dockerfile",
     "docker/build-linux-rpm.Dockerfile",
+    "docker/build-arch-package.Dockerfile",
     "packaging/arch/PKGBUILD",
     "packaging/nix/package.nix",
     "packaging/windows/nsis/ecli.nsi",

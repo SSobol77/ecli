@@ -183,7 +183,8 @@ help-full: help
 	@echo "  make package-rpm              Local generic RPM build"
 	@echo "  make package-rpm-docker       Containerized RPM build"
 	@echo "  make package-opensuse-rpm     openSUSE/SUSE RPM build"
-	@echo "  make package-arch             Arch PKGBUILD package"
+	@echo "  make package-arch             Arch PKGBUILD package (host, needs makepkg)"
+	@echo "  make package-arch-docker      Containerized Arch package build"
 	@echo "  make package-slackware        Slackware TXZ package"
 	@echo "  make package-appimage         AppImage build"
 	@echo "  make package-docker           Docker DEB/RPM helpers"
@@ -541,10 +542,36 @@ package-opensuse-rpm: clean validate-runtime-imports
 	@echo "--> OK: $(OPENSUSE_RPM_SHA_FILE)"
 
 # Build Arch package through packaging/arch/PKGBUILD and canonical Python helper.
+# Host-only: requires a real Arch base-devel toolchain (makepkg). The Ubuntu
+# release runner has no makepkg, so the release-canonical path is
+# package-arch-docker, which runs the same script inside a real Arch container
+# (docker/build-arch-package.Dockerfile) (#93).
 .PHONY: package-arch
 package-arch: clean validate-runtime-imports
-	@command -v makepkg >/dev/null 2>&1 || (echo "Missing makepkg for Arch package build."; exit 5)
+	@command -v makepkg >/dev/null 2>&1 || (echo "Missing makepkg for Arch package build. Use package-arch-docker or build on an Arch host."; exit 5)
 	$(PYTHON) ./scripts/build_and_package_arch.py
+	$(MAKE) package-arch-assert
+
+# Build the Arch package inside a real Arch base-devel container (release path).
+.PHONY: package-arch-docker
+package-arch-docker: clean validate-runtime-imports
+	@command -v docker >/dev/null 2>&1 || (echo "Missing docker for package-arch-docker."; exit 5)
+	docker build -f docker/build-arch-package.Dockerfile -t ecli-arch:base-devel .
+	docker run --rm -v "$$(pwd):/app" -w /app ecli-arch:base-devel
+	@# makepkg refuses to run as root, so the container builds as a non-root user
+	@# and leaves build-user-owned files in build/, dist/, and $(RELEASE_DIR). Reset
+	@# ownership so later host-side targets (clean, package-slackware) succeed (#93).
+	@# Best-effort and safe: non-interactive sudo, no-op when already user-owned
+	@# or when passwordless sudo is unavailable.
+	-@for d in build dist "$(RELEASE_DIR)"; do \
+		[ -d "$$d" ] && sudo -n chown -R "$$(id -u):$$(id -g)" "$$d" 2>/dev/null || true; \
+	done
+	$(MAKE) package-arch-assert
+
+# --- Assertion helper: verify expected artifact names/locations ---------------
+.PHONY: package-arch-assert
+package-arch-assert:
+	@test -n "$(ARCH_PKG_VERSION)" || (echo "ARCH_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
 	$(call assert_current_release_file,$(ARCH_PKG_FILE))
 	$(call verify_sha256,$(ARCH_PKG_FILE))
 	@echo "--> OK: $(ARCH_PKG_FILE)"
@@ -1016,7 +1043,7 @@ package-docker: package-deb-docker package-rpm-docker
 
 # Build all Linux packages (including AppImage and tar.gz)
 .PHONY: package-linux
-package-linux: package-deb-docker package-rpm-docker package-opensuse-rpm package-arch package-slackware package-appimage package-tar-linux
+package-linux: package-deb-docker package-rpm-docker package-opensuse-rpm package-arch-docker package-slackware package-appimage package-tar-linux
 	@echo ""
 	@echo "╔═══════════════════════════════════════════════════════════════════════╗"
 	@echo "║                 ALL LINUX PACKAGES BUILT SUCCESSFULLY                 ║"

@@ -194,6 +194,7 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         sources=(
             "packaging/arch/PKGBUILD",
             "scripts/build_and_package_arch.py",
+            "docker/build-arch-package.Dockerfile",
         ),
         artifact_token="08_arch__ecli_<version>_arch_x86_64.pkg.tar.zst",
         workflow="release.yml",
