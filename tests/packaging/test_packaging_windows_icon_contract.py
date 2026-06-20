@@ -46,8 +46,8 @@ PS1 = "scripts/build-and-package-windows.ps1"
 RELEASE_WORKFLOW = ".github/workflows/release.yml"
 WINDOWS_WORKFLOW = ".github/workflows/windows-installer.yml"
 
-WINDOWS_PORTABLE_TOKEN = "15_windows_portable__ecli_{v}_win_x86_64.exe"
-WINDOWS_NSIS_TOKEN = "16_windows_nsis__ecli_{v}_win_x86_64_setup.exe"
+WINDOWS_PORTABLE_TOKEN = "ecli_{v}_win_x86_64.exe"
+WINDOWS_NSIS_TOKEN = "ecli_{v}_win_x86_64_setup.exe"
 
 
 @pytest.fixture

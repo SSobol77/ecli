@@ -614,37 +614,37 @@ jobs:
           }
 
           copy_one "release-inputs/**/ecli_editor-${version}-py3-none-any.whl" \
-            "${release_dir}/01_pypi_wheel__ecli_editor-${version}-py3-none-any.whl"
+            "${release_dir}/ecli_editor-${version}-py3-none-any.whl"
           copy_one "release-inputs/**/ecli_editor-${version}.tar.gz" \
-            "${release_dir}/02_pypi_sdist__ecli_editor-${version}.tar.gz"
+            "${release_dir}/ecli_editor-${version}.tar.gz"
           copy_one "release-inputs/**/ecli_${version}_linux_x86_64.bin" \
-            "${release_dir}/03_linux_pyinstaller__ecli_${version}_linux_x86_64.bin"
+            "${release_dir}/ecli_${version}_linux_x86_64.bin"
           copy_one "release-inputs/**/ecli_${version}_linux_x86_64.tar.gz" \
-            "${release_dir}/04_linux_tarball__ecli_${version}_linux_x86_64.tar.gz"
+            "${release_dir}/ecli_${version}_linux_x86_64.tar.gz"
           copy_one "release-inputs/**/ecli_${version}_linux_x86_64.deb" \
-            "${release_dir}/05_debian__ecli_${version}_linux_x86_64.deb"
+            "${release_dir}/ecli_${version}_linux_x86_64.deb"
           copy_one "release-inputs/**/ecli_${version}_linux_x86_64.rpm" \
-            "${release_dir}/06_rpm__ecli_${version}_linux_x86_64.rpm"
+            "${release_dir}/ecli_${version}_linux_x86_64.rpm"
           copy_one "release-inputs/**/ecli_${version}_opensuse_x86_64.rpm" \
-            "${release_dir}/07_opensuse__ecli_${version}_opensuse_x86_64.rpm"
+            "${release_dir}/ecli_${version}_opensuse_x86_64.rpm"
           copy_one "release-inputs/**/ecli_${version}_arch_x86_64.pkg.tar.zst" \
-            "${release_dir}/08_arch__ecli_${version}_arch_x86_64.pkg.tar.zst"
+            "${release_dir}/ecli_${version}_arch_x86_64.pkg.tar.zst"
           copy_one "release-inputs/**/ecli_${version}_slackware_x86_64.txz" \
-            "${release_dir}/09_slackware__ecli_${version}_slackware_x86_64.txz"
+            "${release_dir}/ecli_${version}_slackware_x86_64.txz"
           copy_one "release-inputs/**/ecli_${version}_linux_x86_64.AppImage" \
-            "${release_dir}/10_appimage__ecli_${version}_linux_x86_64.AppImage"
+            "${release_dir}/ecli_${version}_linux_x86_64.AppImage"
           copy_one "release-inputs/**/ecli_${version}_freebsd_x86_64.pkg" \
-            "${release_dir}/11_freebsd_pkg__ecli_${version}_freebsd_x86_64.pkg"
+            "${release_dir}/ecli_${version}_freebsd_x86_64.pkg"
           copy_one "release-inputs/**/ecli_${version}_freebsd_ports_chroot_evidence.tar.gz" \
-            "${release_dir}/12_freebsd_ports_chroot__ecli_${version}_freebsd_ports_chroot_evidence.tar.gz"
+            "${release_dir}/ecli_${version}_freebsd_ports_chroot_evidence.tar.gz"
           copy_one "release-inputs/**/ecli_${version}_macos_universal2_app_evidence.tar.gz" \
-            "${release_dir}/13_macos_app__ecli_${version}_macos_universal2_app_evidence.tar.gz"
+            "${release_dir}/ecli_${version}_macos_universal2_app_evidence.tar.gz"
           copy_one "release-inputs/**/ecli_${version}_macos_universal2.dmg" \
-            "${release_dir}/14_macos_dmg__ecli_${version}_macos_universal2.dmg"
+            "${release_dir}/ecli_${version}_macos_universal2.dmg"
           copy_one "release-inputs/**/ecli_${version}_win_x86_64.exe" \
-            "${release_dir}/15_windows_portable__ecli_${version}_win_x86_64.exe"
+            "${release_dir}/ecli_${version}_win_x86_64.exe"
           copy_one "release-inputs/**/ecli_${version}_win_x86_64_setup.exe" \
-            "${release_dir}/16_windows_nsis__ecli_${version}_win_x86_64_setup.exe"
+            "${release_dir}/ecli_${version}_win_x86_64_setup.exe"
 
           mkdir -p build/evidence/nix_flake build/evidence/nixos_package
           mkdir -p build/evidence/docker_deb_helper build/evidence/docker_rpm_helper
@@ -659,15 +659,15 @@ jobs:
           find release-inputs -maxdepth 5 -type f -print | sort \
             > build/evidence/workflow_contract/downloaded-workflow-artifacts.txt
 
-          tar -czf "${release_dir}/17_nix_flake__ecli_${version}_nix_flake_evidence.tar.gz" \
+          tar -czf "${release_dir}/ecli_${version}_nix_flake_evidence.tar.gz" \
             -C build/evidence nix_flake
-          tar -czf "${release_dir}/18_nixos_package__ecli_${version}_nixos_package_evidence.tar.gz" \
+          tar -czf "${release_dir}/ecli_${version}_nixos_package_evidence.tar.gz" \
             -C build/evidence nixos_package
-          tar -czf "${release_dir}/19_docker_deb_helper__ecli_${version}_docker_deb_helper_evidence.tar.gz" \
+          tar -czf "${release_dir}/ecli_${version}_docker_deb_helper_evidence.tar.gz" \
             -C build/evidence docker_deb_helper
-          tar -czf "${release_dir}/20_docker_rpm_helper__ecli_${version}_docker_rpm_helper_evidence.tar.gz" \
+          tar -czf "${release_dir}/ecli_${version}_docker_rpm_helper_evidence.tar.gz" \
             -C build/evidence docker_rpm_helper
-          tar -czf "${release_dir}/21_workflow_contract__ecli_${version}_workflow_contract_evidence.tar.gz" \
+          tar -czf "${release_dir}/ecli_${version}_workflow_contract_evidence.tar.gz" \
             -C build/evidence workflow_contract
 
           for asset in "$release_dir"/*; do
@@ -694,4 +694,4 @@ jobs:
             assets, one per canonical matrix entry. Checksum sidecars are
             mandatory verification evidence under `.checksums/` during CI, but
             are not uploaded as GitHub Release assets.
-          files: releases/${{ steps.release_meta.outputs.version }}/[0-9][0-9]_*
+          files: releases/${{ steps.release_meta.outputs.version }}/ecli_*

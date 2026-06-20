@@ -128,8 +128,8 @@ def test_canonical_release_asset_names_unchanged(
     release_assets: ModuleType,
 ) -> None:
     names = release_assets.expected_asset_names(VERSION)
-    assert f"06_rpm__ecli_{VERSION}_linux_x86_64.rpm" in names
-    assert f"07_opensuse__ecli_{VERSION}_opensuse_x86_64.rpm" in names
+    assert f"ecli_{VERSION}_linux_x86_64.rpm" in names
+    assert f"ecli_{VERSION}_opensuse_x86_64.rpm" in names
 
 
 def test_raw_fpm_basenames_are_never_release_assets(
