@@ -47,6 +47,19 @@ Packaging Artifact Matrix` in `docs/release/artifact-contract.md`:
 - Docker DEB build helper
 - Docker RPM build helper
 
+## Exact official release asset gate
+
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. No reduced or subset official release is
+allowed. AppImage, openSUSE, Arch, Slackware, FreeBSD `.pkg`, FreeBSD
+ports/chroot evidence, Nix flake evidence, NixOS package evidence, Docker helper
+evidence, and workflow contract evidence are mandatory.
+
+Release readiness is blocked unless `scripts/verify_release_assets.py` verifies
+the exact top-level asset set under `releases/<version>/`. Checksum sidecars are
+verification evidence under `.checksums/` or workflow artifacts; they are not
+GitHub Release assets.
+
 ## Required reading
 
 Before any packaging-related action, read:

@@ -15,11 +15,6 @@ name: FreeBSD 14 .pkg
 
 "on":
   workflow_dispatch:
-    inputs:
-      release_tag:
-        description: "Optional release tag (e.g. v0.2.2). When set, the built .pkg is attached to that GitHub Release out-of-band via 'gh release upload --clobber'."
-        required: false
-        default: ""
   push:
     branches: [ "main" ]
     paths:
@@ -33,7 +28,7 @@ name: FreeBSD 14 .pkg
       - "pyproject.toml"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build-freebsd-pkg:
@@ -115,23 +110,7 @@ jobs:
             ${{ steps.find_pkg.outputs.checksum_path }}
           if-no-files-found: error
 
-      - name: Attach FreeBSD .pkg to GitHub Release (out-of-band)
-        # When the standalone workflow is dispatched with `release_tag` set,
-        # the freshly built .pkg + .sha256 are uploaded to that release with
-        # --clobber. This is the post-hoc attach path when the Release workflow
-        # publishes without FreeBSD due to a vmactions flake.
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag != '' }}
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          PKG_PATH: ${{ steps.find_pkg.outputs.pkg_path }}
-          SHA_PATH: ${{ steps.find_pkg.outputs.checksum_path }}
-        shell: bash
+      - name: Report official release gating policy
         run: |
-          set -euo pipefail
-          if ! gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
-            echo "::error::Release $RELEASE_TAG does not exist; cannot attach FreeBSD .pkg out-of-band"
-            exit 1
-          fi
-          gh release upload "$RELEASE_TAG" "$PKG_PATH" "$SHA_PATH" --clobber
-          echo "Attached $PKG_PATH and $SHA_PATH to $RELEASE_TAG"
+          echo "Standalone FreeBSD workflow output is validation evidence only."
+          echo "Official GitHub Release publication waits for the aggregate Release workflow and exact 21-asset verifier."

@@ -39,6 +39,19 @@ This command owns the aggregate release surface, covering this entry from the
 
 - GitHub Actions release/workflow contract map
 
+## Exact official release asset gate
+
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. No reduced or subset official release is
+allowed. AppImage, openSUSE, Arch, Slackware, FreeBSD `.pkg`, FreeBSD
+ports/chroot evidence, Nix flake evidence, NixOS package evidence, Docker helper
+evidence, and workflow contract evidence are mandatory.
+
+Release readiness is blocked unless `scripts/verify_release_assets.py` verifies
+the exact top-level asset set under `releases/<version>/`. Checksum sidecars are
+verification evidence under `.checksums/` or workflow artifacts; they are not
+GitHub Release assets.
+
 Stage 1 `/release` is prepare-only and must never:
 
 - commit,
@@ -148,6 +161,7 @@ Drift:
 - Version drift:
 - Artifact naming drift:
 - Workflow drift:
+- Exact 21 asset gate:
 - Documentation drift:
 
 Blocked commands:
@@ -167,9 +181,12 @@ Do not treat tracked packaging descriptor mutation as acceptable release behavio
 
 ## AUD-010 rule
 
-If FreeBSD has more than one release path, report the ambiguity.
+If FreeBSD has more than one build or validation path, report the evidence
+mapping. The aggregate `Release` workflow is the only official GitHub Release
+publication path and must include both FreeBSD canonical assets before
+publication.
 
-Do not silently choose the standalone workflow or release workflow.
+Do not treat the standalone FreeBSD workflow as a post-publication upload path.
 
 ## Output format
 

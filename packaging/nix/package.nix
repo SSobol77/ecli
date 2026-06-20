@@ -9,7 +9,7 @@
 {
   pkgs,
   src ? ../..,
-  version ? "0.2.2",
+  version ? "0.2.3",
 }:
 
 let
@@ -67,7 +67,7 @@ pkgs.stdenvNoCC.mkDerivation {
   meta = {
     description = "Terminal-first engineering operations workbench";
     homepage = "https://www.ecli.io";
-    license = pkgs.lib.licenses.asl20;
+    license = pkgs.lib.licenses.gpl2Only;
     mainProgram = "ecli";
     platforms = [ "x86_64-linux" "aarch64-linux" ];
   };

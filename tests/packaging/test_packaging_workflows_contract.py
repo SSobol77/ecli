@@ -23,7 +23,7 @@ from conftest import PathAssertion, RepoReader, TokenAssertion
 WORKFLOW_CONTRACT = {
     "ci.yml": {
         "classification": "Global quality gate",
-        "tokens": ["CI", "validate-gate2", "main.py", "ruff", "pytest"],
+        "tokens": ["CI", "validate-release-contract", "main.py", "ruff", "pytest"],
         "surface_docs": [
             "docs/release/artifact-contract.md",
             "docs/release/build-matrix.md",
@@ -40,7 +40,7 @@ WORKFLOW_CONTRACT = {
             "FreeBSD",
             ".pkg",
             "build_and_package_freebsd.py",
-            "gh release upload",
+            "Official GitHub Release publication waits",
         ],
         "surface_docs": [
             "docs/release/artifact-contract.md",
@@ -129,6 +129,7 @@ WORKFLOW_CONTRACT = {
             "Build Python distributions",
             "Build Linux packages",
             "Build Windows artifacts",
+            "verify_release_assets.py",
         ],
         "surface_docs": [
             "docs/release/artifact-contract.md",
@@ -256,6 +257,22 @@ def test_project_automation_is_non_packaging_repository_automation(
     )
 
 
+def test_release_workflow_uses_docker_package_targets_not_legacy_shell(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+
+    # The Linux package job must drive the containerized DEB/RPM builds through the
+    # Makefile targets, which now invoke the canonical Python packaging scripts
+    # inside the Docker helpers.
+    assert "make package-deb-docker" in release
+    assert "make package-rpm-docker" in release
+    # No removed shell packaging entrypoint may reappear in the release workflow
+    # (regression guard for #93).
+    assert "build-and-package-deb.sh" not in release
+    assert "build-and-package-rpm.sh" not in release
+
+
 def test_active_packaging_workflows_have_docs_agents_and_tests(
     read_repo_text: RepoReader,
 ) -> None:
@@ -277,3 +294,92 @@ def test_active_packaging_workflows_have_docs_agents_and_tests(
             assert workflow_name in read_repo_text(
                 "tests/packaging/test_packaging_workflows_contract.py"
             )
+
+
+# --------------------------------------------------------------------------- #
+# #93 regression guard: the Docker DEB/RPM builds run as root and leave
+# root-owned files in build/, dist/, and releases/<version>/ (including
+# releases/<version>/.linux.env). The host-side openSUSE build then fails with
+# PermissionError when it tries to rewrite .linux.env. The release workflow must
+# reset ownership of every Docker-touched output path -- including releases/ --
+# after each Docker package build and before the openSUSE build.
+# --------------------------------------------------------------------------- #
+
+
+def test_release_workflow_resets_release_ownership_after_docker_builds(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+
+    # Anchor on the 'run:' step bodies so prose/comments that mention these make
+    # targets (e.g. the reset-step comments) cannot be mistaken for the steps.
+    deb_build = release.index("run: make package-deb-docker")
+    rpm_build = release.index("run: make package-rpm-docker")
+    opensuse_build = release.index("run: make package-opensuse-rpm")
+
+    deb_reset = release.index("Reset ownership after Docker DEB build")
+    rpm_reset = release.index("Reset ownership after Docker RPM build")
+
+    # 1 & 2: an ownership reset exists after each Docker package build.
+    assert deb_build < deb_reset
+    assert rpm_build < rpm_reset
+
+    # 4: both resets happen before the host-side openSUSE build that rewrites
+    # releases/<version>/.linux.env.
+    assert deb_reset < opensuse_build
+    assert rpm_reset < opensuse_build
+
+    # 3: each reset must cover the release output directory, not only build/ and
+    # dist/, because that is where the root-owned .linux.env lives.
+    deb_reset_block = release[deb_reset:rpm_build]
+    rpm_reset_block = release[rpm_reset:opensuse_build]
+    for block in (deb_reset_block, rpm_reset_block):
+        assert "chown -R" in block
+        assert "releases" in block
+
+
+def test_release_workflow_does_not_ignore_opensuse_failure(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+
+    # Anchor on the 'run:' step body, not the prose mention in the reset comment.
+    opensuse = release.index("run: make package-opensuse-rpm")
+
+    # 5: the openSUSE build line must not be neutralized with '|| true'.
+    line_start = release.rfind("\n", 0, opensuse) + 1
+    line_end = release.index("\n", opensuse)
+    assert "|| true" not in release[line_start:line_end]
+
+    # ...and the step that owns it must not opt into continue-on-error.
+    step_start = release.rfind("- name:", 0, opensuse)
+    next_step = release.index("- name:", opensuse)
+    assert "continue-on-error" not in release[step_start:next_step]
+
+
+def test_release_workflow_preserves_exact_21_asset_contract(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+
+    # 6: the exact-21 release contract is unchanged -- the workflow still
+    # assembles/verifies exactly 21 assets through the canonical verifier.
+    assert "Assemble and verify exact 21 GitHub Release assets" in release
+    assert "exactly 21 physical GitHub Release" in release
+    assert "verify_release_assets.py" in release
+
+
+def test_makefile_docker_package_targets_reset_release_ownership(
+    read_repo_text: RepoReader,
+) -> None:
+    # Local 'make package-*-docker' targets bind-mount the repo into a root
+    # container and leave root-owned output too. They must reset ownership of the
+    # release dir so a subsequent local 'make package-opensuse-rpm' is not blocked
+    # by the same #93 PermissionError.
+    makefile = read_repo_text("Makefile")
+    for target in ("package-deb-docker", "package-rpm-docker"):
+        start = makefile.index(f"\n{target}:")
+        end = makefile.index("\n.PHONY:", start)
+        recipe = makefile[start:end]
+        assert "chown" in recipe
+        assert "$(RELEASE_DIR)" in recipe

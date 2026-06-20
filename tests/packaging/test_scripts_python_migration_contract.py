@@ -59,6 +59,7 @@ REQUIRED_PYTHON_TARGETS = (
     "scripts/package_appimage.py",
     "scripts/publish_pypi.py",
     "scripts/sign_checksums.py",
+    "scripts/verify_release_assets.py",
     "scripts/verify_runtime.py",
     "scripts/verify_artifact.py",
 )
@@ -78,6 +79,7 @@ LIVE_REFERENCE_ROOTS = (
     "Makefile",
     "pyproject.toml",
     ".github/workflows",
+    "docker",
     "docs/release",
     "docs/contributor",
     "docs/product",
@@ -98,6 +100,7 @@ ACTIVE_SCRIPT_SHELL_REFERENCE_RE = re.compile(
 TEXT_SUFFIXES = {
     "",
     ".cfg",
+    ".Dockerfile",
     ".ini",
     ".json",
     ".md",

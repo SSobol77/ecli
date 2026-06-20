@@ -85,7 +85,7 @@ Before performing any work, read:
 
 1. `CLAUDE.md`
 2. `AGENTS.md`
-3. `.claude/README.md`
+3. `.claude/README-claude.md`
 4. `.claude/project-context.md`
 5. `.claude/validation-runbook.md`
 6. `.claude/drift-register.md`
@@ -597,6 +597,8 @@ Rendering stability has priority over feature work.
 
 Do not route new feature work into UI/rendering areas while the target area has known rendering instability, direct curses leakage, or no regression coverage.
 
+For ECLI 0.2.x, do not implement a full PTY terminal emulator. F11 must be treated as an ECLI-owned PySH Console Panel direction. PySH is a command execution backend only. Do not migrate PySH source into ECLI and do not mix this work with VMLab/QEMU/QMP scope.
+
 Rendering risk is likely concentrated around:
 
 1. multiple code paths mutating curses or terminal state,
@@ -740,7 +742,8 @@ release contract (artifact names, locations, checksum format, exit-code
 contracts). The migration is **complete**: no active shell wrapper remains under
 `scripts/`. Canonical Python implementations include
 `scripts/verify_artifact.py`, `scripts/sign_checksums.py`,
-`scripts/check_log_invariant.py`, `scripts/verify_runtime.py`,
+`scripts/check_log_invariant.py`, `scripts/verify_release_assets.py`,
+`scripts/verify_runtime.py`,
 `scripts/build_pyinstaller_linux.py`, `scripts/build_and_package_deb.py`,
 `scripts/build_and_package_rpm.py`, `scripts/build_and_package_opensuse_rpm.py`,
 `scripts/build_and_package_arch.py`, `scripts/build_and_package_slackware.py`,
@@ -822,14 +825,19 @@ Do not document unsupported or nonexistent commands.
 
 The FreeBSD workflow has special release evidence sensitivity.
 
+Official release publication is blocked until the aggregate Release workflow
+produces the FreeBSD `.pkg` asset and the FreeBSD ports/chroot evidence asset as
+part of the exact 21 physical GitHub Release asset set. The standalone FreeBSD
+workflow is validation evidence only and must not attach assets to a published
+release.
+
 When inspecting `.github/workflows/freebsd-pkg.yml`, verify and report:
 
 * VM action pin,
 * `workflow_dispatch` inputs,
-* release tag handling,
 * artifact naming,
 * checksum handling,
-* whether FreeBSD artifacts are attached through the release workflow or out-of-band,
+* whether FreeBSD artifacts flow through the aggregate exact 21-asset release workflow,
 * whether CodeRabbit or auto-review expectations are mentioned.
 
 Do not trigger the workflow from Stage 1.

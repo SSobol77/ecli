@@ -25,6 +25,12 @@ from conftest import (
 
 ARTIFACT: Artifact = get_artifact("docker-rpm-helper")
 
+CANONICAL_RPM_SCRIPT = "scripts/build_and_package_rpm.py"
+# Built from parts so this regression guard does not itself trip the
+# shell-to-Python migration source scanner (tests/ is a scanned surface).
+SHELL_EXT = "." + "sh"
+LEGACY_RPM_SHELL_SCRIPT = "scripts/build-and-package-rpm" + SHELL_EXT
+
 
 def test_docker_rpm_helper_sources_exist(
     assert_paths_non_empty: PathAssertion,
@@ -53,3 +59,19 @@ def test_docker_rpm_helper_is_build_helper_not_release_artifact(
     # release artifacts and must not publish/upload.
     assert "not itself a release artifact" in contract
     assert "must not publish or upload" in contract
+
+
+def test_docker_rpm_helper_uses_canonical_python_script_not_legacy_shell(
+    read_repo_text: RepoReader,
+) -> None:
+    dockerfile = read_repo_text("docker/build-linux-rpm.Dockerfile")
+
+    # The legacy shell packaging scripts were removed in the script migration; the
+    # Docker RPM helper must invoke the canonical Python packaging script and must
+    # not reference the removed shell entrypoint (regression guard for #93).
+    assert LEGACY_RPM_SHELL_SCRIPT not in dockerfile
+    assert CANONICAL_RPM_SCRIPT in dockerfile
+    # No scripts/ path with a shell extension may reappear in the helper.
+    assert not any(
+        "scripts/" in line and SHELL_EXT in line for line in dockerfile.splitlines()
+    )

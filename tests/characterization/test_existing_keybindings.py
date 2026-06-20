@@ -251,3 +251,7 @@ def test_help_text_keeps_existing_panel_and_tool_labels_discoverable() -> None:
     assert "Git menu" in rendered
     assert "F8" in rendered
     assert "System Doctor" in rendered
+    assert "F11" in rendered
+    assert "Open/focus PySH Console Panel" in rendered
+    assert "F12" in rendered
+    assert "Switch focus between editor and panels" in rendered

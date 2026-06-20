@@ -55,6 +55,8 @@ Do not reference or invoke a standalone `regression-guard` agent during Stage 1.
 
 After the Stage 1 lock is lifted, implement planned ECLI features with minimal, scoped diffs.
 
+For ECLI 0.2.x, do not implement a full PTY terminal emulator. F11 must be treated as an ECLI-owned PySH Console Panel direction. PySH is a command execution backend only. Do not migrate PySH source into ECLI and do not mix this work with VMLab/QEMU/QMP scope.
+
 Valid feature areas may include:
 
 - editor commands,

@@ -32,7 +32,7 @@ target
 # test evidence, and agent debug artifacts must live only under logs/.
 logs/*
 !logs/.gitkeep
-!logs/README.md
+!logs/README-logs.md
 
 # ==========================
 # OS / Editor junk

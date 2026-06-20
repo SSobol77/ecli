@@ -39,6 +39,7 @@ PACKAGING_SCRIPT_GLOBS = (
     "scripts/publish_pypi.py",
     "scripts/sign_checksums.py",
     "scripts/verify_artifact.py",
+    "scripts/verify_release_assets.py",
     "scripts/verify_runtime.py",
     "scripts/check_log_invariant.py",
 )
@@ -46,6 +47,7 @@ PACKAGING_SCRIPT_GLOBS = (
 PACKAGING_DESCRIPTORS = (
     "docker/build-linux-deb.Dockerfile",
     "docker/build-linux-rpm.Dockerfile",
+    "docker/build-arch-package.Dockerfile",
     "packaging/arch/PKGBUILD",
     "packaging/nix/package.nix",
     "packaging/windows/nsis/ecli.nsi",

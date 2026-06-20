@@ -86,6 +86,9 @@ RUN python3.11 -m ensurepip --upgrade || true \
 # Project sources
 COPY . .
 
-RUN chmod +x scripts/build-and-package-rpm.sh
-
-CMD ["bash", "-lc", "./scripts/build-and-package-rpm.sh"]
+# Build the .rpm inside the container using the canonical Python packaging script.
+# The legacy shell packaging scripts were removed in the script migration. Invoked
+# via python3.11 because the EL9 default python3 may be 3.9; the Makefile
+# ``package-rpm-docker`` target passes PYTHON=python3.11 for the script's
+# PyInstaller/verify subprocesses and bind-mounts the repo at /app.
+CMD ["python3.11", "scripts/build_and_package_rpm.py"]

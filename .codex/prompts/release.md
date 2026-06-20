@@ -23,6 +23,19 @@ This prompt owns the aggregate release surface, covering this entry from the
 
 - GitHub Actions release/workflow contract map
 
+## Exact official release asset gate
+
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. No reduced or subset official release is
+allowed. AppImage, openSUSE, Arch, Slackware, FreeBSD `.pkg`, FreeBSD
+ports/chroot evidence, Nix flake evidence, NixOS package evidence, Docker helper
+evidence, and workflow contract evidence are mandatory.
+
+Release readiness is blocked unless `scripts/verify_release_assets.py` verifies
+the exact top-level asset set under `releases/<version>/`. Checksum sidecars are
+verification evidence under `.checksums/` or workflow artifacts; they are not
+GitHub Release assets.
+
 Use with:
 
 ```sh
@@ -60,6 +73,7 @@ Inspect:
 - release docs under docs/release/;
 - packaging descriptors;
 - artifact contract;
+- exact 21 GitHub Release asset gate;
 - GitHub and PyPI readiness.
 
 Use read-only inspection commands only, such as:

@@ -29,6 +29,16 @@ Stage 1 release work may only produce:
 - release note drafts,
 - manual runbooks.
 
+## Exact GitHub Release asset gate
+
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. Release publication is blocked unless
+`scripts/verify_release_assets.py` verifies the exact top-level asset set under
+`releases/<version>/`.
+
+Checksum sidecars are mandatory verification evidence under `.checksums/` or CI
+workflow artifacts. They are not GitHub Release assets.
+
 ## Forbidden commands
 
 Do not run:

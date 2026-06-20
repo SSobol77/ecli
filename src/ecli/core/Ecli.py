@@ -95,6 +95,7 @@ from ecli.ui.mouse import (
 )
 from ecli.ui.PanelManager import PanelManager
 from ecli.ui.panels import FileBrowserPanel, GitPanel
+from ecli.ui.pysh_console_panel import PySHConsolePanel
 from ecli.ui.textops import normalize_paste_text, selection_to_text
 from ecli.utils.logging_config import logger, log_record_to_file_handlers
 from ecli.utils.text_buffer import (
@@ -557,6 +558,7 @@ class Ecli:
         self.panel_manager: Optional[PanelManager] = None
         self.git_panel_instance: Optional[GitPanel] = None
         self.file_browser_instance: Optional[FileBrowserPanel] = None
+        self.pysh_console_panel_instance: Optional[PySHConsolePanel] = None
 
         if not self.is_lightweight:
             self.git = GitBridge(self)
@@ -568,6 +570,7 @@ class Ecli:
             self.panel_manager = PanelManager(self)
             self.git_panel_instance = GitPanel(self.stdscr, self)
             self.file_browser_instance = FileBrowserPanel(self.stdscr, self)
+            self.pysh_console_panel_instance = PySHConsolePanel(self.stdscr, self)
 
             if self.file_browser_instance and self.git_panel_instance:
                 self.file_browser_instance.set_git_panel(self.git_panel_instance)
@@ -922,28 +925,22 @@ class Ecli:
         return True
 
     def toggle_terminal_panel(self) -> bool:
-        """Reserved hook for the future Terminal Panel (F11) — not implemented.
+        """Open or focus the ECLI-owned PySH Console Panel."""
+        panel_manager = self.panel_manager
+        panel = cast(Optional[PySHConsolePanel], self.pysh_console_panel_instance)
+        if panel_manager is None or panel is None:
+            self._set_status_message("PySH Console Panel is not available.")
+            return True
 
-        The Terminal Panel will be a normal right-side panel that reuses the
-        existing split-layout architecture unchanged:
+        if getattr(panel_manager, "active_panel", None) is panel and panel.visible:
+            self.focus = "panel"
+            self._force_full_redraw = True
+            self._set_status_message("PySH Console Panel focused.")
+            return True
 
-        * 60% editor / 40% side panel via ``ecli.ui.geometry.compute_layout``;
-        * opaque themed panel surface, border/title/footer, no global-footer
-          overlap (``BasePanel._layout_window`` + ``panel_kind = "terminal"``);
-        * the F12 focus-switch model and Esc-to-close;
-        * the same theme roles and resize-safe clipping.
-
-        Future input contract (intentionally NOT wired here): F11 opens/closes
-        the panel, F12 switches focus, Esc closes the focused panel, and Ctrl+C
-        must interrupt the terminal process **only** when the terminal panel is
-        focused (handled by the panel, not the global editor copy binding).
-
-        No PTY, subprocess or terminal UI is started in this pass.
-        """
-        self._set_status_message(
-            "Terminal panel (F11) is reserved and not yet available."
-        )
-        logging.info("toggle_terminal_panel: reserved hook invoked (not implemented).")
+        panel_manager.show_panel_instance(panel)
+        self._set_status_message("PySH Console Panel opened.")
+        logging.info("toggle_terminal_panel: PySH Console Panel opened/focused.")
         return True
 
     def _get_service_registry(self) -> ServiceRegistry:
@@ -7476,6 +7473,8 @@ class Ecli:
             "toggle_comment_block": "Ctrl+\\",
             "ai_assist": "F7",
             "file_manager": "F10",
+            "toggle_terminal_panel": "F11",
+            "toggle_focus": "F12",
         }
         return [
             "                 ──  Ecli Help  ──  ",
@@ -7487,6 +7486,8 @@ class Ecli:
             f"    {_kb('help', defaults['help']):<22}: This help screen",
             f"    {_kb('ai_assist', defaults['ai_assist']):<22}: AI Code Assistant",
             f"    {_kb('toggle_system_doctor_panel', defaults['toggle_system_doctor_panel']):<22}: System Doctor",
+            f"    {_kb('toggle_terminal_panel', defaults['toggle_terminal_panel']):<22}: Open/focus PySH Console Panel",
+            f"    {_kb('toggle_focus', defaults['toggle_focus']):<22}: Switch focus between editor and panels",
             f"    {_kb('cancel_operation', defaults['cancel_operation']):<22}: Cancel / Close Panel",
             "    Insert Key            : Toggle Insert/Replace mode",
             "",
@@ -7523,9 +7524,9 @@ class Ecli:
             "",
             "              Press any key to close help",  # Changed
             "",
-            "               Licensed under the GPL-2.0-only ",
+            "             Licensed under the GPL-2.0-only ",
             "",
-            "               © 2025 Siergej Sobolewski",
+            "               © 2026 Siergej Sobolewski",
         ]
 
     def show_help(self) -> bool:  # noqa: python:S3516
@@ -8390,6 +8391,12 @@ class Ecli:
             return self.handle_input(key_input)
 
         if self.keybinder.is_key_for_action(key_input, "toggle_widget_panel"):
+            return self.handle_input(key_input)
+
+        if self.keybinder.is_key_for_action(key_input, "toggle_terminal_panel"):
+            return self.handle_input(key_input)
+
+        if self.keybinder.is_key_for_action(key_input, "toggle_focus"):
             return self.handle_input(key_input)
 
         if (

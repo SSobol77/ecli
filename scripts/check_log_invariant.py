@@ -63,7 +63,7 @@ FORBIDDEN_RUNTIME_GLOBS = (
 )
 
 # Tracked files allowed to live directly under ``logs/``.
-TRACKED_LOG_ALLOWLIST = frozenset({"logs/.gitkeep", "logs/README.md"})
+TRACKED_LOG_ALLOWLIST = frozenset({"logs/.gitkeep", "logs/README-logs.md"})
 
 
 def _matches_any(path: str, globs: tuple[str, ...]) -> bool:

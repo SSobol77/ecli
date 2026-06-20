@@ -53,7 +53,7 @@ For source/development builds on Windows, install:
 PowerShell checksum verification should be performed before first execution:
 
 ```powershell
-$version = "0.2.2"
+$version = "0.2.3"
 $file = "ecli_${version}_win_x86_64_setup.exe"
 $expected = (Get-Content "$file.sha256" -Raw).Trim().Split()[0]
 $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $file).Hash.ToLowerInvariant()

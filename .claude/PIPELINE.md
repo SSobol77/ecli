@@ -215,6 +215,7 @@ exists yet. Do not modify src/ecli. Run pytest -k display_width and paste output
 python3 -c 'import tomllib;print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])'
 python3 -m pip index versions ecli-editor || true
 make validate-gate2
+make validate-release-assets
 ```
 
 `[AGENT]` Emit the prepare-only release summary per `release-runbook.md`.
@@ -226,7 +227,6 @@ yank, never manual PyPI upload):
 ```bash
 git tag v<next>
 git push origin v<next>        # triggers release.yml build/publish
-gh workflow run freebsd-pkg.yml --ref main -f release_tag=v<next>   # if FreeBSD leg deferred
 ```
 
 `=== GATE D ===` Forward-only confirmed. Tag push is maintainer-only.

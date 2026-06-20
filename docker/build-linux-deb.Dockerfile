@@ -64,13 +64,19 @@ RUN python3 -m pip install --no-cache-dir uv
 WORKDIR /app
 
 # --- Cache dependency layer
+# Only project metadata + dependency manifests are copied here so the dependency
+# layer caches independently of source changes. The project itself is NOT
+# editable-installed at this stage: requirements-dev.txt pins ``-e .``, whose
+# metadata build reads README.md and the src/ecli package (copied later via
+# ``COPY . .``), so an editable bootstrap here would fail. PyInstaller bundles the
+# project from the full source tree below; the build only needs third-party deps
+# plus build tooling, which are installed explicitly here.
 COPY pyproject.toml ./
-COPY uv.lock* requirements.txt* requirements-dev.txt* ./
+COPY uv.lock ./
 
 RUN python -m pip install --upgrade pip wheel \
     && uv --version \
     && ( [ -f requirements.txt ]      && uv pip install --system -r requirements.txt      || true ) \
-    && ( [ -f requirements-dev.txt ]  && uv pip install --system -r requirements-dev.txt  || true ) \
     && uv pip install --system pyinstaller \
     # ensure runtime deps are present during analysis so PyInstaller can bundle them
     && uv pip install --system aiohttp aiosignal yarl multidict frozenlist pyperclip \
@@ -79,7 +85,9 @@ RUN python -m pip install --upgrade pip wheel \
 # --- Project sources
 COPY . .
 
-RUN chmod +x scripts/build-and-package-deb.sh
-
-# Build package inside the container
-CMD ["bash", "-lc", "./scripts/build-and-package-deb.sh"]
+# Build the .deb inside the container using the canonical Python packaging script.
+# The legacy shell packaging scripts were removed in the script migration. The
+# Makefile ``package-deb-docker`` target bind-mounts the repo at /app and runs this
+# image, so artifacts land in the host releases/<version>/ tree and the host runs
+# package-deb-assert afterward.
+CMD ["python", "scripts/build_and_package_deb.py"]

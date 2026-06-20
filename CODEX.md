@@ -135,12 +135,19 @@ Matrix`; missing docs, agent contracts, runbooks, or validation coverage are
 AUD-003 drift. Codex may repair documentation/tests when explicitly authorized,
 but must not publish, upload, tag, push, or trigger workflows.
 
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. Release publication is blocked unless
+`scripts/verify_release_assets.py` verifies the exact top-level asset set under
+`releases/<version>/`. Checksum sidecars are mandatory verification evidence,
+but they are not GitHub Release assets.
+
 Active build, packaging, verification, and release-helper scripts under
 `scripts/` have been migrated to standard-library Python without changing the
 release contract. The migration is **complete**: no active shell wrapper remains
 under `scripts/`. Canonical Python implementations include verification:
 `scripts/verify_artifact.py`, `scripts/sign_checksums.py`,
-`scripts/check_log_invariant.py`, `scripts/verify_runtime.py`; build/packaging:
+`scripts/check_log_invariant.py`, `scripts/verify_release_assets.py`,
+`scripts/verify_runtime.py`; build/packaging:
 `scripts/build_pyinstaller_linux.py`,
 `scripts/build_and_package_{deb,rpm,opensuse_rpm,arch,slackware,macos,freebsd}.py`,
 `scripts/package_appimage.py`, `scripts/build_freebsd_pkg.py`,
@@ -172,6 +179,8 @@ the existing canonical command surfaces.
 ## Rendering policy
 
 Rendering work is Stage-2-locked unless the maintainer explicitly approves a narrow Stage 1b fix.
+
+For ECLI 0.2.x, do not implement a full PTY terminal emulator. F11 must be treated as an ECLI-owned PySH Console Panel direction. PySH is a command execution backend only. Do not migrate PySH source into ECLI and do not mix this work with VMLab/QEMU/QMP scope.
 
 During Stage 1, Codex may only:
 

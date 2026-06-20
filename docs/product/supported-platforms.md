@@ -35,9 +35,15 @@ See the LICENSE file in the project root for full license text.
 ## Canonical 21-Item Artifact Coverage
 
 The normative artifact list is the `Canonical 21-Item Platform & Packaging
-Artifact Matrix` in `docs/release/artifact-contract.md`. Every entry below must
-remain covered by tests under `tests/packaging/`, by `.claude/commands/`, by
-`.codex/prompts/`, and (where relevant) by a GitHub workflow:
+Artifact Matrix` in `docs/release/artifact-contract.md`. Every official ECLI
+release publishes exactly 21 physical GitHub Release assets, one per canonical
+matrix entry. Release publication is blocked unless `scripts/verify_release_assets.py`
+verifies the exact top-level asset set under `releases/<version>/`. Checksum
+sidecars are verification evidence, not GitHub Release assets.
+
+Every entry below must remain covered by tests under `tests/packaging/`, by
+`.claude/commands/`, by `.codex/prompts/`, and (where relevant) by a GitHub
+workflow:
 
 1. PyPI wheel
 2. PyPI source distribution
@@ -61,6 +67,32 @@ remain covered by tests under `tests/packaging/`, by `.claude/commands/`, by
 20. Docker RPM build helper
 21. GitHub Actions release/workflow contract map
 
+Mandatory GitHub Release asset names for each `<version>`:
+
+```text
+ecli_editor-<version>-py3-none-any.whl
+ecli_editor-<version>.tar.gz
+ecli_<version>_linux_x86_64.bin
+ecli_<version>_linux_x86_64.tar.gz
+ecli_<version>_linux_x86_64.deb
+ecli_<version>_linux_x86_64.rpm
+ecli_<version>_opensuse_x86_64.rpm
+ecli_<version>_arch_x86_64.pkg.tar.zst
+ecli_<version>_slackware_x86_64.txz
+ecli_<version>_linux_x86_64.AppImage
+ecli_<version>_freebsd_x86_64.pkg
+ecli_<version>_freebsd_ports_chroot_evidence.tar.gz
+ecli_<version>_macos_universal2_app_evidence.tar.gz
+ecli_<version>_macos_universal2.dmg
+ecli_<version>_win_x86_64.exe
+ecli_<version>_win_x86_64_setup.exe
+ecli_<version>_nix_flake_evidence.tar.gz
+ecli_<version>_nixos_package_evidence.tar.gz
+ecli_<version>_docker_deb_helper_evidence.tar.gz
+ecli_<version>_docker_rpm_helper_evidence.tar.gz
+ecli_<version>_workflow_contract_evidence.tar.gz
+```
+
 ## Support Stance
 
 - Current state indicates cross-platform packaging intent.
@@ -74,7 +106,7 @@ remain covered by tests under `tests/packaging/`, by `.claude/commands/`, by
 
 - **Fully supported**: CI workflow passes, artifacts are produced and verified, and platform is recommended for production use.
 - **Failing or unverified**: Build failures, test failures, or absence of CI workflow coverage; artifact may not be available or tested; not recommended for release.
-- **Degraded**: Best-effort support with known issues or limited testing; not recommended for production until issues are resolved.
+- **Degraded**: limited support with known issues or limited testing; not recommended for production until issues are resolved.
 
 ### Platform Status and Incident Management
 

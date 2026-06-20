@@ -19,6 +19,23 @@ Canonical Python replacement for ``scripts/build-and-package-arch.sh``. It runs
 output to ``releases/<version>/ecli_<version>_arch_<arch>.pkg.tar.zst``, writes a
 SHA256 sidecar, and runs the runtime verifier.
 
+makepkg needs a real Arch ``base-devel`` toolchain, which the Ubuntu release
+runner does not have. The release-canonical path runs this script inside the
+``docker/build-arch-package.Dockerfile`` helper (``make package-arch-docker``);
+the host-only ``make package-arch`` target remains for Arch developer machines.
+
+Raw/intermediate makepkg output (the native
+``ecli-editor-<ver>-<rel>-<arch>.pkg.tar.zst`` plus the makepkg ``src``/``pkg``
+trees) is kept under ``build/`` and never under ``releases/`` so that
+``releases/<version>/`` only ever holds the canonical normalized artifact and its
+checksum sidecar (#93). makepkg is run from a copy of the PKGBUILD under
+``build/arch`` so the tracked source tree is never written to and a non-root
+build user can own every output path inside the Docker helper.
+
+``pkgver`` is taken from ``pyproject.toml`` (the version source of truth) and
+written into the build-only PKGBUILD copy. The tracked
+``packaging/arch/PKGBUILD`` is never mutated as a build side effect (AUD-003).
+
 This script orchestrates the local packaging toolchain only. It never publishes,
 uploads, signs with external keys, tags, pushes, or triggers any workflow.
 
@@ -33,6 +50,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -61,6 +79,35 @@ def normalize_arch() -> str:
     if raw in ("aarch64", "arm64"):
         return "aarch64"
     return raw
+
+
+def arch_build_dir(root: Path) -> Path:
+    """Return the ``build/`` staging dir for raw makepkg output (never releases/).
+
+    makepkg writes its ``src``/``pkg`` working trees and the raw
+    ``ecli-editor-<ver>-<rel>-<arch>.pkg.tar.zst`` here. Keeping this under
+    ``build/`` guarantees ``releases/<version>/`` holds only the canonical
+    normalized artifact and its checksum sidecar (#93), mirroring the RPM raw
+    output isolation in ``scripts/build_and_package_rpm.py``.
+    """
+    return root / "build" / "arch"
+
+
+def stage_pkgbuild(root: Path, build_dir: Path, version: str) -> Path:
+    """Copy the tracked PKGBUILD into *build_dir* with ``pkgver`` set to *version*.
+
+    The tracked ``packaging/arch/PKGBUILD`` is never modified. Only the build-only
+    copy is rewritten so the package metadata tracks ``pyproject.toml`` instead of
+    a hard-coded ``pkgver`` (AUD-003). makepkg is then run from *build_dir*, so the
+    source tree is never used as a makepkg working directory.
+    """
+    source = (root / "packaging" / "arch" / "PKGBUILD").read_text(encoding="utf-8")
+    rewritten = re.sub(
+        r"(?m)^pkgver=.*$", f"pkgver={version}", source, count=1
+    )
+    target = build_dir / "PKGBUILD"
+    target.write_text(rewritten, encoding="utf-8")
+    return target
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -98,18 +145,30 @@ def main(argv: list[str] | None = None) -> int:
     releases_dir.mkdir(parents=True, exist_ok=True)
     normalized = releases_dir / f"ecli_{version}_arch_{arch}.pkg.tar.zst"
 
+    # Raw makepkg output and working trees stay under build/ (never releases/) and
+    # makepkg runs from a copy of the PKGBUILD so the tracked source tree is never
+    # written to (#93).
+    build_dir = arch_build_dir(root)
+    shutil.rmtree(build_dir, ignore_errors=True)
+    build_dir.mkdir(parents=True, exist_ok=True)
+    stage_pkgbuild(root, build_dir, version)
+
     print("==> Building Arch package")
+    # --nodeps: the build environment (the docker/build-arch-package.Dockerfile
+    # helper, or a prepared Arch host) provisions the toolchain. PyInstaller is
+    # not in the official Arch repos (AUR only) and is installed with pip, so
+    # makepkg's pacman dependency check would otherwise fail on python-pyinstaller.
     subprocess.run(
-        ["makepkg", "--clean", "--force", "--noconfirm"],
-        cwd=root / "packaging" / "arch",
-        env={**os.environ, "ECLI_REPO_ROOT": str(root), "PKGDEST": str(releases_dir)},
+        ["makepkg", "--clean", "--force", "--noconfirm", "--nodeps"],
+        cwd=build_dir,
+        env={**os.environ, "ECLI_REPO_ROOT": str(root), "PKGDEST": str(build_dir)},
         check=True,
     )
 
-    raw_candidates = sorted(releases_dir.glob(f"{PACKAGE_NAME}-{version}-*.pkg.tar.*"))
+    raw_candidates = sorted(build_dir.glob(f"{PACKAGE_NAME}-{version}-*.pkg.tar.*"))
     if not raw_candidates or not raw_candidates[0].is_file():
         print(
-            f"ERROR: Arch package artifact not found under {releases_dir}.",
+            f"ERROR: Arch package artifact not found under {build_dir}.",
             file=sys.stderr,
         )
         return EXIT_ERROR

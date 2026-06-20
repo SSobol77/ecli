@@ -65,6 +65,10 @@ Forbidden:
 * artifact upload;
 * PyPI publishing.
 
+## ECLI 0.2.x panel-console rule
+
+For ECLI 0.2.x, do not implement a full PTY terminal emulator. F11 must be treated as an ECLI-owned PySH Console Panel direction. PySH is a command execution backend only. Do not migrate PySH source into ECLI and do not mix this work with VMLab/QEMU/QMP scope.
+
 ## Locked-state rules
 
 Feature work is blocked until:

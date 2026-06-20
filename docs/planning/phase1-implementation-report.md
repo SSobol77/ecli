@@ -20,7 +20,7 @@ Base state: `main` at `cc30717`.
 
 Phase 1 is complete for workstreams A, B, and C. Workstream D was deferred by
 maintainer decision; the Phase 0 FreeBSD package flow remains functional but is
-not Gate 2 polished. PR #17 was accepted as an out-of-band hygiene addition to
+not Gate 2 polished. PR #17 was accepted as a separate hygiene addition to
 close long-standing GPL-2.0-only metadata drift before v0.1.0 release operations.
 
 No real PyPI publish, production tag push, or production GitHub Release was
@@ -70,8 +70,8 @@ Status: complete.
 - [x] CycloneDX SBOM is generated in JSON schema version 1.5 with validation.
 - [x] SBOM artifact names are:
   `dist/ecli-editor-<version>.cdx.json` and `.sha256`.
-- [x] SBOM is uploaded as a workflow artifact and attached to the GitHub
-  Release.
+- [x] Historical v0.1.0 SBOM handling recorded. Superseded by Issue #92:
+  SBOM files are verification evidence only and are not GitHub Release assets.
 - [x] SBOM is not uploaded to PyPI.
 
 ### Workstream C - Windows Portable EXE and NSIS Installer
@@ -126,7 +126,8 @@ Status: complete.
 
 - [x] macOS Universal2 DMG (ad-hoc signed) builds and verifies in CI.
 - [x] PyPI publish workflow is tag-triggered using static `PYPI_API_TOKEN`.
-- [x] CycloneDX SBOM (schema 1.5) is generated and attached to GitHub Release.
+- [x] CycloneDX SBOM (schema 1.5) generation recorded. Superseded by Issue #92:
+  SBOM files are verification evidence only and are not GitHub Release assets.
 - [x] Windows portable EXE + NSIS installer build, both unsigned.
 - [x] User documentation (macOS, Windows) explains first-launch warnings
   honestly.

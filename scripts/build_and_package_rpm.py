@@ -16,9 +16,16 @@
 
 Canonical Python replacement for ``scripts/build-and-package-rpm.sh`` and the
 shared flow behind ``scripts/build-and-package-opensuse-rpm.sh``. It builds a
-PyInstaller binary, stages an FHS payload, produces an RPM with FPM, normalizes
-the filename to ``ecli_<version>_<platform>_<arch>.rpm``, and writes a SHA256
-sidecar.
+PyInstaller binary, stages an FHS payload, produces an RPM with FPM under a
+target-specific ``build/`` subdirectory, copies it to the canonical release name
+``ecli_<version>_<platform>_<arch>.rpm`` in ``releases/<version>/``, and writes a
+SHA256 sidecar.
+
+Raw/intermediate FPM output is kept under ``build/`` (never ``releases/``) and is
+target-specific so the generic RPM and openSUSE RPM flows never share a raw FPM
+output path. Sharing one made FPM refuse to overwrite the pre-existing raw file
+``releases/<version>/ecli-<version>.rpm`` (#93). ``releases/<version>/`` holds
+only canonical release-facing artifacts and their checksum sidecars.
 
 Contract-relevant environment variables are preserved:
 
@@ -281,6 +288,35 @@ def build_fpm_command(
     return cmd
 
 
+def fpm_output_layout(
+    root: Path, package_name: str, version: str, platform_label: str
+) -> tuple[Path, Path, Path]:
+    """Return ``(build_dir, staging_dir, raw_rpm)`` for *platform_label*.
+
+    Raw/intermediate FPM output is written under ``build/`` (never
+    ``releases/``) and is made target-specific so the generic RPM and openSUSE
+    RPM flows never share a raw FPM output path. Two RPM targets writing the same
+    raw filename made FPM refuse to overwrite the existing file (#93).
+
+    * generic (``linux``): ``build/rpm/fpm/ecli-<version>.rpm``
+    * other (e.g. ``opensuse``):
+      ``build/<label>-rpm/fpm/ecli-<version>-<label>.rpm``
+
+    Distinctness is guaranteed by the per-target ``build/`` subdirectory, so the
+    flows never collide even if FPM derives its own raw RPM filename.
+    """
+    subdir = "rpm" if platform_label == "linux" else f"{platform_label}-rpm"
+    build_dir = root / "build" / subdir
+    staging = build_dir / "staging"
+    raw_name = (
+        f"{package_name}-{version}.rpm"
+        if platform_label == "linux"
+        else f"{package_name}-{version}-{platform_label}.rpm"
+    )
+    raw_rpm = build_dir / "fpm" / raw_name
+    return build_dir, staging, raw_rpm
+
+
 def main(argv: list[str] | None = None) -> int:
     """Build the RPM and verify it; return the exit code."""
     parser = argparse.ArgumentParser(
@@ -331,10 +367,12 @@ def main(argv: list[str] | None = None) -> int:
     (releases_dir / f"{normalized.name}.sha256").unlink(missing_ok=True)
 
     print("==> Building executable with PyInstaller")
-    build_dir = root / "build" / "rpm"
-    staging = build_dir / "staging"
+    build_dir, staging, raw_rpm = fpm_output_layout(
+        root, package_name, version, platform_label
+    )
     shutil.rmtree(build_dir, ignore_errors=True)
     staging.mkdir(parents=True, exist_ok=True)
+    raw_rpm.parent.mkdir(parents=True, exist_ok=True)
     run_pyinstaller(root, package_name)
     executable = find_executable(root, package_name)
     if executable is None:
@@ -347,7 +385,9 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     print("==> Building .rpm with FPM")
-    tmp_rpm_out = releases_dir / f"{package_name}-{version}.rpm"
+    # Raw/intermediate FPM output stays under build/ (never releases/) and is
+    # target-specific so the generic RPM and openSUSE RPM flows never collide on
+    # a shared raw filename (#93).
     subprocess.run(
         build_fpm_command(
             staging,
@@ -358,27 +398,27 @@ def main(argv: list[str] | None = None) -> int:
             license_id,
             category,
             depends,
-            tmp_rpm_out,
+            raw_rpm,
         ),
         cwd=root,
         check=True,
     )
 
-    print("==> Locating final RPM")
-    candidates = sorted(releases_dir.glob(f"{package_name}-*.rpm"))
+    print("==> Locating raw RPM")
+    candidates = sorted(raw_rpm.parent.glob(f"{package_name}-*.rpm"))
     if not candidates:
-        print(f"ERROR: RPM not found under {releases_dir}", file=sys.stderr)
+        print(f"ERROR: RPM not found under {raw_rpm.parent}", file=sys.stderr)
         return EXIT_ERROR
     actual_rpm = candidates[0]
 
-    if actual_rpm != normalized:
-        shutil.copy2(actual_rpm, normalized)
+    print("==> Copying to the canonical release asset name")
+    shutil.copy2(actual_rpm, normalized)
 
     print("==> Generating SHA-256 checksum")
     write_sha256(releases_dir, normalized)
 
     print("DONE")
-    print(f"RPM (actual): {actual_rpm}")
+    print(f"RPM (raw): {actual_rpm}")
     print(f"RPM (normalized): {normalized}")
     subprocess.run(
         [sys.executable, "scripts/verify_runtime.py", str(normalized)],

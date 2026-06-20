@@ -77,11 +77,9 @@ CursesWindow = Any
 # with the global status/footer, the F12 focus model, Esc-to-close, the theme
 # roles, and resize-safe clipping (BasePanel._layout_window).
 #
-# ``"terminal"`` is RESERVED here for a future Terminal Panel. It is documented
-# now so the layout/panel architecture explicitly supports it, but it is NOT
-# implemented in this pass (no PTY, no subprocess, no terminal UI). A future
-# ``TerminalPanel(BasePanel)`` only needs ``panel_kind = "terminal"`` and
-# ``is_modal_panel = False`` to inherit the entire split layout.
+# ``"terminal"`` is the side-panel layout kind used by the PySH Console Panel.
+# The panel owns ECLI command-console state and uses PySH only as a subprocess
+# command backend; it is not a terminal emulator.
 SIDE_PANEL_KINDS: frozenset[str] = frozenset(
     {
         "file_manager",
@@ -90,7 +88,7 @@ SIDE_PANEL_KINDS: frozenset[str] = frozenset(
         "ai_provider",
         "command_plan",
         "services",
-        "terminal",  # reserved — future Terminal Panel (F11), not implemented yet
+        "terminal",  # PySH Console Panel (F11)
     }
 )
 #: Centered modal panels (Help, dialogs); not part of the side-panel split.
@@ -103,9 +101,8 @@ class BasePanel:
 
     Side panels (``is_modal_panel = False``) are generic consumers of the
     split-layout system: ``_layout_window`` places them in the right 40% work
-    area without overlapping the global header/status/footer. A future Terminal
-    Panel (``panel_kind = "terminal"``) will reuse this unchanged — see
-    ``SIDE_PANEL_KINDS``.
+    area without overlapping the global header/status/footer. The PySH Console
+    Panel uses ``panel_kind = "terminal"`` to reuse this unchanged.
     """
 
     # Shift + Arrow key codes

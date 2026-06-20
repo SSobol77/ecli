@@ -123,6 +123,11 @@ Codex must remain read-only unless maintainer explicitly authorizes Stage 1b or 
 ## Stage D — Release prepare-only
 
 Codex may inspect versions, docs, packaging descriptors, and release notes.
+Every official ECLI release publishes exactly 21 physical GitHub Release assets,
+one per canonical matrix entry. Release publication is blocked unless
+`scripts/verify_release_assets.py` verifies the exact top-level asset set under
+`releases/<version>/`. Checksum sidecars are verification evidence, not GitHub
+Release assets.
 
 Codex must not:
 
