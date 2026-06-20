@@ -56,28 +56,38 @@ additional files.
 Mandatory GitHub Release asset names for each `<version>`:
 
 ```text
-01_pypi_wheel__ecli_editor-<version>-py3-none-any.whl
-02_pypi_sdist__ecli_editor-<version>.tar.gz
-03_linux_pyinstaller__ecli_<version>_linux_x86_64.bin
-04_linux_tarball__ecli_<version>_linux_x86_64.tar.gz
-05_debian__ecli_<version>_linux_x86_64.deb
-06_rpm__ecli_<version>_linux_x86_64.rpm
-07_opensuse__ecli_<version>_opensuse_x86_64.rpm
-08_arch__ecli_<version>_arch_x86_64.pkg.tar.zst
-09_slackware__ecli_<version>_slackware_x86_64.txz
-10_appimage__ecli_<version>_linux_x86_64.AppImage
-11_freebsd_pkg__ecli_<version>_freebsd_x86_64.pkg
-12_freebsd_ports_chroot__ecli_<version>_freebsd_ports_chroot_evidence.tar.gz
-13_macos_app__ecli_<version>_macos_universal2_app_evidence.tar.gz
-14_macos_dmg__ecli_<version>_macos_universal2.dmg
-15_windows_portable__ecli_<version>_win_x86_64.exe
-16_windows_nsis__ecli_<version>_win_x86_64_setup.exe
-17_nix_flake__ecli_<version>_nix_flake_evidence.tar.gz
-18_nixos_package__ecli_<version>_nixos_package_evidence.tar.gz
-19_docker_deb_helper__ecli_<version>_docker_deb_helper_evidence.tar.gz
-20_docker_rpm_helper__ecli_<version>_docker_rpm_helper_evidence.tar.gz
-21_workflow_contract__ecli_<version>_workflow_contract_evidence.tar.gz
+ecli_editor-<version>-py3-none-any.whl
+ecli_editor-<version>.tar.gz
+ecli_<version>_linux_x86_64.bin
+ecli_<version>_linux_x86_64.tar.gz
+ecli_<version>_linux_x86_64.deb
+ecli_<version>_linux_x86_64.rpm
+ecli_<version>_opensuse_x86_64.rpm
+ecli_<version>_arch_x86_64.pkg.tar.zst
+ecli_<version>_slackware_x86_64.txz
+ecli_<version>_linux_x86_64.AppImage
+ecli_<version>_freebsd_x86_64.pkg
+ecli_<version>_freebsd_ports_chroot_evidence.tar.gz
+ecli_<version>_macos_universal2_app_evidence.tar.gz
+ecli_<version>_macos_universal2.dmg
+ecli_<version>_win_x86_64.exe
+ecli_<version>_win_x86_64_setup.exe
+ecli_<version>_nix_flake_evidence.tar.gz
+ecli_<version>_nixos_package_evidence.tar.gz
+ecli_<version>_docker_deb_helper_evidence.tar.gz
+ecli_<version>_docker_rpm_helper_evidence.tar.gz
+ecli_<version>_workflow_contract_evidence.tar.gz
 ```
+
+Public asset names are clean. They carry no numeric ordering prefix. The
+`NN_label__` prefixes (for example `01_pypi_wheel__…`,
+`16_windows_nsis__…`) were a v0.2.3-only staging mistake: the verifier and the
+local staging contract briefly required them, and they were uploaded once before
+the v0.2.3 GitHub Release was manually repaired to clean names. They are not
+canonical and must never appear in public GitHub Release asset filenames.
+`scripts/verify_release_assets.py` now rejects any top-level file matching
+`^[0-9]{2}_.*__`. Internal ordering (positions 1..21) lives only in the matrix
+below and in the verifier's template order, never in a filename.
 
 ## Canonical 21-Item Platform & Packaging Artifact Matrix
 
@@ -94,27 +104,27 @@ unsupported package types.
 
 | # | Package / artifact | Platform / system | Repository source files | Expected artifact / output | Related GitHub workflow | Required test file | Required Claude command coverage | Required Codex prompt coverage | Release-readiness condition |
 |---|---|---|---|---|---|---|---|---|---|
-| 1 | PyPI wheel | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.py` | `01_pypi_wheel__ecli_editor-<version>-py3-none-any.whl` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_wheel_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Wheel builds, `twine check --strict` passes, checksum evidence present outside the GitHub Release asset set |
-| 2 | PyPI source distribution | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.py` | `02_pypi_sdist__ecli_editor-<version>.tar.gz` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_sdist_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Sdist builds, `twine check --strict` passes, checksum evidence present outside the GitHub Release asset set |
-| 3 | Linux generic PyInstaller executable | Linux | `packaging/pyinstaller/ecli.spec`; `packaging/pyinstaller/rthooks/force_imports.py`; `scripts/build_pyinstaller_linux.py`; root `main.py` compatibility shim | `03_linux_pyinstaller__ecli_<version>_linux_x86_64.bin` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_pyinstaller_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Runtime import check passes; spec uses root `main.py`; binary smoke-runs |
-| 4 | Linux release tarball | Linux | `scripts/build_pyinstaller_linux.py`; `scripts/verify_runtime.py`; `Makefile` targets `package-tar-linux`, `validate-tar-linux-contract` | `04_linux_tarball__ecli_<version>_linux_x86_64.tar.gz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_tarball_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Tarball artifact and checksum evidence validated; runtime smoke check passes |
-| 5 | Debian / Ubuntu `.deb` | Linux (Debian/Ubuntu) | `scripts/build_and_package_deb.py`; `docker/build-linux-deb.Dockerfile`; `Makefile` target `package-deb` | `05_debian__ecli_<version>_linux_x86_64.deb` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_deb_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | DEB artifact naming and checksum checks pass; package metadata inspected when toolchain present |
-| 6 | generic RPM `.rpm` | Linux (RPM family) | `scripts/build_and_package_rpm.py`; `docker/build-linux-rpm.Dockerfile`; `Makefile` target `package-rpm` | `06_rpm__ecli_<version>_linux_x86_64.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | RPM artifact naming and checksum checks pass; FPM/RPM metadata inspected when toolchain present |
-| 7 | openSUSE / SUSE RPM | Linux (openSUSE/SUSE) | `scripts/build_and_package_opensuse_rpm.py`; shared RPM flow | `07_opensuse__ecli_<version>_opensuse_x86_64.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_opensuse_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | openSUSE/SUSE artifact naming and checksum checks pass through the shared RPM contract |
-| 8 | Arch Linux `PKGBUILD` | Linux (Arch) | `packaging/arch/PKGBUILD` (never root `PKGBUILD`); `scripts/build_and_package_arch.py`; Docker helper `docker/build-arch-package.Dockerfile`; `Makefile` targets `package-arch` (host), `package-arch-docker` (release path) | `08_arch__ecli_<version>_arch_x86_64.pkg.tar.zst` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_arch_pkgbuild_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Raw `makepkg` output normalized under `build/` (never `releases/`); checksum evidence present; no active root `PKGBUILD` alias; release runner builds Arch in the `archlinux:base-devel` Docker helper because Ubuntu has no `makepkg` |
-| 9 | Slackware `.txz` | Linux (Slackware) | `scripts/build_and_package_slackware.py`; Linux PyInstaller helper; Docker helper `docker/build-slackware-package.Dockerfile`; `Makefile` targets `package-slackware` (host), `package-slackware-docker` (release path) | `09_slackware__ecli_<version>_slackware_x86_64.txz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_slackware_txz_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Raw `makepkg` output normalized under `build/` (never `releases/`); checksum evidence present; release runner builds Slackware in the `aclemons/slackware:current` Docker helper because Ubuntu has no Slackware `makepkg` |
-| 10 | AppImage | Linux (cross-distro) | `packaging/linux/appimage/appimage-builder.yml`; `scripts/package_appimage.py`; `Makefile` target `package-appimage` | `10_appimage__ecli_<version>_linux_x86_64.AppImage` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_appimage_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | AppImage artifact naming and checksum checks pass; descriptor mutation is AUD-003 drift |
-| 11 | FreeBSD `.pkg` | FreeBSD | `scripts/build_and_package_freebsd.py`; `scripts/build_freebsd_pkg.py`; `.github/workflows/freebsd-pkg.yml` | `11_freebsd_pkg__ecli_<version>_freebsd_x86_64.pkg` | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_pkg_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Native/VM `.pkg` naming and checksum checks pass; vmactions log and checksum evidence captured |
-| 12 | FreeBSD ports/chroot build path | FreeBSD | `scripts/build_freebsd_port.py`; `tools/freebsd-chroot-build.sh`; `Makefile` targets `package-freebsd-port`, `package-freebsd-chroot` | `12_freebsd_ports_chroot__ecli_<version>_freebsd_ports_chroot_evidence.tar.gz` | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_ports_chroot_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Local port and chroot paths are preserved as required release evidence |
-| 13 | macOS `.app` | macOS | `scripts/build_and_package_macos.py`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `13_macos_app__ecli_<version>_macos_universal2_app_evidence.tar.gz` | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_app_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | `.app` bundle built from shared PyInstaller spec using root `main.py`; Universal2 evidence captured |
-| 14 | macOS `.dmg` | macOS | `scripts/build_and_package_macos.py`; `.github/workflows/macos-dmg.yml`; `.github/workflows/macos-validate.yml`; `docs/install/macos.md` | `14_macos_dmg__ecli_<version>_macos_universal2.dmg` | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_dmg_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | macOS Contract Validate passes; DMG artifact and checksum structural validation |
-| 15 | Windows portable `.exe` | Windows | `scripts/build-and-package-windows.ps1`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `15_windows_portable__ecli_<version>_win_x86_64.exe` | `.github/workflows/windows-installer.yml` | `tests/packaging/test_packaging_windows_portable_exe_contract.py` | `.claude/commands/package-windows.md` | `.codex/prompts/package-windows.md` | Portable EXE help/version smoke passes; checksum evidence present |
-| 16 | Windows NSIS installer `.exe` | Windows | `packaging/windows/nsis/ecli.nsi`; `scripts/build-and-package-windows.ps1`; `.github/workflows/windows-installer.yml`; `.github/workflows/windows-validate.yml`; `docs/install/windows.md` | `16_windows_nsis__ecli_<version>_win_x86_64_setup.exe` | `.github/workflows/windows-installer.yml` | `tests/packaging/test_packaging_windows_nsis_installer_contract.py` | `.claude/commands/package-windows.md` | `.codex/prompts/package-windows.md` | Windows Contract Validate passes; NSIS installer and checksum validation |
-| 17 | Nix flake | Nix / NixOS | `flake.nix` | `17_nix_flake__ecli_<version>_nix_flake_evidence.tar.gz` | _local build path; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_nix_flake_contract.py` | `.claude/commands/package-nix.md` | `.codex/prompts/package-nix.md` | Flake exposes default package/app for declared systems; version drift reported against `pyproject.toml` |
-| 18 | Nix/NixOS package expression | Nix / NixOS | `packaging/nix/package.nix` | `18_nixos_package__ecli_<version>_nixos_package_evidence.tar.gz` | _local build path; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_nixos_package_contract.py` | `.claude/commands/package-nix.md` | `.codex/prompts/package-nix.md` | Package expression builds `ecli` with `mainProgram`; hard-coded version/license drift reported against `pyproject.toml` |
-| 19 | Docker DEB build helper | Linux build helper | `docker/build-linux-deb.Dockerfile`; `Makefile` targets `package-deb-docker`, `package-docker` | `19_docker_deb_helper__ecli_<version>_docker_deb_helper_evidence.tar.gz` | _build helper; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_docker_deb_helper_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Helper builds the DEB inside a container; the helper image is not itself a release artifact and must not publish or upload artifacts |
-| 20 | Docker RPM build helper | Linux build helper | `docker/build-linux-rpm.Dockerfile`; `Makefile` targets `package-rpm-docker`, `package-docker` | `20_docker_rpm_helper__ecli_<version>_docker_rpm_helper_evidence.tar.gz` | _build helper; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_docker_rpm_helper_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Helper builds the RPM inside a container; the helper image is not itself a release artifact and must not publish or upload artifacts |
-| 21 | GitHub Actions release/workflow contract map | CI / release automation | `.github/workflows/release.yml`; `.github/workflows/ci.yml`; the GitHub Actions Workflow Contract Map below | `21_workflow_contract__ecli_<version>_workflow_contract_evidence.tar.gz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_workflows_contract.py` | `.claude/commands/release.md` | `.codex/prompts/release.md` | Every workflow on disk is documented and mapped; aggregate release matrix gated by `validate-release-assets` |
+| 1 | PyPI wheel | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.py` | `ecli_editor-<version>-py3-none-any.whl` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_wheel_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Wheel builds, `twine check --strict` passes, checksum evidence present outside the GitHub Release asset set |
+| 2 | PyPI source distribution | PyPI / Python | `pyproject.toml`; `scripts/publish_pypi.py` | `ecli_editor-<version>.tar.gz` | `.github/workflows/pypi-validate.yml` | `tests/packaging/test_packaging_pypi_sdist_contract.py` | `.claude/commands/package-pypi.md` | `.codex/prompts/package-pypi.md` | Sdist builds, `twine check --strict` passes, checksum evidence present outside the GitHub Release asset set |
+| 3 | Linux generic PyInstaller executable | Linux | `packaging/pyinstaller/ecli.spec`; `packaging/pyinstaller/rthooks/force_imports.py`; `scripts/build_pyinstaller_linux.py`; root `main.py` compatibility shim | `ecli_<version>_linux_x86_64.bin` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_pyinstaller_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Runtime import check passes; spec uses root `main.py`; binary smoke-runs |
+| 4 | Linux release tarball | Linux | `scripts/build_pyinstaller_linux.py`; `scripts/verify_runtime.py`; `Makefile` targets `package-tar-linux`, `validate-tar-linux-contract` | `ecli_<version>_linux_x86_64.tar.gz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_linux_tarball_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Tarball artifact and checksum evidence validated; runtime smoke check passes |
+| 5 | Debian / Ubuntu `.deb` | Linux (Debian/Ubuntu) | `scripts/build_and_package_deb.py`; `docker/build-linux-deb.Dockerfile`; `Makefile` target `package-deb` | `ecli_<version>_linux_x86_64.deb` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_deb_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | DEB artifact naming and checksum checks pass; package metadata inspected when toolchain present |
+| 6 | generic RPM `.rpm` | Linux (RPM family) | `scripts/build_and_package_rpm.py`; `docker/build-linux-rpm.Dockerfile`; `Makefile` target `package-rpm` | `ecli_<version>_linux_x86_64.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | RPM artifact naming and checksum checks pass; FPM/RPM metadata inspected when toolchain present |
+| 7 | openSUSE / SUSE RPM | Linux (openSUSE/SUSE) | `scripts/build_and_package_opensuse_rpm.py`; shared RPM flow | `ecli_<version>_opensuse_x86_64.rpm` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_opensuse_rpm_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | openSUSE/SUSE artifact naming and checksum checks pass through the shared RPM contract |
+| 8 | Arch Linux `PKGBUILD` | Linux (Arch) | `packaging/arch/PKGBUILD` (never root `PKGBUILD`); `scripts/build_and_package_arch.py`; Docker helper `docker/build-arch-package.Dockerfile`; `Makefile` targets `package-arch` (host), `package-arch-docker` (release path) | `ecli_<version>_arch_x86_64.pkg.tar.zst` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_arch_pkgbuild_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Raw `makepkg` output normalized under `build/` (never `releases/`); checksum evidence present; no active root `PKGBUILD` alias; release runner builds Arch in the `archlinux:base-devel` Docker helper because Ubuntu has no `makepkg` |
+| 9 | Slackware `.txz` | Linux (Slackware) | `scripts/build_and_package_slackware.py`; Linux PyInstaller helper; Docker helper `docker/build-slackware-package.Dockerfile`; `Makefile` targets `package-slackware` (host), `package-slackware-docker` (release path) | `ecli_<version>_slackware_x86_64.txz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_slackware_txz_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Raw `makepkg` output normalized under `build/` (never `releases/`); checksum evidence present; release runner builds Slackware in the `aclemons/slackware:current` Docker helper because Ubuntu has no Slackware `makepkg` |
+| 10 | AppImage | Linux (cross-distro) | `packaging/linux/appimage/appimage-builder.yml`; `scripts/package_appimage.py`; `Makefile` target `package-appimage` | `ecli_<version>_linux_x86_64.AppImage` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_appimage_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | AppImage artifact naming and checksum checks pass; descriptor mutation is AUD-003 drift |
+| 11 | FreeBSD `.pkg` | FreeBSD | `scripts/build_and_package_freebsd.py`; `scripts/build_freebsd_pkg.py`; `.github/workflows/freebsd-pkg.yml` | `ecli_<version>_freebsd_x86_64.pkg` | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_pkg_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Native/VM `.pkg` naming and checksum checks pass; vmactions log and checksum evidence captured |
+| 12 | FreeBSD ports/chroot build path | FreeBSD | `scripts/build_freebsd_port.py`; `tools/freebsd-chroot-build.sh`; `Makefile` targets `package-freebsd-port`, `package-freebsd-chroot` | `ecli_<version>_freebsd_ports_chroot_evidence.tar.gz` | `.github/workflows/freebsd-pkg.yml` | `tests/packaging/test_packaging_freebsd_ports_chroot_contract.py` | `.claude/commands/package-freebsd.md` | `.codex/prompts/package-freebsd.md` | Local port and chroot paths are preserved as required release evidence |
+| 13 | macOS `.app` | macOS | `scripts/build_and_package_macos.py`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `ecli_<version>_macos_universal2_app_evidence.tar.gz` | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_app_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | `.app` bundle built from shared PyInstaller spec using root `main.py`; Universal2 evidence captured |
+| 14 | macOS `.dmg` | macOS | `scripts/build_and_package_macos.py`; `.github/workflows/macos-dmg.yml`; `.github/workflows/macos-validate.yml`; `docs/install/macos.md` | `ecli_<version>_macos_universal2.dmg` | `.github/workflows/macos-dmg.yml` | `tests/packaging/test_packaging_macos_dmg_contract.py` | `.claude/commands/package-macos.md` | `.codex/prompts/package-macos.md` | macOS Contract Validate passes; DMG artifact and checksum structural validation |
+| 15 | Windows portable `.exe` | Windows | `scripts/build-and-package-windows.ps1`; `packaging/pyinstaller/ecli.spec`; root `main.py` compatibility shim | `ecli_<version>_win_x86_64.exe` | `.github/workflows/windows-installer.yml` | `tests/packaging/test_packaging_windows_portable_exe_contract.py` | `.claude/commands/package-windows.md` | `.codex/prompts/package-windows.md` | Portable EXE help/version smoke passes; checksum evidence present |
+| 16 | Windows NSIS installer `.exe` | Windows | `packaging/windows/nsis/ecli.nsi`; `scripts/build-and-package-windows.ps1`; `.github/workflows/windows-installer.yml`; `.github/workflows/windows-validate.yml`; `docs/install/windows.md` | `ecli_<version>_win_x86_64_setup.exe` | `.github/workflows/windows-installer.yml` | `tests/packaging/test_packaging_windows_nsis_installer_contract.py` | `.claude/commands/package-windows.md` | `.codex/prompts/package-windows.md` | Windows Contract Validate passes; NSIS installer and checksum validation |
+| 17 | Nix flake | Nix / NixOS | `flake.nix` | `ecli_<version>_nix_flake_evidence.tar.gz` | _local build path; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_nix_flake_contract.py` | `.claude/commands/package-nix.md` | `.codex/prompts/package-nix.md` | Flake exposes default package/app for declared systems; version drift reported against `pyproject.toml` |
+| 18 | Nix/NixOS package expression | Nix / NixOS | `packaging/nix/package.nix` | `ecli_<version>_nixos_package_evidence.tar.gz` | _local build path; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_nixos_package_contract.py` | `.claude/commands/package-nix.md` | `.codex/prompts/package-nix.md` | Package expression builds `ecli` with `mainProgram`; hard-coded version/license drift reported against `pyproject.toml` |
+| 19 | Docker DEB build helper | Linux build helper | `docker/build-linux-deb.Dockerfile`; `Makefile` targets `package-deb-docker`, `package-docker` | `ecli_<version>_docker_deb_helper_evidence.tar.gz` | _build helper; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_docker_deb_helper_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Helper builds the DEB inside a container; the helper image is not itself a release artifact and must not publish or upload artifacts |
+| 20 | Docker RPM build helper | Linux build helper | `docker/build-linux-rpm.Dockerfile`; `Makefile` targets `package-rpm-docker`, `package-docker` | `ecli_<version>_docker_rpm_helper_evidence.tar.gz` | _build helper; release evidence assembled by release workflow_ | `tests/packaging/test_packaging_docker_rpm_helper_contract.py` | `.claude/commands/package-linux.md` | `.codex/prompts/package-linux.md` | Helper builds the RPM inside a container; the helper image is not itself a release artifact and must not publish or upload artifacts |
+| 21 | GitHub Actions release/workflow contract map | CI / release automation | `.github/workflows/release.yml`; `.github/workflows/ci.yml`; the GitHub Actions Workflow Contract Map below | `ecli_<version>_workflow_contract_evidence.tar.gz` | `.github/workflows/release.yml` | `tests/packaging/test_packaging_workflows_contract.py` | `.claude/commands/release.md` | `.codex/prompts/release.md` | Every workflow on disk is documented and mapped; aggregate release matrix gated by `validate-release-assets` |
 
 ## Platform & Packaging Release Contract Matrix
 
@@ -160,14 +170,18 @@ agent contract, release documentation, and repository-local packaging test.
 
 ## Canonical Naming Rules
 
-Final GitHub Release artifact names are the 21 prefixed filenames in
-`Permanent Official Release Asset Rule`. Builder outputs may use package-native
-names while they are being verified, but the publication directory must be
-normalized to the exact prefixed names before `scripts/verify_release_assets.py`
-passes.
+Final GitHub Release artifact names are the 21 clean public filenames in
+`Permanent Official Release Asset Rule`. They carry no numeric ordering prefix.
+Builder outputs may use package-native names while they are being verified, but
+the publication directory must be normalized to those exact clean names before
+`scripts/verify_release_assets.py` passes.
 
 Raw package builder output must never be uploaded as a substitute for the
-canonical prefixed release asset name.
+canonical release asset name.
+
+Numeric `NN_label__` prefixes are forbidden in public asset names. They were a
+v0.2.3-only staging mistake (see `Permanent Official Release Asset Rule`); the
+verifier rejects any top-level file matching `^[0-9]{2}_.*__`.
 
 Allowed `<platform>` tokens:
 
@@ -216,11 +230,11 @@ Arch Linux packaging has two valid filename domains. `PKGBUILD` and raw `makepkg
 `ecli-editor-<version>-1-<arch>.pkg.tar.zst`.
 
 The ECLI release script must normalize that package to `ecli_<version>_arch_<arch>.pkg.tar.zst` before it is
-copied to `08_arch__ecli_<version>_arch_x86_64.pkg.tar.zst` for GitHub Release publication.
+copied to `ecli_<version>_arch_x86_64.pkg.tar.zst` for GitHub Release publication.
 
 Slackware packages use the traditional `.txz` builder output format. The ECLI
 GitHub Release artifact must be copied to
-`09_slackware__ecli_<version>_slackware_x86_64.txz`.
+`ecli_<version>_slackware_x86_64.txz`.
 
 For each official GitHub Release asset, checksum evidence must exist:
 
@@ -255,7 +269,7 @@ naming. The SBOM tracks the same convention.
 The SBOM and its SHA256 sidecar are verification evidence only. They are not
 GitHub Release assets and must not be uploaded as additional GitHub Release
 files. If SBOM evidence is needed for release review, include it in workflow
-artifacts or in the `21_workflow_contract__..._evidence.tar.gz` asset.
+artifacts or in the `ecli_<version>_workflow_contract_evidence.tar.gz` asset.
 
 Format requirements:
 

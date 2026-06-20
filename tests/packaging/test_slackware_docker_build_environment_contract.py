@@ -37,7 +37,7 @@ from conftest import RepoReader, load_script_module
 VERSION = "0.2.3"
 RELEASE_WORKFLOW = ".github/workflows/release.yml"
 SLACKWARE_DOCKERFILE = "docker/build-slackware-package.Dockerfile"
-CANONICAL_SLACKWARE_ASSET = f"09_slackware__ecli_{VERSION}_slackware_x86_64.txz"
+CANONICAL_SLACKWARE_ASSET = f"ecli_{VERSION}_slackware_x86_64.txz"
 
 
 @pytest.fixture

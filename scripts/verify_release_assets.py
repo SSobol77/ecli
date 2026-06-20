@@ -16,9 +16,14 @@
 
 This verifier is intentionally separate from checksum verification. Official
 release assets are the 21 top-level files named by ``expected_asset_names()``.
+Public asset names are clean: they carry no numeric ordering prefix. Any
+top-level file matching ``^[0-9]{2}_..*__`` (the historical v0.2.3 staging
+mistake) is rejected. Internal ordering is represented only by the position of
+each template in ``ASSET_TEMPLATES``, never by the public filename.
+
 Checksum sidecars may be used during CI validation under
 ``releases/<version>/.checksums/``, but top-level ``.sha256`` files are not
-GitHub Release assets and therefore make this verifier fail as extras.
+GitHub Release assets and therefore make this verifier fail.
 
 The script is read-only: it never builds, publishes, uploads, tags, pushes, or
 modifies release files.
@@ -27,6 +32,7 @@ modifies release files.
 from __future__ import annotations
 
 import argparse
+import re
 import sys
 import tomllib
 from pathlib import Path
@@ -38,29 +44,40 @@ EXIT_RELEASE_DIR_MISSING = 2
 EXIT_ASSET_MISMATCH = 3
 
 
+# Clean public GitHub Release asset names, in canonical internal order
+# (positions 1..21). The order encodes internal ordering only; it must never be
+# rendered as a numeric filename prefix. Numeric prefixes such as
+# ``01_pypi_wheel__`` were a v0.2.3-only staging mistake and are rejected by
+# ``verify_release_assets`` via ``PREFIXED_ASSET_RE``.
 ASSET_TEMPLATES: tuple[str, ...] = (
-    "01_pypi_wheel__ecli_editor-{version}-py3-none-any.whl",
-    "02_pypi_sdist__ecli_editor-{version}.tar.gz",
-    "03_linux_pyinstaller__ecli_{version}_linux_x86_64.bin",
-    "04_linux_tarball__ecli_{version}_linux_x86_64.tar.gz",
-    "05_debian__ecli_{version}_linux_x86_64.deb",
-    "06_rpm__ecli_{version}_linux_x86_64.rpm",
-    "07_opensuse__ecli_{version}_opensuse_x86_64.rpm",
-    "08_arch__ecli_{version}_arch_x86_64.pkg.tar.zst",
-    "09_slackware__ecli_{version}_slackware_x86_64.txz",
-    "10_appimage__ecli_{version}_linux_x86_64.AppImage",
-    "11_freebsd_pkg__ecli_{version}_freebsd_x86_64.pkg",
-    "12_freebsd_ports_chroot__ecli_{version}_freebsd_ports_chroot_evidence.tar.gz",
-    "13_macos_app__ecli_{version}_macos_universal2_app_evidence.tar.gz",
-    "14_macos_dmg__ecli_{version}_macos_universal2.dmg",
-    "15_windows_portable__ecli_{version}_win_x86_64.exe",
-    "16_windows_nsis__ecli_{version}_win_x86_64_setup.exe",
-    "17_nix_flake__ecli_{version}_nix_flake_evidence.tar.gz",
-    "18_nixos_package__ecli_{version}_nixos_package_evidence.tar.gz",
-    "19_docker_deb_helper__ecli_{version}_docker_deb_helper_evidence.tar.gz",
-    "20_docker_rpm_helper__ecli_{version}_docker_rpm_helper_evidence.tar.gz",
-    "21_workflow_contract__ecli_{version}_workflow_contract_evidence.tar.gz",
+    "ecli_editor-{version}-py3-none-any.whl",
+    "ecli_editor-{version}.tar.gz",
+    "ecli_{version}_linux_x86_64.bin",
+    "ecli_{version}_linux_x86_64.tar.gz",
+    "ecli_{version}_linux_x86_64.deb",
+    "ecli_{version}_linux_x86_64.rpm",
+    "ecli_{version}_opensuse_x86_64.rpm",
+    "ecli_{version}_arch_x86_64.pkg.tar.zst",
+    "ecli_{version}_slackware_x86_64.txz",
+    "ecli_{version}_linux_x86_64.AppImage",
+    "ecli_{version}_freebsd_x86_64.pkg",
+    "ecli_{version}_freebsd_ports_chroot_evidence.tar.gz",
+    "ecli_{version}_macos_universal2_app_evidence.tar.gz",
+    "ecli_{version}_macos_universal2.dmg",
+    "ecli_{version}_win_x86_64.exe",
+    "ecli_{version}_win_x86_64_setup.exe",
+    "ecli_{version}_nix_flake_evidence.tar.gz",
+    "ecli_{version}_nixos_package_evidence.tar.gz",
+    "ecli_{version}_docker_deb_helper_evidence.tar.gz",
+    "ecli_{version}_docker_rpm_helper_evidence.tar.gz",
+    "ecli_{version}_workflow_contract_evidence.tar.gz",
 )
+
+
+# Forbidden public filename shape: a two-digit ordering prefix followed by a
+# ``label__`` segment (e.g. ``16_windows_nsis__ecli_...``). Public release asset
+# names must never carry this prefix.
+PREFIXED_ASSET_RE = re.compile(r"^[0-9]{2}_.*__")
 
 
 class _ContractArgumentParser(argparse.ArgumentParser):
@@ -127,9 +144,26 @@ def verify_release_assets(release_dir: Path, version: str) -> int:
     actual = {name for name in entries if (release_dir / name).is_file()}
     unexpected_dirs = {name for name in entries if (release_dir / name).is_dir()}
 
+    # Public asset names are clean. Numeric-prefixed names and top-level
+    # ``.sha256`` sidecars are contract violations even though they would also be
+    # caught by the generic "extra" set below; report them explicitly so the
+    # failure reason is unambiguous.
+    prefixed = sorted(name for name in actual if PREFIXED_ASSET_RE.match(name))
+    sidecars = sorted(name for name in actual if name.endswith(".sha256"))
+
     missing = sorted(expected - actual)
     extra = sorted((actual - expected) | unexpected_dirs)
 
+    if prefixed:
+        print("PREFIXED:")
+        for name in prefixed:
+            print(f"  {name}")
+        print("ERROR: numeric-prefixed names are not public release asset names")
+    if sidecars:
+        print("SIDECAR:")
+        for name in sidecars:
+            print(f"  {name}")
+        print("ERROR: top-level .sha256 sidecars must live under .checksums/")
     if missing:
         print("MISSING:")
         for name in missing:
@@ -141,7 +175,7 @@ def verify_release_assets(release_dir: Path, version: str) -> int:
 
     if len(actual) != 21:
         print(f"ERROR: expected exactly 21 release assets, found {len(actual)}")
-    if missing or extra or len(actual) != 21:
+    if missing or extra or prefixed or sidecars or len(actual) != 21:
         return EXIT_ASSET_MISMATCH
 
     print(f"PASS: exactly 21 release assets present for {version}")

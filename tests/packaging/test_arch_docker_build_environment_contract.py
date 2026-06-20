@@ -36,7 +36,7 @@ from conftest import RepoReader, load_script_module
 
 VERSION = "0.2.3"
 RELEASE_WORKFLOW = ".github/workflows/release.yml"
-CANONICAL_ARCH_ASSET = f"08_arch__ecli_{VERSION}_arch_x86_64.pkg.tar.zst"
+CANONICAL_ARCH_ASSET = f"ecli_{VERSION}_arch_x86_64.pkg.tar.zst"
 
 
 @pytest.fixture
