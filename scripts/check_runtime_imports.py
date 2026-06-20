@@ -26,6 +26,11 @@ FORBIDDEN_IMPORT_PARTS = frozenset(
     {"conftest", "mock", "pytest", "test_helpers", "testing", "unittest"}
 )
 SOURCE_ROOT = Path("src/ecli")
+# Imported, read-only VS Code / TextMate extension assets (issue #98) are not
+# ECLI runtime source. The upstream tree must remain unchanged and contains
+# foreign-language code and intentionally-malformed Python fixtures, so this
+# guard must not parse it. See docs/architecture/extensions-layer.md.
+EXCLUDED_TOP_LEVEL = frozenset({"extensions"})
 
 
 def _forbidden_imports(path: Path) -> list[tuple[int, str]]:
@@ -56,6 +61,9 @@ def main() -> int:
     """Validate production runtime import policy."""
     violations: list[str] = []
     for path in sorted(SOURCE_ROOT.rglob("*.py")):
+        relative = path.relative_to(SOURCE_ROOT)
+        if relative.parts and relative.parts[0] in EXCLUDED_TOP_LEVEL:
+            continue
         for lineno, import_text in _forbidden_imports(path):
             violations.append(
                 f"{path}:{lineno}: forbidden runtime import: {import_text}"

@@ -136,6 +136,10 @@ markers = [
 
 [tool.mypy]
 files = ["src/ecli", "tests"]
+# Imported, read-only VS Code / TextMate extension assets (issue #98) are not
+# ECLI Python sources and must not be type-checked. See
+# docs/architecture/extensions-layer.md.
+exclude = ['^src/ecli/extensions/']
 mypy_path = "src"
 python_version = "3.11"
 ignore_missing_imports = true
@@ -155,6 +159,11 @@ extend-exclude = [
     ".git",
     "build",
     "dist",
+    # Imported, read-only VS Code / TextMate extension assets (issue #98). This
+    # upstream tree must remain unchanged and contains foreign-language code and
+    # intentionally-malformed test fixtures; ECLI's own linters/formatters must
+    # not scan it. See docs/architecture/extensions-layer.md.
+    "src/ecli/extensions",
     "src/ecli/core/Ecli.py",
     "src/ecli/core/History.py",
     "src/ecli/integrations/AI.py",

@@ -24,6 +24,12 @@ ROOT_README = "README.md"
 OLD_RELEASE_README = "docs/release/" + ROOT_README
 NEW_RELEASE_README = "docs/release/README-release.md"
 
+# Nested README.md files under the imported, read-only upstream VS Code /
+# TextMate extension asset tree (issue #98) belong to the upstream assets and
+# are exempt from the ECLI README naming policy. The policy is unchanged for the
+# rest of the repository. See docs/architecture/extensions-layer.md.
+IMPORTED_EXTENSIONS_PREFIX = "src/ecli/extensions/"
+
 
 def tracked_files() -> list[str]:
     completed = subprocess.run(
@@ -46,7 +52,8 @@ def test_root_readme_is_the_only_tracked_global_readme() -> None:
     non_root_readmes = [
         path
         for path in files
-        if path.endswith(f"/{ROOT_README}") or path == ROOT_README
+        if (path.endswith(f"/{ROOT_README}") or path == ROOT_README)
+        and not path.startswith(IMPORTED_EXTENSIONS_PREFIX)
     ]
     assert non_root_readmes == [ROOT_README]
 
