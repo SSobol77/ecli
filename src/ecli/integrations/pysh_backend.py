@@ -64,9 +64,7 @@ class PySHSubprocessBackend:
         """Return True when the configured PySH executable is discoverable."""
         return self._resolve_executable() is not None
 
-    def run(
-        self, command: str, cwd: Path, env: Mapping[str, str]
-    ) -> PySHCommandResult:
+    def run(self, command: str, cwd: Path, env: Mapping[str, str]) -> PySHCommandResult:
         """Execute *command* as ``pysh -c <command>`` without host shell parsing."""
         executable = self._resolve_executable()
         if executable is None:

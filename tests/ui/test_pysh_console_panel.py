@@ -78,9 +78,7 @@ class _FakeBackend:
         self.run_calls: list[tuple[str, Path, dict[str, str]]] = []
         self.cancel_calls = 0
 
-    def run(
-        self, command: str, cwd: Path, env: Mapping[str, str]
-    ) -> PySHCommandResult:
+    def run(self, command: str, cwd: Path, env: Mapping[str, str]) -> PySHCommandResult:
         env_copy = dict(env)
         self.run_calls.append((command, cwd, env_copy))
         if self.result is not None:

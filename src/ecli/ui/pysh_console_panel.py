@@ -318,7 +318,9 @@ class PySHConsolePanel(BasePanel):
 
     def _insert_text(self, text: str) -> None:
         self.input_line = (
-            self.input_line[: self.cursor_col] + text + self.input_line[self.cursor_col :]
+            self.input_line[: self.cursor_col]
+            + text
+            + self.input_line[self.cursor_col :]
         )
         self.cursor_col += len(text)
         self.history_index = None
@@ -403,7 +405,10 @@ class PySHConsolePanel(BasePanel):
 
     def _close_panel(self) -> None:
         panel_manager = getattr(self.editor, "panel_manager", None)
-        if panel_manager is not None and getattr(panel_manager, "active_panel", None) is self:
+        if (
+            panel_manager is not None
+            and getattr(panel_manager, "active_panel", None) is self
+        ):
             panel_manager.close_active_panel()
         else:
             self.close()

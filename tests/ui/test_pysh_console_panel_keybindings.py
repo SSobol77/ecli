@@ -81,7 +81,9 @@ class _BinderEditor:
         return True
 
 
-def _make_panel(monkeypatch: pytest.MonkeyPatch) -> tuple[PySHConsolePanel, _FakeEditor]:
+def _make_panel(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[PySHConsolePanel, _FakeEditor]:
     monkeypatch.setattr("ecli.ui.panels.curses.newwin", lambda *args: _FakeWindow())
     editor = _FakeEditor()
     panel = PySHConsolePanel(editor.stdscr, editor)

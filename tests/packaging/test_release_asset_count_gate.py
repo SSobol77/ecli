@@ -69,7 +69,9 @@ def test_no_canonical_name_carries_a_numeric_prefix(
     names = release_assets.expected_asset_names("7.6.5")
 
     prefixed = [name for name in names if PREFIXED_RE.match(name)]
-    assert prefixed == [], f"numeric-prefixed public asset names are forbidden: {prefixed}"
+    assert prefixed == [], (
+        f"numeric-prefixed public asset names are forbidden: {prefixed}"
+    )
     assert all(name.startswith("ecli_") for name in names)
 
 
@@ -302,7 +304,9 @@ def test_top_level_sha256_sidecar_fails_as_extra_asset(
     )
 
 
-def test_checksums_directory_is_allowed(release_assets: ModuleType, tmp_path: Path) -> None:
+def test_checksums_directory_is_allowed(
+    release_assets: ModuleType, tmp_path: Path
+) -> None:
     names = release_assets.expected_asset_names("1.2.3")
     _write_assets(tmp_path, names)
     checksums = tmp_path / ".checksums"

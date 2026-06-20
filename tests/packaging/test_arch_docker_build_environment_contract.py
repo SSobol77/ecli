@@ -227,7 +227,10 @@ def test_normalized_arch_artifact_is_under_releases(
     version = arch.read_version(repo_root)
     arch_label = arch.normalize_arch()
     normalized = (
-        repo_root / "releases" / version / f"ecli_{version}_arch_{arch_label}.pkg.tar.zst"
+        repo_root
+        / "releases"
+        / version
+        / f"ecli_{version}_arch_{arch_label}.pkg.tar.zst"
     )
     assert normalized.parent == repo_root / "releases" / version
 

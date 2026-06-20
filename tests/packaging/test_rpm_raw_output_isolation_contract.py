@@ -90,11 +90,7 @@ def test_raw_output_paths_match_documented_layout(
     assert generic == repo_root / "build" / "rpm" / "fpm" / f"ecli-{VERSION}.rpm"
     assert (
         opensuse
-        == repo_root
-        / "build"
-        / "opensuse-rpm"
-        / "fpm"
-        / f"ecli-{VERSION}-opensuse.rpm"
+        == repo_root / "build" / "opensuse-rpm" / "fpm" / f"ecli-{VERSION}-opensuse.rpm"
     )
 
 
@@ -119,9 +115,7 @@ def test_script_does_not_assemble_raw_fpm_output_in_releases(
     # The target-specific build/ layout must drive the FPM --package path.
     assert "fpm_output_layout(" in script
     # The canonical normalized release name must remain unchanged.
-    assert (
-        'f"{package_name}_{version}_{platform_label}_{arch}.rpm"' in script
-    )
+    assert 'f"{package_name}_{version}_{platform_label}_{arch}.rpm"' in script
 
 
 def test_canonical_release_asset_names_unchanged(

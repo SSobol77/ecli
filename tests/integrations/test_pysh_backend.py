@@ -85,7 +85,9 @@ def test_pysh_backend_missing_executable_is_deterministic(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
-    monkeypatch.setattr("ecli.integrations.pysh_backend.shutil.which", lambda _name: None)
+    monkeypatch.setattr(
+        "ecli.integrations.pysh_backend.shutil.which", lambda _name: None
+    )
     backend = PySHSubprocessBackend()
 
     result = backend.run("echo hello", tmp_path, {"ECLI_TEST": "1"})
@@ -110,7 +112,9 @@ def test_pysh_backend_invokes_pysh_with_argv_and_captures_result(
         return _CompletedProcess(stdout="stdout text\n", stderr="stderr text\n")
 
     env = {"ORIGINAL": "value"}
-    monkeypatch.setattr("ecli.integrations.pysh_backend.shutil.which", lambda _name: "pysh")
+    monkeypatch.setattr(
+        "ecli.integrations.pysh_backend.shutil.which", lambda _name: "pysh"
+    )
     monkeypatch.setattr("ecli.integrations.pysh_backend.subprocess.Popen", fake_popen)
 
     result = PySHSubprocessBackend().run("echo $HOME && false", tmp_path, env)
@@ -168,7 +172,9 @@ def test_pysh_backend_cancelled_run_returns_cancelled_result(
         processes.append(process)
         return process
 
-    monkeypatch.setattr("ecli.integrations.pysh_backend.shutil.which", lambda _name: "pysh")
+    monkeypatch.setattr(
+        "ecli.integrations.pysh_backend.shutil.which", lambda _name: "pysh"
+    )
     monkeypatch.setattr("ecli.integrations.pysh_backend.subprocess.Popen", fake_popen)
 
     result = backend.run("long command", tmp_path, {})

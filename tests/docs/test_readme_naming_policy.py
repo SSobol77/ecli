@@ -44,7 +44,9 @@ def test_root_readme_is_the_only_tracked_global_readme() -> None:
     assert OLD_RELEASE_README not in files
 
     non_root_readmes = [
-        path for path in files if path.endswith(f"/{ROOT_README}") or path == ROOT_README
+        path
+        for path in files
+        if path.endswith(f"/{ROOT_README}") or path == ROOT_README
     ]
     assert non_root_readmes == [ROOT_README]
 
