@@ -157,8 +157,12 @@ gh api repos/SSobol77/ecli/milestones --jq \
 |---|---|---|
 | `#70` publish v0.2.0 w/ TUI panels | v0.2.0 (m2) | reconcile vs released v0.2.2 → close-as-delivered OR keep as next-tag tracker |
 | `#53` reduce `Ecli.py` by service delegation | v0.2.0 (m2) | keep open; **no agent split of `Ecli.py`** (contract-forbidden) |
-| `#54` finalize VMLab contracts (`status:contract-drift`) | v0.3.0 (m3) | clear contract-drift BEFORE #55/#56 |
-| `#55/#56/#57` VMLab discovery/argv/CLI | v0.3.0 (m3) | keep `status:blocked` until m2 closes; order 54→55→56→57 |
+| `#54` finalize VMLab contracts (`status:contract-drift`) | v0.3.5 (m3) | clear contract-drift BEFORE #55/#56 |
+| `#55/#56/#57` VMLab discovery/argv/CLI | v0.3.5 (m3) | keep `status:blocked` until m2 closes; order 54→55→56→57 |
+
+Milestone note: the VMLab Skeleton is milestone #3, **v0.3.5 — VMLab Skeleton**,
+and stays `status:blocked` until the Extensions Foundation milestone completes.
+The Extensions Foundation milestone is **v0.3.0**.
 
 `[MAINTAINER]` Execute the chosen actions yourself (examples):
 

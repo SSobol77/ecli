@@ -95,8 +95,17 @@ architecture decision.
 
 ## Release Boundary
 
-v0.2.3 must not change the VMLab roadmap and must not modify the v0.3.0 VMLab
-Skeleton scope. VMLab remains in its own milestone line after v0.2.3.
+v0.2.3 must not change the VMLab roadmap and must not modify the VMLab Skeleton
+milestone scope. VMLab remains in its own milestone line after v0.2.3.
+
+> Roadmap clarification (recorded for issue #97; the v0.2.x ADR decision above is
+> unchanged). The milestone numbering has since been revised, so this note is
+> added to prevent misreading. The v0.3.0 milestone is now **Extensions
+> Foundation**. The VMLab Skeleton was moved to a later milestone,
+> **v0.3.5 — VMLab Skeleton**, and is blocked until the Extensions Foundation
+> milestone (v0.3.0) is complete. This clarification changes no technical
+> behavior: F11 remains the PySH Console Panel, and a generic PTY terminal
+> emulator remains rejected.
 
 ## Acceptance Checklist
 

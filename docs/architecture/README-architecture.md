@@ -27,6 +27,7 @@ Defines architecture authority, ownership contracts, lifecycle semantics, and mi
 | `event-and-concurrency-model.md` | Operational + contract | queue ownership, payload expectations, redraw triggers |
 | `integration-boundaries.md` | Normative + operational | integration isolation, degradation semantics, failure consequence |
 | `panel-console-stabilization.md` | Normative boundary | 0.2.x F11/PySH console direction and full PTY terminal emulator rejection |
+| `extensions-layer.md` | Normative contract | v0.3.0 imported data-only extension asset tree under `src/ecli/extensions/` and the deterministic adapter boundary |
 
 ## Explicit Authority Pointers
 
