@@ -152,11 +152,15 @@ jobs:
         run: |
           set -euo pipefail
           # Docker containers in package-deb-docker run as root and leave
-          # root-owned files in build/ and dist/. The next make target invokes
-          # 'make clean' on the host under the runner user, which fails on
-          # root-owned paths. Reset ownership defensively before continuing.
+          # root-owned files in build/, dist/, and releases/<version>/ (the deb
+          # script writes releases/<version>/.linux.env and the .deb/.sha256 as
+          # root). The next make targets run on the host under the runner user:
+          # 'make clean' fails on root-owned build/dist, and 'make
+          # package-opensuse-rpm' cannot rewrite releases/<version>/.linux.env.
+          # Reset ownership of every Docker-touched output path (#93).
           if [ -d build ]; then sudo chown -R "$(id -u):$(id -g)" build/; fi
           if [ -d dist ]; then sudo chown -R "$(id -u):$(id -g)" dist/; fi
+          if [ -d releases ]; then sudo chown -R "$(id -u):$(id -g)" releases/; fi
 
       - name: Build RPM package in Docker
         run: make package-rpm-docker
@@ -164,8 +168,13 @@ jobs:
       - name: Reset ownership after Docker RPM build
         run: |
           set -euo pipefail
+          # Mirror the DEB reset. The Docker RPM build writes root-owned files in
+          # build/, dist/, and releases/<version>/ (including .linux.env). Reset
+          # ownership so the host-side 'make package-opensuse-rpm' can rewrite
+          # releases/<version>/.linux.env instead of hitting PermissionError (#93).
           if [ -d build ]; then sudo chown -R "$(id -u):$(id -g)" build/; fi
           if [ -d dist ]; then sudo chown -R "$(id -u):$(id -g)" dist/; fi
+          if [ -d releases ]; then sudo chown -R "$(id -u):$(id -g)" releases/; fi
 
       - name: Build openSUSE RPM
         run: make package-opensuse-rpm

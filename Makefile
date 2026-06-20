@@ -431,6 +431,14 @@ package-deb-docker: clean validate-runtime-imports
 		--build-arg DEBIAN_RELEASE=bullseye \
 		-t ecli-deb:py311-bullseye .
 	docker run --rm -v "$$(pwd):/app" -w /app ecli-deb:py311-bullseye
+	@# Docker ran as root via the bind mount and may leave root-owned files in
+	@# build/, dist/, and $(RELEASE_DIR) (e.g. .linux.env). Reset ownership so
+	@# later host-side targets (clean, package-opensuse-rpm) succeed (#93).
+	@# Best-effort and safe: non-interactive sudo, no-op when already user-owned
+	@# or when passwordless sudo is unavailable.
+	-@for d in build dist "$(RELEASE_DIR)"; do \
+		[ -d "$$d" ] && sudo -n chown -R "$$(id -u):$$(id -g)" "$$d" 2>/dev/null || true; \
+	done
 	$(MAKE) package-deb-assert
 
 # --- Assertion helper: verify expected artifact names/locations ---------------
@@ -484,6 +492,14 @@ package-rpm-docker: clean validate-runtime-imports
 	@command -v docker >/dev/null 2>&1 || (echo "Missing docker for package-rpm-docker."; exit 5)
 	docker build -f docker/build-linux-rpm.Dockerfile -t ecli-rpm:alma9 .
 	docker run --rm -e PYTHON=python3.11 -v "$$(pwd):/app" -w /app ecli-rpm:alma9
+	@# Docker ran as root via the bind mount and may leave root-owned files in
+	@# build/, dist/, and $(RELEASE_DIR) (e.g. .linux.env). Reset ownership so
+	@# later host-side targets (clean, package-opensuse-rpm) succeed (#93).
+	@# Best-effort and safe: non-interactive sudo, no-op when already user-owned
+	@# or when passwordless sudo is unavailable.
+	-@for d in build dist "$(RELEASE_DIR)"; do \
+		[ -d "$$d" ] && sudo -n chown -R "$$(id -u):$$(id -g)" "$$d" 2>/dev/null || true; \
+	done
 	$(MAKE) package-rpm-assert
 
 # --- Assertion helper: verify expected artifact names/locations ---------------
