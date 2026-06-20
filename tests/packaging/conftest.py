@@ -207,7 +207,10 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         key="slackware-txz",
         name="Slackware `.txz`",
         platform="Linux (Slackware)",
-        sources=("scripts/build_and_package_slackware.py",),
+        sources=(
+            "scripts/build_and_package_slackware.py",
+            "docker/build-slackware-package.Dockerfile",
+        ),
         artifact_token="09_slackware__ecli_<version>_slackware_x86_64.txz",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_slackware_txz_contract.py",

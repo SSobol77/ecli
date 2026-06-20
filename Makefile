@@ -185,7 +185,8 @@ help-full: help
 	@echo "  make package-opensuse-rpm     openSUSE/SUSE RPM build"
 	@echo "  make package-arch             Arch PKGBUILD package (host, needs makepkg)"
 	@echo "  make package-arch-docker      Containerized Arch package build"
-	@echo "  make package-slackware        Slackware TXZ package"
+	@echo "  make package-slackware        Slackware TXZ package (host, needs makepkg)"
+	@echo "  make package-slackware-docker Containerized Slackware package build"
 	@echo "  make package-appimage         AppImage build"
 	@echo "  make package-docker           Docker DEB/RPM helpers"
 	@echo "  make package-linux            Linux package group"
@@ -577,11 +578,37 @@ package-arch-assert:
 	@echo "--> OK: $(ARCH_PKG_FILE)"
 	@echo "--> OK: $(ARCH_SHA_FILE)"
 
-# Build Slackware TXZ package using canonical Python helper.
+# Build Slackware TXZ package using the canonical Python helper.
+# Host-only: requires a real Slackware pkgtools toolchain (makepkg). The Ubuntu
+# release runner has no Slackware makepkg, so the release-canonical path is
+# package-slackware-docker, which runs the same script inside a real Slackware
+# container (docker/build-slackware-package.Dockerfile) (#93).
 .PHONY: package-slackware
 package-slackware: clean validate-runtime-imports
-	@command -v makepkg >/dev/null 2>&1 || (echo "Missing makepkg for Slackware package build."; exit 5)
+	@command -v makepkg >/dev/null 2>&1 || (echo "Missing makepkg for Slackware package build. Use package-slackware-docker or build on a Slackware host."; exit 5)
 	$(PYTHON) ./scripts/build_and_package_slackware.py
+	$(MAKE) package-slackware-assert
+
+# Build the Slackware package inside a real Slackware container (release path).
+.PHONY: package-slackware-docker
+package-slackware-docker: clean validate-runtime-imports
+	@command -v docker >/dev/null 2>&1 || (echo "Missing docker for package-slackware-docker."; exit 5)
+	docker build -f docker/build-slackware-package.Dockerfile -t ecli-slackware:current .
+	docker run --rm -v "$$(pwd):/app" -w /app ecli-slackware:current
+	@# Slackware makepkg runs as root inside the container and leaves root-owned
+	@# files in build/, dist/, and $(RELEASE_DIR). The next host-side steps run as
+	@# the runner user (package-appimage writes releases/), so reset ownership of
+	@# every Docker-touched output path (#93). Best-effort and safe: non-interactive
+	@# sudo, no-op when already user-owned or when passwordless sudo is unavailable.
+	-@for d in build dist "$(RELEASE_DIR)"; do \
+		[ -d "$$d" ] && sudo -n chown -R "$$(id -u):$$(id -g)" "$$d" 2>/dev/null || true; \
+	done
+	$(MAKE) package-slackware-assert
+
+# --- Assertion helper: verify expected artifact names/locations ---------------
+.PHONY: package-slackware-assert
+package-slackware-assert:
+	@test -n "$(SLACKWARE_PKG_VERSION)" || (echo "SLACKWARE_PKG_VERSION is empty (check pyproject.toml)"; exit 1)
 	$(call assert_current_release_file,$(SLACKWARE_PKG_FILE))
 	$(call verify_sha256,$(SLACKWARE_PKG_FILE))
 	@echo "--> OK: $(SLACKWARE_PKG_FILE)"
@@ -1043,7 +1070,7 @@ package-docker: package-deb-docker package-rpm-docker
 
 # Build all Linux packages (including AppImage and tar.gz)
 .PHONY: package-linux
-package-linux: package-deb-docker package-rpm-docker package-opensuse-rpm package-arch-docker package-slackware package-appimage package-tar-linux
+package-linux: package-deb-docker package-rpm-docker package-opensuse-rpm package-arch-docker package-slackware-docker package-appimage package-tar-linux
 	@echo ""
 	@echo "╔═══════════════════════════════════════════════════════════════════════╗"
 	@echo "║                 ALL LINUX PACKAGES BUILT SUCCESSFULLY                 ║"

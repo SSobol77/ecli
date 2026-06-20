@@ -19,12 +19,24 @@ builds the Linux PyInstaller binary, stages a Slackware payload (including
 ``install/slack-desc``), runs Slackware ``makepkg``, writes a SHA256 sidecar, and
 verifies the artifact as ``releases/<version>/ecli_<version>_slackware_<arch>.txz``.
 
+Slackware ``makepkg`` needs a real Slackware pkgtools environment, which the
+Ubuntu release runner does not have. The release-canonical path runs this script
+inside the ``docker/build-slackware-package.Dockerfile`` helper
+(``make package-slackware-docker``); the host-only ``make package-slackware``
+target remains for Slackware developer machines.
+
+Raw/intermediate makepkg output is written under ``build/slackware`` and only the
+normalized canonical artifact and its checksum sidecar are copied into
+``releases/<version>/`` so that ``releases/<version>/`` never holds a raw package
+name as a top-level release asset (#93), mirroring the Arch/RPM raw-output
+isolation.
+
 This script orchestrates the local packaging toolchain only. It never publishes,
 uploads, signs with external keys, tags, pushes, or triggers any workflow.
 
 Exit codes:
 
-* ``0`` package built and verified
+* ``0`` package built, normalized, and verified
 * ``1`` version unreadable or PyInstaller output missing
 * ``5`` a required Slackware tool (``makepkg``/``sha256sum``) is missing
 """
@@ -74,6 +86,17 @@ def find_executable(root: Path) -> Path | None:
     return None
 
 
+def slackware_build_dir(root: Path) -> Path:
+    """Return the ``build/`` staging dir for raw makepkg output (never releases/).
+
+    Slackware ``makepkg`` packages the staged payload tree (``pkg/``) and writes
+    the raw ``.txz`` here. Keeping this under ``build/`` guarantees
+    ``releases/<version>/`` holds only the canonical normalized artifact and its
+    checksum sidecar (#93), mirroring ``scripts/build_and_package_arch.py``.
+    """
+    return root / "build" / "slackware"
+
+
 def slack_desc() -> str:
     p = PACKAGE_NAME
     return (
@@ -120,9 +143,13 @@ def main(argv: list[str] | None = None) -> int:
         return EXIT_MISSING_TOOL
 
     releases_dir = root / "releases" / version
-    build_root = root / "build" / "slackware"
+    build_root = slackware_build_dir(root)
     staging_root = build_root / "pkg"
-    final_txz = releases_dir / f"{PACKAGE_NAME}_{version}_slackware_{arch}.txz"
+    artifact_name = f"{PACKAGE_NAME}_{version}_slackware_{arch}.txz"
+    # Raw makepkg output stays under build/ (never releases/); the normalized
+    # canonical artifact is copied into releases/<version>/ (#93).
+    raw_txz = build_root / artifact_name
+    normalized = releases_dir / artifact_name
 
     print("==> Building ECLI PyInstaller binary")
     subprocess.run(
@@ -168,23 +195,34 @@ def main(argv: list[str] | None = None) -> int:
     (staging_root / "install" / "slack-desc").write_text(slack_desc(), encoding="utf-8")
 
     print("==> Building Slackware package")
-    final_txz.unlink(missing_ok=True)
-    (releases_dir / f"{final_txz.name}.sha256").unlink(missing_ok=True)
+    raw_txz.unlink(missing_ok=True)
     subprocess.run(
-        ["makepkg", "-l", "y", "-c", "n", str(final_txz)],
+        ["makepkg", "-l", "y", "-c", "n", str(raw_txz)],
         cwd=staging_root,
         check=True,
     )
+    if not raw_txz.is_file():
+        print(
+            f"ERROR: Slackware package artifact not found under {build_root}.",
+            file=sys.stderr,
+        )
+        return EXIT_ERROR
+
+    print("==> Normalizing release artifact")
+    normalized.unlink(missing_ok=True)
+    (releases_dir / f"{normalized.name}.sha256").unlink(missing_ok=True)
+    shutil.copy2(raw_txz, normalized)
 
     print("==> Writing checksum")
-    write_sha256(releases_dir, final_txz)
+    write_sha256(releases_dir, normalized)
     subprocess.run(
-        [sys.executable, "scripts/verify_runtime.py", str(final_txz)],
+        [sys.executable, "scripts/verify_runtime.py", str(normalized)],
         cwd=root,
         check=True,
     )
 
-    print(f"DONE: {final_txz}")
+    print(f"Raw makepkg artifact: {raw_txz}")
+    print(f"DONE: {normalized}")
     return EXIT_OK
 
 

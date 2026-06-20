@@ -188,15 +188,27 @@ jobs:
           # makepkg refuses to run as root, so package-arch-docker builds as a
           # non-root user inside the Arch base-devel container and leaves
           # build-user-owned files in build/, dist/, and releases/<version>/. The
-          # next host-side steps run as the runner user (package-slackware runs
-          # 'make clean' over build/dist; package-appimage writes releases/), so
-          # reset ownership of every Docker-touched output path (#93).
+          # next host-side steps run as the runner user (package-slackware-docker
+          # runs 'make clean' over build/dist; package-appimage writes releases/),
+          # so reset ownership of every Docker-touched output path (#93).
           if [ -d build ]; then sudo chown -R "$(id -u):$(id -g)" build/; fi
           if [ -d dist ]; then sudo chown -R "$(id -u):$(id -g)" dist/; fi
           if [ -d releases ]; then sudo chown -R "$(id -u):$(id -g)" releases/; fi
 
-      - name: Build Slackware package
-        run: make package-slackware
+      - name: Build Slackware package in Docker
+        run: make package-slackware-docker
+
+      - name: Reset ownership after Docker Slackware build
+        run: |
+          set -euo pipefail
+          # Slackware makepkg runs as root inside the Slackware container
+          # (docker/build-slackware-package.Dockerfile) and leaves root-owned
+          # files in build/, dist/, and releases/<version>/. The next host-side
+          # step (package-appimage writes releases/) runs as the runner user, so
+          # reset ownership of every Docker-touched output path (#93).
+          if [ -d build ]; then sudo chown -R "$(id -u):$(id -g)" build/; fi
+          if [ -d dist ]; then sudo chown -R "$(id -u):$(id -g)" dist/; fi
+          if [ -d releases ]; then sudo chown -R "$(id -u):$(id -g)" releases/; fi
 
       - name: Build AppImage
         run: make package-appimage
