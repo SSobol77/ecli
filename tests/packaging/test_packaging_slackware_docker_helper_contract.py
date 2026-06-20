@@ -52,6 +52,7 @@ def test_slackware_docker_helper_uses_real_slackware_base_image(
     assert "FROM aclemons/slackware" in dockerfile
     # The Slackware toolchain is provisioned through slackpkg, not apt/pacman.
     assert "slackpkg" in dockerfile
+    assert "USER 65532:65532" in dockerfile
 
 
 def test_slackware_docker_helper_provides_pkgtools_makepkg(

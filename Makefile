@@ -594,7 +594,7 @@ package-slackware: clean validate-runtime-imports
 package-slackware-docker: clean validate-runtime-imports
 	@command -v docker >/dev/null 2>&1 || (echo "Missing docker for package-slackware-docker."; exit 5)
 	docker build -f docker/build-slackware-package.Dockerfile -t ecli-slackware:current .
-	docker run --rm -v "$$(pwd):/app" -w /app ecli-slackware:current
+	docker run --rm --user 0:0 -v "$$(pwd):/app" -w /app ecli-slackware:current
 	@# Slackware makepkg runs as root inside the container and leaves root-owned
 	@# files in build/, dist/, and $(RELEASE_DIR). The next host-side steps run as
 	@# the runner user (package-appimage writes releases/), so reset ownership of

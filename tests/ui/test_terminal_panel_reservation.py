@@ -72,7 +72,7 @@ def test_toggle_terminal_panel_opens_pysh_console_panel() -> None:
     assert editor.toggle_terminal_panel() is True
     assert manager.shown == [panel]
     assert panel.visible is True
-    assert messages[-1] == "PySH Console Panel opened."
+    assert messages == ["PySH Console Panel opened."]
 
 
 def test_toggle_terminal_panel_focuses_existing_pysh_console_panel() -> None:
@@ -92,7 +92,7 @@ def test_toggle_terminal_panel_focuses_existing_pysh_console_panel() -> None:
     assert manager.shown == []
     assert editor.focus == "panel"
     assert editor._force_full_redraw is True
-    assert messages[-1] == "PySH Console Panel focused."
+    assert messages == ["PySH Console Panel focused."]
 
 
 def test_f11_opens_pysh_console_panel_action() -> None:

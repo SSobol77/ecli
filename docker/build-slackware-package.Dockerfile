@@ -25,11 +25,9 @@
 # post-build runtime smoke check requires.
 #
 # Slackware `makepkg` is the traditional pkgtools packager and is normally run as
-# root, so unlike the Arch helper this image does not drop to a non-root build
-# user. The repository is bind-mounted at /app; raw makepkg output stays under
-# build/ and only the canonical normalized artifact is written into
-# releases/<version>/ (see scripts/build_and_package_slackware.py). Host-side
-# ownership is reset after the run because the container writes as root (#93).
+# root. The image defaults to a non-root UID/GID for safe ad-hoc execution; the
+# canonical Makefile target explicitly opts into `--user 0:0` for the package
+# build, then resets host-side ownership of Docker-touched outputs (#93).
 # ==============================================================================
 
 FROM aclemons/slackware:current
@@ -98,8 +96,11 @@ WORKDIR /app
 
 # Build the Slackware package inside the container using the canonical Python
 # script. The Makefile `package-slackware-docker` target bind-mounts the repo at
-# /app and runs this image as root, so the raw makepkg output lands under
+# /app and explicitly runs this image with `--user 0:0`, because Slackware
+# pkgtools/makepkg require root. Raw makepkg output lands under
 # build/slackware/ and the normalized canonical artifact lands in the host
 # releases/<version>/ tree; the host resets ownership and runs
 # package-slackware-assert afterward (#93).
+# For any ad-hoc/manual container execution, default to a non-root UID/GID.
+USER 65532:65532
 CMD ["python3", "scripts/build_and_package_slackware.py"]

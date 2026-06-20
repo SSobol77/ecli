@@ -72,7 +72,7 @@ WORKDIR /app
 # project from the full source tree below; the build only needs third-party deps
 # plus build tooling, which are installed explicitly here.
 COPY pyproject.toml ./
-COPY uv.lock* requirements.txt* ./
+COPY uv.lock ./
 
 RUN python -m pip install --upgrade pip wheel \
     && uv --version \

@@ -104,6 +104,7 @@ def test_slackware_build_uses_real_slackware_dockerfile(
     recipe = makefile[start:end]
     assert "docker build -f docker/build-slackware-package.Dockerfile" in recipe
     assert "docker run" in recipe
+    assert "--user 0:0" in recipe
 
 
 # --------------------------------------------------------------------------- #
