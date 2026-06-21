@@ -750,7 +750,8 @@ def _coerce_theme_id(raw: Any) -> int | None:
 
 
 def _with_theme_diagnostic(palette: ThemePalette, message: str) -> ThemePalette:
-    return replace(palette, diagnostics=(*palette.diagnostics, message))
+    updated = replace(palette, diagnostics=(*palette.diagnostics, message))
+    return cast(ThemePalette, updated)
 
 
 def resolve_theme(

@@ -34,7 +34,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 def _read(relative: str) -> str:
     path = REPO_ROOT / relative
     if not path.is_file():
-        pytest.skip(f"required doc missing: {relative}")
+        pytest.fail(f"required doc missing: {relative}")
     return path.read_text(encoding="utf-8")
 
 

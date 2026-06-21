@@ -160,7 +160,9 @@ def _can_arm_alarm() -> bool:
     the main thread (or on platforms without ``setitimer``) we skip the alarm and
     rely on the load-time grammar quarantine plus negative caching.
     """
-    return _HAS_WALL_CLOCK_ALARM and threading.current_thread() is threading.main_thread()
+    return (
+        _HAS_WALL_CLOCK_ALARM and threading.current_thread() is threading.main_thread()
+    )
 
 
 def _call_with_budget(fn: Callable[[], _T], seconds: float) -> _T:

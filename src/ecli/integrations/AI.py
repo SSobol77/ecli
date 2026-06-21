@@ -29,11 +29,20 @@ DeepSeek, Qwen (DashScope), Kimi (Moonshot).
 import asyncio
 import json
 import os
+import re
 from typing import Any, Optional, cast
 
 import aiohttp
 
 from ecli.utils.logging_config import logger
+
+_SENSITIVE_LOG_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(
+        r"(?i)(api[_-]?key|authorization|bearer|token|secret|password)"
+        r"\s*[:=]\s*[^,\s}\]]+"
+    ),
+)
+_MAX_PROVIDER_ERROR_LOG_CHARS = 500
 
 
 class AiConfigurationError(ValueError):
@@ -74,6 +83,16 @@ def ai_configuration_panel_message(
         ]
     )
     return "\n".join(lines)
+
+
+def _safe_provider_error_excerpt(response_text: str) -> str:
+    """Return a bounded, redacted provider error excerpt for logs."""
+    excerpt = response_text[:_MAX_PROVIDER_ERROR_LOG_CHARS]
+    for pattern in _SENSITIVE_LOG_PATTERNS:
+        excerpt = pattern.sub(r"\1=<redacted>", excerpt)
+    if len(response_text) > _MAX_PROVIDER_ERROR_LOG_CHARS:
+        excerpt += "...<truncated>"
+    return excerpt
 
 
 # Get logger to ensure messages match the general logging system
@@ -871,18 +890,24 @@ class OpenAICompatibleClient(BaseAiClient):
         """Return a user-friendly message for a non-200 response."""
         response_lower = response_text.lower()
         if status_code == 401:
-            return f"Error: Invalid {self.PROVIDER} API key. Please check {self.KEY_ENV}."
+            return (
+                f"Error: Invalid {self.PROVIDER} API key. Please check {self.KEY_ENV}."
+            )
         if status_code == 403:
             return (
                 f"Error: Access to {self.PROVIDER} API forbidden (permissions or "
                 "credits). Please check your account."
             )
         if status_code == 429:
-            return f"Error: {self.PROVIDER} rate limit exceeded. Please try again later."
+            return (
+                f"Error: {self.PROVIDER} rate limit exceeded. Please try again later."
+            )
         if status_code == 400 and "model" in response_lower:
             return f"Error: Unsupported {self.PROVIDER} model: {self.model}"
         if status_code == 500:
-            return f"Error: {self.PROVIDER} internal server error. Please try again later."
+            return (
+                f"Error: {self.PROVIDER} internal server error. Please try again later."
+            )
         return f"{self.PROVIDER} Error {status_code}: {response_text[:200]}..."
 
     async def ask_async(
@@ -922,7 +947,7 @@ class OpenAICompatibleClient(BaseAiClient):
                         "%s API Error %s: %s",
                         self.PROVIDER,
                         response.status,
-                        response_text,
+                        _safe_provider_error_excerpt(response_text),
                     )
                     return self._handle_compatible_error(response.status, response_text)
 

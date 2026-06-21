@@ -680,15 +680,15 @@ class Ecli:
     # ---------------- Screen wiring ----------------
     def attach_screen(self, stdscr: curses.window) -> None:
         """Attach curses stdscr after construction.
-           Keeps compatibility with wrapper().
+        Keeps compatibility with wrapper().
         """
         self.stdscr = stdscr
 
     # ---------------- CLI file preloading ----------------
     def preload_cli_document(self, path: Path) -> None:
         """Preload (open or create) a buffer named after 'path',
-           even if it does not exist on disk.
-           This ensures that Save will default to that path.
+        even if it does not exist on disk.
+        This ensures that Save will default to that path.
         """
         intended = str(path.resolve())
         self._cli_intended_path = intended
@@ -716,10 +716,19 @@ class Ecli:
                 self._set_current_path(intended)
                 return
             except Exception:
-                logger.debug("open_file(%s) failed, will try creating an empty buffer", intended, exc_info=True)
+                logger.debug(
+                    "open_file(%s) failed, will try creating an empty buffer",
+                    intended,
+                    exc_info=True,
+                )
 
         # 3) Create an empty in-memory buffer with given name if API exists.
-        for meth_name in ("create_empty_buffer_with_name", "new_buffer_named", "new_file_with_name", "new_file"):
+        for meth_name in (
+            "create_empty_buffer_with_name",
+            "new_buffer_named",
+            "new_file_with_name",
+            "new_file",
+        ):
             if hasattr(self, meth_name):
                 try:
                     meth = getattr(self, meth_name)
@@ -730,7 +739,9 @@ class Ecli:
                     self._set_current_path(intended)
                     return
                 except Exception:
-                    logger.debug("%s failed, continue fallback", meth_name, exc_info=True)
+                    logger.debug(
+                        "%s failed, continue fallback", meth_name, exc_info=True
+                    )
 
         # 4) Last resort: create on disk then open (guarantees correct default name).
         try:
@@ -739,11 +750,15 @@ class Ecli:
             self.open_file(intended)
             self._set_current_path(intended)
         except Exception:
-            logger.warning("Could not preload CLI document %s; starting unnamed buffer.", intended, exc_info=True)
+            logger.warning(
+                "Could not preload CLI document %s; starting unnamed buffer.",
+                intended,
+                exc_info=True,
+            )
 
     def open_or_create(self, path: str | Path) -> None:
         """Open the file if it exists; otherwise create
-           an empty buffer with that path.
+        an empty buffer with that path.
         """
         p = str(Path(path).expanduser().resolve())
         if os.path.exists(p):
@@ -751,7 +766,12 @@ class Ecli:
             self._set_current_path(p)
             return
         # try to create a named empty buffer via your APIs
-        for meth_name in ("create_empty_buffer_with_name", "new_buffer_named", "new_file_with_name", "new_file"):
+        for meth_name in (
+            "create_empty_buffer_with_name",
+            "new_buffer_named",
+            "new_file_with_name",
+            "new_file",
+        ):
             if hasattr(self, meth_name):
                 try:
                     meth = getattr(self, meth_name)
@@ -772,13 +792,11 @@ class Ecli:
     # --------------- internal helpers ---------------
     def _set_current_path(self, abs_path: str) -> None:
         """Set common filename attributes
-           so Save/Write use the intended path by default.
+        so Save/Write use the intended path by default.
         """
         self.current_file_path = abs_path
         self.file_path = abs_path
         self.filename = abs_path
-
-
 
     # --- Clipboard Availability Check ---
     def close(self) -> None:
@@ -1226,8 +1244,7 @@ class Ecli:
             return ""
 
         if not all(
-            isinstance(value, int)
-            for value in (start_row, start_col, end_row, end_col)
+            isinstance(value, int) for value in (start_row, start_col, end_row, end_col)
         ):
             log_record_to_file_handlers(
                 logging.WARNING,
@@ -1250,9 +1267,7 @@ class Ecli:
         # Delegate to the central, buffer-coordinate-only extractor. It returns
         # file content for the (row, col) span only — never line numbers, the
         # gutter, borders, or any other rendered UI chrome.
-        return selection_to_text(
-            self.text, (start_row, start_col), (end_row, end_col)
-        )
+        return selection_to_text(self.text, (start_row, start_col), (end_row, end_col))
 
     # --- Copy selected text ---
     def copy(self) -> bool:
@@ -1547,7 +1562,9 @@ class Ecli:
         missing or non-boolean value falls back to enabled so highlighting never
         silently breaks on a malformed config.
         """
-        editor_config = self.config.get("editor", {}) if isinstance(self.config, dict) else {}
+        editor_config = (
+            self.config.get("editor", {}) if isinstance(self.config, dict) else {}
+        )
         value = editor_config.get("syntax_highlighting", True)
         return bool(value) if isinstance(value, bool) else True
 
@@ -1897,8 +1914,7 @@ class Ecli:
     ) -> list[tuple[str, int]]:
         """Map TextMate style categories to active curses colour attributes."""
         return [
-            (text, self.colors.get(category, default_color))
-            for text, category in spans
+            (text, self.colors.get(category, default_color)) for text, category in spans
         ]
 
     def _determine_lexer(self) -> TextLexer:
@@ -1951,7 +1967,7 @@ class Ecli:
     @staticmethod
     def _is_non_sql_filename(filename: str | None) -> bool:
         if not filename:
-            return True
+            return False
         return not os.path.basename(filename).lower().endswith(".sql")
 
     def _load_custom_syntax_patterns(self) -> list[tuple[re.Pattern, str]]:
@@ -5625,7 +5641,9 @@ class Ecli:
                 content_to_write += newline
 
         try:
-            encoded = content_to_write.encode(self.encoding or "utf-8", errors="replace")
+            encoded = content_to_write.encode(
+                self.encoding or "utf-8", errors="replace"
+            )
             with self.safe_open(target_filename, "wb") as f:
                 cast(BinaryIO, f).write(encoded)
 
@@ -7285,7 +7303,8 @@ class Ecli:
             ):
                 return None
             screen_y_coord = (
-                text_row_idx - self.scroll_top
+                text_row_idx
+                - self.scroll_top
                 + getattr(self, "_content_area_y_offset", 0)
             )
             try:
@@ -8267,7 +8286,7 @@ class Ecli:
         try:
             curses.setupterm()
             smcup = curses.tigetstr("smcup")  # enter alternate screen
-            smkx  = curses.tigetstr("smkx")   # application cursor keys
+            smkx = curses.tigetstr("smkx")  # application cursor keys
             if smcup:
                 curses.putp(smcup.decode("ascii", "ignore"))
             if smkx:
@@ -8312,11 +8331,15 @@ class Ecli:
                     redraw_needed: bool = self._process_events_and_input()
                     self._render_screen(redraw_needed)
                 except KeyboardInterrupt:
-                    logger.info("KeyboardInterrupt received, initiating graceful shutdown.")
+                    logger.info(
+                        "KeyboardInterrupt received, initiating graceful shutdown."
+                    )
                     self.exit_editor()
                     break
                 except Exception as e:
-                    logger.critical("Unhandled exception in main loop: %s", e, exc_info=True)
+                    logger.critical(
+                        "Unhandled exception in main loop: %s", e, exc_info=True
+                    )
                     self.exit_editor()
                     break
             # -------------------------------------------------------------------------
@@ -8352,7 +8375,7 @@ class Ecli:
 
             # --- EXIT terminal application modes (normal cursor keys + leave alt screen) ---
             try:
-                rmkx  = curses.tigetstr("rmkx")
+                rmkx = curses.tigetstr("rmkx")
                 rmcup = curses.tigetstr("rmcup")
                 if rmkx:
                     curses.putp(rmkx.decode("ascii", "ignore"))

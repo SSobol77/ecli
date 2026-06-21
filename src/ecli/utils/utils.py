@@ -84,18 +84,27 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # Mirrors the [editor] table in config.toml (the global syntax_highlighting
     # switch lives here). default_new_filename is an internal-only default.
     "editor": {
-        "use_system_clipboard": True, "show_line_numbers": True,
-        "tab_size": 4, "use_spaces": True, "word_wrap": False,
-        "auto_indent": True, "auto_brackets": True, "syntax_highlighting": True,
+        "use_system_clipboard": True,
+        "show_line_numbers": True,
+        "tab_size": 4,
+        "use_spaces": True,
+        "word_wrap": False,
+        "auto_indent": True,
+        "auto_brackets": True,
+        "syntax_highlighting": True,
         # Opt-in mouse support (off by default to preserve native text selection).
-        "mouse": False, "default_new_filename": "new_file.py",
+        "mouse": False,
+        "default_new_filename": "new_file.py",
     },
     "logging": {
-        "file_level": "DEBUG", "console_level": "WARNING",
-        "log_to_console": False, "separate_error_log": False,
+        "file_level": "DEBUG",
+        "console_level": "WARNING",
+        "log_to_console": False,
+        "separate_error_log": False,
     },
     "linter": {
-        "enabled": True, "auto_install": True,
+        "enabled": True,
+        "auto_install": True,
         "exclude": [".git", "**pycache**", ".venv"],
     },
     # Extensions Layer switches. These mirror the [extensions] table in
@@ -106,28 +115,54 @@ DEFAULT_CONFIG: dict[str, Any] = {
     # or the optional tokenizer is unavailable; "legacy" forces the built-in
     # highlighter. See docs/architecture/extensions-layer.md.
     "extensions": {
-        "enabled": True, "metadata_registry": True, "grammar_catalog": True,
-        "language_detection": True, "syntax_engine": "extension",
+        "enabled": True,
+        "metadata_registry": True,
+        "grammar_catalog": True,
+        "language_detection": True,
+        "syntax_engine": "extension",
     },
     "fonts": {"font_family": "monospace", "font_size": 16},
     "keybindings": {
-        "delete": "del", "paste": "ctrl+v", "copy": "ctrl+c", "cut": "ctrl+x",
-        "undo": "ctrl+z", "redo": "ctrl+y", "lint": "f4", "new_file": "f2",
-        "open_file": "ctrl+o", "save_file": "ctrl+s", "save_as": "f5",
-        "select_all": "ctrl+a", "quit": "ctrl+q", "goto_line": "ctrl+g",
-        "git_menu": "f9", "cancel_operation": "esc", "find": "ctrl+f",
-        "find_next": "f3", "search_and_replace": "f6", "help": "f1",
+        "delete": "del",
+        "paste": "ctrl+v",
+        "copy": "ctrl+c",
+        "cut": "ctrl+x",
+        "undo": "ctrl+z",
+        "redo": "ctrl+y",
+        "lint": "f4",
+        "new_file": "f2",
+        "open_file": "ctrl+o",
+        "save_file": "ctrl+s",
+        "save_as": "f5",
+        "select_all": "ctrl+a",
+        "quit": "ctrl+q",
+        "goto_line": "ctrl+g",
+        "git_menu": "f9",
+        "cancel_operation": "esc",
+        "find": "ctrl+f",
+        "find_next": "f3",
+        "search_and_replace": "f6",
+        "help": "f1",
         "extend_selection_left": ["shift+left", "alt-h"],
         "extend_selection_right": ["shift+right", "alt-l"],
         "extend_selection_up": ["shift+up", "alt-k"],
         "extend_selection_down": ["shift+down", "alt-j"],
-        "handle_up": ["up"], "handle_down": ["down"], "handle_left": ["left"],
+        "handle_up": ["up"],
+        "handle_down": ["down"],
+        "handle_left": ["left"],
         "handle_right": ["right"],
     },
     "ai": {"default_provider": "gemini"},
     "ai.keys": {
-        "openai": "", "gemini": "", "mistral": "", "claude": "", "grok": "",
-        "huggingface": "", "deepseek": "", "qwen": "", "kimi": "",
+        "openai": "",
+        "gemini": "",
+        "mistral": "",
+        "claude": "",
+        "grok": "",
+        "huggingface": "",
+        "deepseek": "",
+        "qwen": "",
+        "kimi": "",
     },
     # Coding-optimized default model per provider.
     "ai.models": {
@@ -144,44 +179,183 @@ DEFAULT_CONFIG: dict[str, Any] = {
     "git": {"enabled": True},
     "settings": {"auto_save_interval": 5, "show_git_info": True},
     "file_icons": {
-        "docs": "📘", "text": "📝", "code": "💻", "python": "🐍", "toml": "❄️", "javascript": "📜", "typescript": "📑",
-        "php": "🐘", "ruby": "♦️", "css": "🎨", "html": "🌐", "json": "📊", "yaml": "⚙️",
-        "xml": "📰", "markdown": "📗", "plaintext": "📄", "shell": "💫", "dart": "🎯", "go": "🐹",
-        "c": "🇨", "cpp": "🇨➕", "java": "☕", "julia": "🧮", "rust": "🦀", "csharp": "♯",
-        "scala": "💎", "r": "📉", "swift": "🐦", "dockerfile": "🐳", "terraform": "🛠️",
-        "jenkins": "🧑‍✈️", "puppet": "🎎", "saltstack": "🧂", "git": "🔖", "notebook": "📒",
-        "diff": "↔️", "makefile": "🛠️", "ini": "⚙️", "csv": "🔩", "sql": "💾",
-        "graphql": "📈", "kotlin": "📱", "lua": "🌙", "perl": "🐪", "powershell": "💻",
-        "nix": "❄️", "image": "🖼️", "audio": "🎵", "video": "🎞️", "archive": "📦",
-        "font": "🖋️", "binary": "⚙️", "document": "📄", "folder": "📁", "folder_open": "📂",
+        "docs": "📘",
+        "text": "📝",
+        "code": "💻",
+        "python": "🐍",
+        "toml": "❄️",
+        "javascript": "📜",
+        "typescript": "📑",
+        "php": "🐘",
+        "ruby": "♦️",
+        "css": "🎨",
+        "html": "🌐",
+        "json": "📊",
+        "yaml": "⚙️",
+        "xml": "📰",
+        "markdown": "📗",
+        "plaintext": "📄",
+        "shell": "💫",
+        "dart": "🎯",
+        "go": "🐹",
+        "c": "🇨",
+        "cpp": "🇨➕",
+        "java": "☕",
+        "julia": "🧮",
+        "rust": "🦀",
+        "csharp": "♯",
+        "scala": "💎",
+        "r": "📉",
+        "swift": "🐦",
+        "dockerfile": "🐳",
+        "terraform": "🛠️",
+        "jenkins": "🧑‍✈️",
+        "puppet": "🎎",
+        "saltstack": "🧂",
+        "git": "🔖",
+        "notebook": "📒",
+        "diff": "↔️",
+        "makefile": "🛠️",
+        "ini": "⚙️",
+        "csv": "🔩",
+        "sql": "💾",
+        "graphql": "📈",
+        "kotlin": "📱",
+        "lua": "🌙",
+        "perl": "🐪",
+        "powershell": "💻",
+        "nix": "❄️",
+        "image": "🖼️",
+        "audio": "🎵",
+        "video": "🎞️",
+        "archive": "📦",
+        "font": "🖋️",
+        "binary": "⚙️",
+        "document": "📄",
+        "folder": "📁",
+        "folder_open": "📂",
         "default": "❓",
     },
     "supported_formats": {
-        "docs": ["readme", "docs", "todo", "changelog", "license", "contributing", "code_of_conduct"],
-        "python": ["py", "pyw", "pyc", "pyd"], "toml": ["toml", "tml"],
-        "javascript": ["js", "mjs", "cjs", "jsx"], "typescript": ["ts", "tsx", "mts", "cts"],
-        "php": ["php", "php3", "php4", "php5", "phtml"], "ruby": ["rb", "erb", "rake", "rbw", "gemspec"],
-        "css": ["css"], "html": ["html", "htm", "xhtml"], "json": ["json", "jsonc", "geojson", "webmanifest"],
-        "yaml": ["yaml", "yml"], "xml": ["xml", "xsd", "xsl", "xslt", "plist", "rss", "atom", "csproj", "svg"],
-        "markdown": ["md", "markdown", "mdown", "mkd"], "text": ["txt", "log", "rst", "srt", "sub", "me"],
-        "shell": ["sh", "bash", "zsh", "fish", "ksh", "csh", "tcsh", "dash", "ash", "cmd", "command", "tool", "bat"],
-        "dart": ["dart"], "go": ["go"], "c": ["c", "h"], "cpp": ["cpp", "cxx", "cc", "hpp", "hxx", "hh", "inl", "tpp"],
-        "java": ["java", "jar", "class"], "julia": ["jl"], "rust": ["rs", "rlib"], "csharp": ["cs"],
-        "scala": ["scala", "sc"], "r": ["r", "R", "rds", "rda"], "swift": ["swift"],
-        "dockerfile": ["Dockerfile", "dockerfile"], "terraform": ["tf", "tfvars"],
-        "jenkins": ["Jenkinsfile", "jenkinsfile", "groovy"], "puppet": ["pp"], "saltstack": ["sls"],
-        "git": [".gitignore", ".gitattributes", ".gitmodules", ".gitkeep", "gitconfig", "config"],
-        "notebook": ["ipynb"], "diff": ["diff", "patch"], "makefile": ["Makefile", "makefile", "mk", "mak"],
-        "ini": ["ini", "cfg", "conf", "properties", "editorconfig"], "csv": ["csv", "tsv"], "sql": ["sql"],
-        "graphql": ["graphql", "gql"], "kotlin": ["kt", "kts"], "lua": ["lua"], "perl": ["pl", "pm", "t", "pod"],
-        "powershell": ["ps1", "psm1", "psd1"], "nix": ["nix"],
-        "image": ["jpg", "jpeg", "png", "gif", "bmp", "ico", "webp", "tiff", "tif", "heic", "heif"],
+        "docs": [
+            "readme",
+            "docs",
+            "todo",
+            "changelog",
+            "license",
+            "contributing",
+            "code_of_conduct",
+        ],
+        "python": ["py", "pyw", "pyc", "pyd"],
+        "toml": ["toml", "tml"],
+        "javascript": ["js", "mjs", "cjs", "jsx"],
+        "typescript": ["ts", "tsx", "mts", "cts"],
+        "php": ["php", "php3", "php4", "php5", "phtml"],
+        "ruby": ["rb", "erb", "rake", "rbw", "gemspec"],
+        "css": ["css"],
+        "html": ["html", "htm", "xhtml"],
+        "json": ["json", "jsonc", "geojson", "webmanifest"],
+        "yaml": ["yaml", "yml"],
+        "xml": ["xml", "xsd", "xsl", "xslt", "plist", "rss", "atom", "csproj", "svg"],
+        "markdown": ["md", "markdown", "mdown", "mkd"],
+        "text": ["txt", "log", "rst", "srt", "sub", "me"],
+        "shell": [
+            "sh",
+            "bash",
+            "zsh",
+            "fish",
+            "ksh",
+            "csh",
+            "tcsh",
+            "dash",
+            "ash",
+            "cmd",
+            "command",
+            "tool",
+            "bat",
+        ],
+        "dart": ["dart"],
+        "go": ["go"],
+        "c": ["c", "h"],
+        "cpp": ["cpp", "cxx", "cc", "hpp", "hxx", "hh", "inl", "tpp"],
+        "java": ["java", "jar", "class"],
+        "julia": ["jl"],
+        "rust": ["rs", "rlib"],
+        "csharp": ["cs"],
+        "scala": ["scala", "sc"],
+        "r": ["r", "R", "rds", "rda"],
+        "swift": ["swift"],
+        "dockerfile": ["Dockerfile", "dockerfile"],
+        "terraform": ["tf", "tfvars"],
+        "jenkins": ["Jenkinsfile", "jenkinsfile", "groovy"],
+        "puppet": ["pp"],
+        "saltstack": ["sls"],
+        "git": [
+            ".gitignore",
+            ".gitattributes",
+            ".gitmodules",
+            ".gitkeep",
+            "gitconfig",
+            "config",
+        ],
+        "notebook": ["ipynb"],
+        "diff": ["diff", "patch"],
+        "makefile": ["Makefile", "makefile", "mk", "mak"],
+        "ini": ["ini", "cfg", "conf", "properties", "editorconfig"],
+        "csv": ["csv", "tsv"],
+        "sql": ["sql"],
+        "graphql": ["graphql", "gql"],
+        "kotlin": ["kt", "kts"],
+        "lua": ["lua"],
+        "perl": ["pl", "pm", "t", "pod"],
+        "powershell": ["ps1", "psm1", "psd1"],
+        "nix": ["nix"],
+        "image": [
+            "jpg",
+            "jpeg",
+            "png",
+            "gif",
+            "bmp",
+            "ico",
+            "webp",
+            "tiff",
+            "tif",
+            "heic",
+            "heif",
+        ],
         "audio": ["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"],
         "video": ["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"],
-        "archive": ["zip", "tar", "gz", "tgz", "bz2", "rar", "7z", "xz", "iso", "deb", "rpm", "pkg"],
+        "archive": [
+            "zip",
+            "tar",
+            "gz",
+            "tgz",
+            "bz2",
+            "rar",
+            "7z",
+            "xz",
+            "iso",
+            "deb",
+            "rpm",
+            "pkg",
+        ],
         "font": ["ttf", "otf", "woff", "woff2", "eot"],
         "binary": ["exe", "dll", "so", "o", "bin", "app", "com", "msi", "dmg"],
-        "document": ["doc", "docx", "odt", "rtf", "pdf", "ppt", "pptx", "odp", "xls", "xlsx", "ods", "epub", "mobi"],
+        "document": [
+            "doc",
+            "docx",
+            "odt",
+            "rtf",
+            "pdf",
+            "ppt",
+            "pptx",
+            "odp",
+            "xls",
+            "xlsx",
+            "ods",
+            "epub",
+            "mobi",
+        ],
     },
     "comments": {
         "python": {"line_prefix": "# ", "docstring_delim": '"""'},
@@ -191,9 +365,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "javascript": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "typescript": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "php": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
-        "html": {"block_delims": ["<!--", "-->"]}, "xml": {"block_delims": ["<!--", "-->"]},
-        "css": {"block_delims": ["/*", "*/"]}, "scss": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
-        "graphql": {"line_prefix": "# "}, "c": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
+        "html": {"block_delims": ["<!--", "-->"]},
+        "xml": {"block_delims": ["<!--", "-->"]},
+        "css": {"block_delims": ["/*", "*/"]},
+        "scss": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
+        "graphql": {"line_prefix": "# "},
+        "c": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "cpp": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "csharp": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "java": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
@@ -204,27 +381,40 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "scala": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "dart": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "haskell": {"line_prefix": "-- ", "block_delims": ["{-", "-}"]},
-        "elixir": {"line_prefix": "# ", "docstring_delim": '"""'}, "erlang": {"line_prefix": "% "},
-        "clojure": {"line_prefix": ";; "}, "fsharp": {"line_prefix": "// ", "block_delims": ["(*", "*)"]},
-        "ocaml": {"block_delims": ["(*", "*)"]}, "shell": {"line_prefix": "# "},
+        "elixir": {"line_prefix": "# ", "docstring_delim": '"""'},
+        "erlang": {"line_prefix": "% "},
+        "clojure": {"line_prefix": ";; "},
+        "fsharp": {"line_prefix": "// ", "block_delims": ["(*", "*)"]},
+        "ocaml": {"block_delims": ["(*", "*)"]},
+        "shell": {"line_prefix": "# "},
         "powershell": {"line_prefix": "# ", "block_delims": ["<#", "#>"]},
-        "dockerfile": {"line_prefix": "# "}, "makefile": {"line_prefix": "# "},
+        "dockerfile": {"line_prefix": "# "},
+        "makefile": {"line_prefix": "# "},
         "terraform": {"line_prefix": "# ", "block_delims": ["/*", "*/"]},
         "jenkins": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
-        "puppet": {"line_prefix": "# "}, "saltstack": {"line_prefix": "# "},
-        "nix": {"line_prefix": "# ", "block_delims": ["/*", "*/"]}, "vim": {"line_prefix": '" '},
-        "assembly": {"line_prefix": "; "}, "sql": {"line_prefix": "-- ", "block_delims": ["/*", "*/"]},
-        "yaml": {"line_prefix": "# "}, "toml": {"line_prefix": "# "}, "ini": {"line_prefix": "; "},
-        "markdown": {"block_delims": ["<!--", "-->"]}, "latex": {"line_prefix": "% "},
-        "r": {"line_prefix": "# "}, "julia": {"line_prefix": "# ", "block_delims": ["#=", "=#"]},
+        "puppet": {"line_prefix": "# "},
+        "saltstack": {"line_prefix": "# "},
+        "nix": {"line_prefix": "# ", "block_delims": ["/*", "*/"]},
+        "vim": {"line_prefix": '" '},
+        "assembly": {"line_prefix": "; "},
+        "sql": {"line_prefix": "-- ", "block_delims": ["/*", "*/"]},
+        "yaml": {"line_prefix": "# "},
+        "toml": {"line_prefix": "# "},
+        "ini": {"line_prefix": "; "},
+        "markdown": {"block_delims": ["<!--", "-->"]},
+        "latex": {"line_prefix": "% "},
+        "r": {"line_prefix": "# "},
+        "julia": {"line_prefix": "# ", "block_delims": ["#=", "=#"]},
         "matlab": {"line_prefix": "% ", "block_delims": ["%{", "%}"]},
         "nim": {"line_prefix": "# ", "block_delims": ["#[", "]#"]},
-        "crystal": {"line_prefix": "# "}, "zig": {"line_prefix": "// "}, "bat": {"line_prefix": "REM "},
+        "crystal": {"line_prefix": "# "},
+        "zig": {"line_prefix": "// "},
+        "bat": {"line_prefix": "REM "},
     },
 }
 
 _ECLI_CONFIG_DIR_RELATIVE = Path(".config") / "ecli"
-_CONFIG_FILENAME = "config.toml"
+CONFIG_FILENAME = "config.toml"
 _TEXTMATE_BACKUP_FILENAME = "config.toml.pre-textmate.bak"
 _THEME_NUMBERING_BACKUP_FILENAME = "config.toml.pre-extension-theme-numbering.bak"
 _CONFIG_MIGRATION_WARNINGS: list[str] = []
@@ -260,6 +450,7 @@ _TRANSITIONAL_THEME_ID_TO_CANONICAL_ID = {
 
 # --- Helper Functions ---
 
+
 def _trusted_user_config_dir() -> Path:
     """Return the trusted ECLI user config directory."""
     return Path.home() / _ECLI_CONFIG_DIR_RELATIVE
@@ -283,7 +474,7 @@ def _safe_config_backup_path(user_config_path: Path, backup_name: str) -> Path |
     """
     trusted_dir = _trusted_user_config_dir().resolve()
     config_path = user_config_path.resolve()
-    expected_config = trusted_dir / _CONFIG_FILENAME
+    expected_config = trusted_dir / CONFIG_FILENAME
     if config_path != expected_config or not _is_relative_to(config_path, trusted_dir):
         logger.warning(
             "Skipped ECLI config backup outside trusted config directory: %s",
@@ -295,7 +486,7 @@ def _safe_config_backup_path(user_config_path: Path, backup_name: str) -> Path |
 
 def get_project_root() -> Path:
     """Determines the project's root directory for finding template files."""
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS)
     else:
         return Path(__file__).resolve().parents[3]
@@ -305,14 +496,14 @@ def ensure_user_config_exists() -> None:
     """Checks for user config files in `~/.config/ecli` and creates them if missing."""
     try:
         config_dir = _trusted_user_config_dir()
-        user_config_path = config_dir / _CONFIG_FILENAME
+        user_config_path = config_dir / CONFIG_FILENAME
         user_env_path = config_dir / ".env"
 
         config_dir.mkdir(parents=True, exist_ok=True)
 
         if not user_config_path.exists():
             project_root = get_project_root()
-            source_config_path = project_root / "config.toml"
+            source_config_path = project_root / CONFIG_FILENAME
             if source_config_path.exists():
                 shutil.copy(source_config_path, user_config_path)
                 logger.info(f"Created user config template at: {user_config_path}")
@@ -325,7 +516,9 @@ def ensure_user_config_exists() -> None:
         migrate_obsolete_config_tables(user_config_path)
 
     except Exception as e:
-        logger.critical(f"Could not create user configuration files: {e}", exc_info=True)
+        logger.critical(
+            f"Could not create user configuration files: {e}", exc_info=True
+        )
 
 
 def migrate_obsolete_config_tables(user_config_path: Path) -> bool:
@@ -460,8 +653,7 @@ def migrate_legacy_theme_config(user_config_path: Path) -> bool:
             backup.write_text(text, encoding="utf-8")
         user_config_path.write_text(migrated, encoding="utf-8")
         message = (
-            "Migrated ECLI theme numbering in user config "
-            f"({reason}); backup: {backup}"
+            f"Migrated ECLI theme numbering in user config ({reason}); backup: {backup}"
         )
         _CONFIG_MIGRATION_WARNINGS.append(message)
         logger.warning("%s", message)
@@ -558,8 +750,6 @@ def _previous_or_current_compatibility_ids() -> set[int]:
     }
 
 
-
-
 def load_config() -> dict[str, Any]:
     """
     Loads and merges configurations, ensuring the application can always run.
@@ -570,7 +760,7 @@ def load_config() -> dict[str, Any]:
 
     ensure_user_config_exists()
 
-    user_config_path = Path.home() / ".config" / "ecli" / "config.toml"
+    user_config_path = _trusted_user_config_dir() / CONFIG_FILENAME
     loaded_from = "(built-in defaults only)"
     if user_config_path.is_file():
         try:
@@ -580,8 +770,8 @@ def load_config() -> dict[str, Any]:
             logger.info("Loaded user config from %s", user_config_path)
             if isinstance(user_config.get("theme"), dict):
                 logger.warning(
-                    "User config %s uses the legacy [theme] table. Set a root-level "
-                    "a valid root-level 'theme = N' (or [theme] id = N), "
+                    "User config %s uses the legacy [theme] table. Set a "
+                    "valid root-level 'theme = N' (or [theme] id = N), "
                     "or run with ECLI_THEME=N.",
                     user_config_path,
                 )
@@ -603,7 +793,7 @@ def load_config() -> dict[str, Any]:
 
 def _load_toml_file(path: Path) -> dict[str, Any]:
     if toml is not None:
-        return toml.load(path)
+        return toml.load(str(path))
     return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
@@ -668,7 +858,9 @@ def safe_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
     """
     timeout = kwargs.pop("timeout", None)
     if timeout is not None and not isinstance(timeout, int | float):
-        logger.warning("Invalid timeout type %s; running without timeout.", type(timeout).__name__)
+        logger.warning(
+            "Invalid timeout type %s; running without timeout.", type(timeout).__name__
+        )
         timeout = None
     elif timeout is not None and timeout <= 0:
         logger.warning("Invalid timeout value %s; using default 30s.", timeout)
@@ -676,17 +868,27 @@ def safe_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
 
     try:
         return subprocess.run(
-            cmd, capture_output=True, text=True, check=False,
-            encoding="utf-8", errors="replace", timeout=timeout, **kwargs,
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            **kwargs,
         )
     except FileNotFoundError as e:
         logger.error(f"Command not found: {cmd[0]!r}", exc_info=True)
         return subprocess.CompletedProcess(cmd, 127, stdout="", stderr=str(e))
     except subprocess.TimeoutExpired as e:
         logger.warning(f"Command timed out after {timeout}s: {' '.join(cmd)}")
-        return subprocess.CompletedProcess(cmd, -15, stdout=e.stdout or "", stderr=e.stderr or "")
+        return subprocess.CompletedProcess(
+            cmd, -15, stdout=e.stdout or "", stderr=e.stderr or ""
+        )
     except Exception as e:
-        logger.exception(f"An unexpected error occurred while running command: {' '.join(cmd)}")
+        logger.exception(
+            f"An unexpected error occurred while running command: {' '.join(cmd)}"
+        )
         return subprocess.CompletedProcess(cmd, -1, stdout="", stderr=str(e))
 
 

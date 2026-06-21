@@ -270,14 +270,14 @@ def tokens_to_spans(
         )
 
     spans: list[tuple[str, str]] = []
-    current_text = line[0]
+    current_text: list[str] = [line[0]]
     current_category = categories[0]
     for index in range(1, length):
         if categories[index] == current_category:
-            current_text += line[index]
+            current_text.append(line[index])
         else:
-            spans.append((current_text, current_category))
-            current_text = line[index]
+            spans.append(("".join(current_text), current_category))
+            current_text = [line[index]]
             current_category = categories[index]
-    spans.append((current_text, current_category))
+    spans.append(("".join(current_text), current_category))
     return spans

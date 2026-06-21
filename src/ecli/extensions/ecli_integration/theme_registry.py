@@ -225,9 +225,7 @@ def _skip_line_comment(text: str, index: int) -> int:
 def _skip_block_comment(text: str, index: int, out: list[str]) -> int:
     """Replace a ``/* ... */`` comment body with whitespace/newlines."""
     index += 2
-    while index + 1 < len(text) and not (
-        text[index] == "*" and text[index + 1] == "/"
-    ):
+    while index + 1 < len(text) and not (text[index] == "*" and text[index + 1] == "/"):
         out.append("\n" if text[index] in "\r\n" else " ")
         index += 1
     return index + 2 if index + 1 < len(text) else index

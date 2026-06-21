@@ -34,6 +34,7 @@ import io
 import token
 import tokenize
 from collections import OrderedDict
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -86,6 +87,8 @@ _SPAN_CACHE_MAX = 8192
 
 # Protected-range map type: per buffer-line index -> immutable ranges.
 _RangeMap = dict[int, tuple[tuple[int, int, str], ...]]
+_CarriedState = tuple[str, str | None]
+_ScanResult = tuple[int, _CarriedState | None, bool]
 
 
 @dataclass(frozen=True)
@@ -133,14 +136,14 @@ class LineHighlighter:
     scope_name: str | None = None
     _cache: OrderedDict[
         tuple[str, tuple[tuple[int, int, str], ...]], tuple[LineSpan, ...] | None
-    ] = field(
-        default_factory=OrderedDict
-    )
+    ] = field(default_factory=OrderedDict)
     _ranges_cache: tuple[object, _RangeMap] | None = field(default=None)
 
     def highlight(self, line: str) -> list[LineSpan] | None:
         """Return cached ``(text, category)`` spans for ``line`` or ``None``."""
-        protected = tuple(_protected_ranges_for_scope(self.scope_name, [line]).get(0, ()))
+        protected = tuple(
+            _protected_ranges_for_scope(self.scope_name, [line]).get(0, ())
+        )
         return self._highlight_line(line, protected)
 
     def highlight_lines(
@@ -262,9 +265,7 @@ def _python_string_ranges(
             for row in range(start_row - 1, end_row):
                 if not 0 <= row < len(lines):
                     continue
-                start, end = _string_span_for_row(
-                    row, tok.start, tok.end, lines[row]
-                )
+                start, end = _string_span_for_row(row, tok.start, tok.end, lines[row])
                 ranges.setdefault(row, []).append((start, end, "string"))
     except (tokenize.TokenError, IndentationError, SyntaxError):
         return {}
@@ -273,12 +274,7 @@ def _python_string_ranges(
 
 def _scope_supports_protection(scope_name: str | None) -> bool:
     """Return whether ``scope_name`` has an ECLI deterministic guard."""
-    return scope_name in {
-        "source.python",
-        "source.js",
-        "source.ts",
-        "source.css",
-    } or scope_name in _HTML_SCOPES
+    return _protected_range_handler(scope_name) is not None
 
 
 _HTML_SCOPES = frozenset(
@@ -299,15 +295,40 @@ def _protected_ranges_for_scope(
     repaint known multiline comments/strings over the TextMate output when the
     current line-oriented engine cannot preserve cross-line state.
     """
-    if scope_name == "source.python":
-        return _python_string_ranges(lines)
-    if scope_name in {"source.js", "source.ts"}:
-        return _javascript_like_protected_ranges(lines)
-    if scope_name == "source.css":
-        return _css_protected_ranges(lines)
+    handler = _protected_range_handler(scope_name)
+    return handler(lines) if handler is not None else {}
+
+
+def _protected_range_handler(
+    scope_name: str | None,
+) -> Callable[[list[str]], dict[int, tuple[tuple[int, int, str], ...]]] | None:
+    """Return the deterministic protected-range scanner for ``scope_name``."""
+    if scope_name is None:
+        return None
     if scope_name in _HTML_SCOPES:
-        return _html_comment_ranges(lines)
-    return {}
+        return _html_comment_ranges
+    return _PROTECTED_RANGE_HANDLERS.get(scope_name)
+
+
+def _python_protected_ranges(
+    lines: list[str],
+) -> dict[int, tuple[tuple[int, int, str], ...]]:
+    """Dispatch to the current Python string scanner."""
+    return _python_string_ranges(lines)
+
+
+def _javascript_protected_ranges(
+    lines: list[str],
+) -> dict[int, tuple[tuple[int, int, str], ...]]:
+    """Dispatch to the current JavaScript/TypeScript scanner."""
+    return _javascript_like_protected_ranges(lines)
+
+
+def _css_protected_ranges_dispatch(
+    lines: list[str],
+) -> dict[int, tuple[tuple[int, int, str], ...]]:
+    """Dispatch to the current CSS scanner."""
+    return _css_protected_ranges(lines)
 
 
 def _append_range(
@@ -353,9 +374,9 @@ class _CLikeRules:
 def _resume_c_like_state(
     line: str,
     row: int,
-    state: tuple[str, str | None] | None,
+    state: _CarriedState | None,
     ranges: dict[int, list[tuple[int, int, str]]],
-) -> tuple[int, tuple[str, str | None] | None, bool]:
+) -> _ScanResult:
     """Resume an open multiline C-like comment/string at the start of a line."""
     if state is None:
         return 0, None, False
@@ -380,7 +401,7 @@ def _scan_block_comment_start(
     row: int,
     index: int,
     ranges: dict[int, list[tuple[int, int, str]]],
-) -> tuple[int, tuple[str, str | None] | None]:
+) -> tuple[int, _CarriedState | None]:
     """Protect a C-like block comment that starts at ``index``."""
     close = line.find("*/", index + 2)
     if close == -1:
@@ -397,7 +418,7 @@ def _scan_string_start(
     index: int,
     quote: str,
     ranges: dict[int, list[tuple[int, int, str]]],
-) -> tuple[int, tuple[str, str | None] | None]:
+) -> tuple[int, _CarriedState | None]:
     """Protect a quoted/template string that starts at ``index``."""
     end, closed = _scan_quoted_string(line, index, quote)
     _append_range(ranges, row, index, end, "string")
@@ -415,36 +436,76 @@ def _scan_line_comment_start(
     return len(line)
 
 
+def _scan_c_like_comment_token(
+    line: str,
+    row: int,
+    index: int,
+    rules: _CLikeRules,
+    ranges: dict[int, list[tuple[int, int, str]]],
+) -> _ScanResult | None:
+    """Scan a C-like comment opener at ``index`` when rules permit it."""
+    two = line[index : index + 2]
+    if rules.block_comments and two == "/*":
+        next_index, state = _scan_block_comment_start(line, row, index, ranges)
+        return next_index, state, state is not None
+    if rules.line_comments and two == "//":
+        return _scan_line_comment_start(line, row, index, ranges), None, True
+    return None
+
+
+def _c_like_string_delimiter(line: str, index: int, rules: _CLikeRules) -> str | None:
+    """Return the string delimiter starting at ``index`` under ``rules``."""
+    char = line[index]
+    if rules.quoted_strings and char in {"'", '"'}:
+        return char
+    if rules.template_strings and char == "`":
+        return char
+    return None
+
+
+def _scan_c_like_string_token(
+    line: str,
+    row: int,
+    index: int,
+    rules: _CLikeRules,
+    ranges: dict[int, list[tuple[int, int, str]]],
+) -> _ScanResult | None:
+    """Scan a C-like string opener at ``index`` when rules permit it."""
+    delimiter = _c_like_string_delimiter(line, index, rules)
+    if delimiter is None:
+        return None
+    next_index, state = _scan_string_start(line, row, index, delimiter, ranges)
+    return next_index, state, state is not None
+
+
+def _scan_c_like_token(
+    line: str,
+    row: int,
+    index: int,
+    rules: _CLikeRules,
+    ranges: dict[int, list[tuple[int, int, str]]],
+) -> _ScanResult:
+    """Scan one C-like token opener or advance by one character."""
+    for scanner in (_scan_c_like_comment_token, _scan_c_like_string_token):
+        result = scanner(line, row, index, rules, ranges)
+        if result is not None:
+            return result
+    return index + 1, None, False
+
+
 def _scan_c_like_line(
     line: str,
     row: int,
     start: int,
     rules: _CLikeRules,
     ranges: dict[int, list[tuple[int, int, str]]],
-) -> tuple[str, str | None] | None:
+) -> _CarriedState | None:
     """Scan one normal-state C-like line and return any carried state."""
     index = start
     while index < len(line):
-        two = line[index : index + 2]
-        if rules.block_comments and two == "/*":
-            index, state = _scan_block_comment_start(line, row, index, ranges)
-            if state is not None:
-                return state
-            continue
-        if rules.line_comments and two == "//":
-            _scan_line_comment_start(line, row, index, ranges)
-            return None
-        if rules.quoted_strings and line[index] in {"'", '"'}:
-            index, state = _scan_string_start(line, row, index, line[index], ranges)
-            if state is not None:
-                return state
-            continue
-        if rules.template_strings and line[index] == "`":
-            index, state = _scan_string_start(line, row, index, "`", ranges)
-            if state is not None:
-                return state
-            continue
-        index += 1
+        index, state, stop_line = _scan_c_like_token(line, row, index, rules, ranges)
+        if stop_line:
+            return state
     return None
 
 
@@ -529,6 +590,16 @@ def _html_comment_ranges(
             _append_range(ranges, row, start, end, "comment")
             index = end
     return {line: tuple(spans) for line, spans in ranges.items()}
+
+
+_PROTECTED_RANGE_HANDLERS: dict[
+    str, Callable[[list[str]], dict[int, tuple[tuple[int, int, str], ...]]]
+] = {
+    "source.python": _python_protected_ranges,
+    "source.js": _javascript_protected_ranges,
+    "source.ts": _javascript_protected_ranges,
+    "source.css": _css_protected_ranges_dispatch,
+}
 
 
 @dataclass(frozen=True)

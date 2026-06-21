@@ -21,7 +21,12 @@ from pathlib import Path
 import pytest
 
 from ecli.utils.themes import THEME_ENV_VAR, resolve_theme
-from ecli.utils.utils import DEFAULT_CONFIG, load_config, migrate_legacy_theme_config
+from ecli.utils.utils import (
+    CONFIG_FILENAME,
+    DEFAULT_CONFIG,
+    load_config,
+    migrate_legacy_theme_config,
+)
 
 
 REPO_CONFIG = Path(__file__).resolve().parents[2] / "config.toml"
@@ -82,6 +87,10 @@ def test_legacy_theme_table_config_is_migrated_to_root_theme(
     assert resolve_theme(load_config()).theme_id == 181
 
 
+def test_config_filename_constant_names_user_config() -> None:
+    assert CONFIG_FILENAME == "config.toml"
+
+
 def test_light_legacy_theme_migrates_to_theme_one(isolated_home: Path) -> None:
     (isolated_home / "config.toml").write_text(
         '[theme]\nname = "light"\n', encoding="utf-8"
@@ -113,6 +122,20 @@ def test_theme_migration_refuses_backup_outside_trusted_config_dir(
     assert not (
         isolated_home / "config.toml.pre-extension-theme-numbering.bak"
     ).exists()
+
+
+def test_theme_migration_writes_fixed_backup_inside_trusted_config_dir(
+    isolated_home: Path,
+) -> None:
+    cfg = isolated_home / CONFIG_FILENAME
+    original = '[theme]\nname = "dark"\n'
+    cfg.write_text(original, encoding="utf-8")
+
+    assert migrate_legacy_theme_config(cfg) is True
+
+    backup = isolated_home / "config.toml.pre-extension-theme-numbering.bak"
+    assert backup.exists()
+    assert backup.read_text(encoding="utf-8") == original
 
 
 def test_env_overrides_user_config_via_load(isolated_home: Path, monkeypatch) -> None:

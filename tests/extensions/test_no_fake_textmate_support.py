@@ -66,7 +66,9 @@ _STYLE_COLORS = {
 REQUIRED_MISSING = ("pyproject.toml", "boot.asm", "main.ada", "solver.f90")
 
 
-def _make_editor(filename: str, text: list[str], engine: str = "extension") -> Ecli:
+def _make_editor(
+    filename: str | None, text: list[str], engine: str = "extension"
+) -> Ecli:
     editor = Ecli.__new__(Ecli)
     config = copy.deepcopy(DEFAULT_CONFIG)
     extensions = config.setdefault("extensions", {})
@@ -165,6 +167,10 @@ def test_genuine_sql_file_is_allowed_to_be_sql() -> None:
     # guard suppresses content-guessing, not real SQL files.
     editor = _make_editor("schema.sql", ["SELECT 1;"], engine="extension")
     assert "sql" in (editor.current_language or "").lower()
+
+
+def test_unnamed_buffer_does_not_suppress_sql_content_guess() -> None:
+    assert Ecli._is_non_sql_filename(None) is False
 
 
 # --------------------------------------------------------------------------- #
