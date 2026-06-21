@@ -73,6 +73,28 @@ flowchart TD
 - Intended target state: provide optional migration tooling or diagnostics when template introduces new recommended keys.
 - Validation required: verify template-diff diagnostics path in implementation.
 
+## Theme Number Migration
+
+`theme = N` is a versioned configuration contract:
+
+- `1`-`8` are deprecated migration aliases for old pre-extension-theme configs.
+- `100`-`199` are light themes.
+- `200`-`299` are dark themes.
+- `300`-`399` are high-contrast themes.
+- `800`-`899` are reserved for future custom/imported special themes.
+
+When ECLI detects stale theme numbering in an existing user config, it writes
+`~/.config/ecli/config.toml.pre-extension-theme-numbering.bak` before modifying
+the file and emits a startup warning. Old aliases `1`-`8` migrate to preserved
+built-in compatibility ids in the `18x`/`28x`/`38x` ranges. Transitional ids
+from the previous in-progress implementation migrate as `1`-`10` -> `101`-`110`,
+`11`-`25` -> `201`-`215`, and `26`-`29` -> `301`-`304`.
+
+Invalid or missing theme numbers are not treated as implicit defaults during a
+live session. ECLI keeps the current valid theme when available, reports the
+problem, and falls back to startup default `207` only when no current theme
+exists.
+
 ## Parse-Failure Behavior by Source
 
 - Embedded defaults failure: release-blocking defect.

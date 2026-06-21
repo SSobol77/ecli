@@ -21,8 +21,15 @@ typed flags — it never activates an extension runtime.
 The Extensions Layer is data-only. There is **no** configuration value that can
 enable a VS Code extension host, Node/TypeScript activation, ``activationEvents``,
 ``package.json`` scripts, or a Copilot runtime. Any such key found in the table
-is ignored with a diagnostic, and ``syntax_engine`` stays ``"legacy"`` until
-issue #102 ships a tested extension-backed renderer.
+is ignored with a diagnostic.
+
+``syntax_engine`` accepts ``"legacy"`` (default, authoritative) and ``"extension"``
+(selects the #102 extension-backed syntax-service boundary). Selecting
+``"extension"`` routes rendering through the TextMate syntax service when the
+optional tokenizer and selected grammar are usable. It never enables a runtime;
+missing tokenizer or grammar failures fall back to the legacy highlighter (see
+``syntax_service.py``). Unknown values fall back to ``"legacy"`` with a
+diagnostic.
 """
 
 from __future__ import annotations
@@ -57,7 +64,7 @@ _FORBIDDEN_RUNTIME_KEYS = frozenset(
 
 
 class SyntaxEngine(StrEnum):
-    """Selectable syntax engine. Only ``LEGACY`` is active until issue #102."""
+    """Selectable syntax engine."""
 
     LEGACY = "legacy"
     EXTENSION = "extension"
@@ -174,17 +181,13 @@ def _read_syntax_engine(
     if "syntax_engine" not in section:
         return SyntaxEngine.LEGACY.value
     value = section["syntax_engine"]
+    # "extension" is a valid selection as of #102: it routes through the
+    # extension-backed syntax-service boundary. It never enables a runtime, and
+    # rendering falls back to legacy when tokenization is unavailable.
     if value == SyntaxEngine.LEGACY.value:
         return SyntaxEngine.LEGACY.value
     if value == SyntaxEngine.EXTENSION.value:
-        diagnostics.append(
-            RegistryDiagnostic(
-                "warning",
-                source,
-                "extension syntax engine is not available until #102; using 'legacy'",
-            )
-        )
-        return SyntaxEngine.LEGACY.value
+        return SyntaxEngine.EXTENSION.value
     diagnostics.append(
         RegistryDiagnostic(
             "warning", source, f"unknown syntax_engine {value!r}; using 'legacy'"

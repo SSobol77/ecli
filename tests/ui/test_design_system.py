@@ -62,7 +62,7 @@ def test_all_required_roles_are_defined() -> None:
 def test_every_role_maps_to_a_color_key_present_in_chrome_or_syntax() -> None:
     # Every mapped colour key must be a key the renderer actually allocates,
     # i.e. a chrome pair name or a syntax/git colour name.
-    palette = get_theme(5)
+    palette = get_theme(207)
     available = set(palette.chrome_color_pairs()) | set(palette.syntax_color_hex())
     for role, key in ROLE_COLOR_KEYS.items():
         assert key in available, (role, key)

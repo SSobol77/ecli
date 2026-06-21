@@ -58,6 +58,21 @@ Native `.deb`, `.rpm`, `.dmg`, and `.exe` installers may provide launcher integr
 
 ## Platform Dependencies
 
+### TextMate syntax highlighting
+
+ECLI's default extension-backed syntax engine uses `python-textmate`, which
+pulls `onigurumacffi` for the Oniguruma regular-expression engine. Standard
+`pip`, `pipx`, and release artifact installs should receive these Python
+dependencies automatically.
+
+On source-build platforms where `onigurumacffi` cannot use a binary wheel,
+install the Oniguruma development package before building. Typical package names
+are `libonig-dev` or `oniguruma` on Debian/Ubuntu-style systems,
+`oniguruma` on Arch and Nix, and `devel/oniguruma` on FreeBSD.
+
+If the tokenizer or native dependency is unavailable at runtime, ECLI must start
+and fall back to the legacy highlighter rather than crashing.
+
 ### SUSE / openSUSE
 
 Runtime dependencies for the openSUSE/SUSE RPM path:

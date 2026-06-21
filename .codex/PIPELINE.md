@@ -58,6 +58,25 @@ Codex must obey:
 * VMLab moved to v0.3.5 and is blocked until the v0.3.0 Extensions Foundation is
   complete.
 
+## Current maintainer priority order
+
+For further ECLI work, Codex must sequence planning and implementation as:
+
+1. Stabilize all Extensions and the Extensions Layer.
+2. Finish TextMate rendering, TextMate performance, and multiline comment
+   handling.
+3. Implement F4 Diagnostics / Linter Panel.
+4. Implement F7 AI Code Assistant as an Extensions Layer feature.
+5. Implement the plugin layer for new themes, linters, and AI extensions.
+6. Implement F11 Terminal-console without duplicating PySH.
+7. Implement full mouse support.
+8. Implement F8 System Doctor / lab engineer diagnostic tools.
+9. Implement F9 Git improvements.
+
+This order does not override Stage gates, audit gates, the single-writer screen
+invariant, Extensions Layer security constraints, or release/publish safety
+rules.
+
 ## Recommended Codex execution mode
 
 For Stage 1 inventory and diagnostics:

@@ -35,6 +35,8 @@ def test_constants(macos: ModuleType) -> None:
     assert macos.EXIT_DMG_MISSING == 2
     assert macos.EXIT_SHA_MISSING == 3
     assert macos.EXIT_MISSING_TOOL == 5
+    assert macos.ONIGURUMA_HEADER == "oniguruma.h"
+    assert macos.ONIGURUMA_PKG_CONFIG_NAME == "oniguruma"
 
 
 def test_non_darwin_returns_error(
@@ -57,3 +59,32 @@ def test_dmg_artifact_token(macos: ModuleType, repo_root: Path) -> None:
     )
     assert expected.parent == repo_root / "releases" / version
     assert expected.name == f"ecli_{version}_macos_{macos.MACOS_ARCH}.dmg"
+
+
+def test_oniguruma_env_adds_include_lib_and_pkg_config_paths(
+    macos: ModuleType, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    prefix = tmp_path / "oniguruma"
+    (prefix / "include").mkdir(parents=True)
+    (prefix / "lib" / "pkgconfig").mkdir(parents=True)
+    (prefix / "lib" / "pkgconfig" / "oniguruma.pc").write_text("", encoding="utf-8")
+    (prefix / "include" / "oniguruma.h").write_text("", encoding="utf-8")
+    (prefix / "lib" / "libonig.dylib").write_text("", encoding="utf-8")
+    monkeypatch.setenv("ECLI_ONIGURUMA_PREFIX", str(prefix))
+    monkeypatch.setattr(macos, "_capture_stdout", lambda _command: None)
+
+    env = macos.macos_native_dependency_env({})
+
+    assert f"-I{prefix / 'include'}" in env["CPPFLAGS"]
+    assert f"-I{prefix / 'include'}" in env["CFLAGS"]
+    assert f"-L{prefix / 'lib'}" in env["LDFLAGS"]
+    assert str(prefix / "lib" / "pkgconfig") in env["PKG_CONFIG_PATH"]
+
+
+def test_macos_workflows_install_oniguruma_before_build(repo_root: Path) -> None:
+    for relative in (
+        ".github/workflows/macos-dmg.yml",
+        ".github/workflows/macos-validate.yml",
+    ):
+        text = (repo_root / relative).read_text(encoding="utf-8")
+        assert "brew install oniguruma pkg-config" in text

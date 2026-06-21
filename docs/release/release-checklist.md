@@ -92,3 +92,44 @@ ecli_<version>_docker_deb_helper_evidence.tar.gz
 ecli_<version>_docker_rpm_helper_evidence.tar.gz
 ecli_<version>_workflow_contract_evidence.tar.gz
 ```
+
+## TextMate engine dependency check
+
+- [ ] `pyproject.toml` declares `python-textmate` (pulls `onigurumacffi`).
+- [ ] Wheel/PyInstaller/AppImage/DMG/Windows artifacts include
+      `python-textmate` + `onigurumacffi`, or start and fall back to the legacy
+      highlighter without crashing when absent.
+- [ ] macOS workflows install Homebrew `oniguruma` and `pkg-config` before
+      package installation, and `scripts/build_and_package_macos.py` exports
+      `CPPFLAGS`, `CFLAGS`, `LDFLAGS`, and `PKG_CONFIG_PATH` for pip subprocesses.
+- [ ] Source-build platforms (FreeBSD ports/pkg, Nix from source) provide the
+      **Oniguruma** dev headers/library, or document the legacy-fallback policy.
+- [ ] Startup log shows `textmate_tokenizer_available=True` on a reference build.
+- [ ] Real large-file scroll smoke passes on `Makefile` and
+      `logs/freebsd-0.2.2-fail.log` without repaint freezes.
+- [ ] Multiline comment/string rendering checks pass for Python triple strings,
+      JavaScript block/doc comments, TypeScript block/doc comments, HTML
+      comments, and CSS block comments.
+- [ ] Words, numbers, operators, tags, selectors, properties, and values inside
+      protected multiline comments/strings render as comment/string, while code
+      after the protected region still highlights as code.
+- [ ] `.log` files and `.gitignore` are not detected as SQL/Transact-SQL.
+- [ ] TextMate dependency/fallback checks pass when `python-textmate` or
+      Oniguruma is unavailable.
+
+## Theme numbering migration check
+
+- [ ] Shipped `config.toml` defaults to `theme = 207` (`Dark+`).
+- [ ] Theme numbering policy is present in `config.toml`,
+      `docs/architecture/extensions-layer.md`, and config docs:
+      `1`-`8` deprecated aliases, `100`-`199` light, `200`-`299` dark,
+      `300`-`399` high contrast, `800`-`899` reserved.
+- [ ] Old pre-extension `theme = 1`-`8` configs migrate to the matching
+      compatibility ids in the `18x`/`28x`/`38x` ranges.
+- [ ] Transitional previous-implementation ids migrate as `1`-`10` -> `101`-`110`,
+      `11`-`25` -> `201`-`215`, and `26`-`29` -> `301`-`304`.
+- [ ] Migration writes
+      `~/.config/ecli/config.toml.pre-extension-theme-numbering.bak` and emits a
+      visible ECLI warning.
+- [ ] Missing/invalid theme numbers are not mapped to unrelated themes; ECLI
+      keeps the current valid theme when available.

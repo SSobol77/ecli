@@ -19,7 +19,7 @@ embedded-language metadata, and token-type metadata, and verifies that grammar
 files resolve to existing locations under ``src/ecli/extensions/``.
 
 It does **not** parse TextMate grammar internals, tokenize text, or render
-syntax. Those belong to the syntax service (#102), which does not exist yet.
+syntax. Those belong to the syntax service (#102).
 """
 
 from __future__ import annotations

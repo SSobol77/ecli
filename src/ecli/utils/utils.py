@@ -41,10 +41,14 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any, Optional
 
-import toml
+try:
+    import toml
+except ModuleNotFoundError:  # pragma: no cover - exercised in minimal envs
+    toml = None  # type: ignore[assignment]
 
 logger = logging.getLogger("ecli")
 
@@ -61,98 +65,297 @@ GEMINI_API_KEY=
 MISTRAL_API_KEY=
 CLAUDE_API_KEY=
 HUGGINGFACE_API_KEY=
+# DeepSeek: https://platform.deepseek.com
+DEEPSEEK_API_KEY=
+# Qwen (Alibaba DashScope, international): https://dashscope-intl.aliyuncs.com
+DASHSCOPE_API_KEY=
+# Kimi (Moonshot AI): https://platform.moonshot.ai
+MOONSHOT_API_KEY=
 """
 
 # This dictionary is a direct, hardcoded representation of `default_config.toml`.
 # It serves as the ultimate fallback, ensuring the application can ALWAYS start.
 DEFAULT_CONFIG: dict[str, Any] = {
-    # Built-in colour theme (1-4 light, 5-8 dark). See ecli.utils.themes.
-    "theme": 5,
+    # Professional extension-backed colour theme. 207 = Dark+ when the imported
+    # VS Code theme-defaults assets are present; built-in compatibility themes
+    # are available in reserved 18x/28x/38x ranges. See ecli.utils.themes.
+    "theme": 207,
     "colors": {"error": "red", "status": "bright_white", "green": "green"},
+    # Mirrors the [editor] table in config.toml (the global syntax_highlighting
+    # switch lives here). default_new_filename is an internal-only default.
     "editor": {
-        "use_system_clipboard": True, "default_new_filename": "new_file.py",
-        "tab_size": 4, "use_spaces": True, "syntax_highlighting": True,
+        "use_system_clipboard": True,
+        "show_line_numbers": True,
+        "tab_size": 4,
+        "use_spaces": True,
+        "word_wrap": False,
+        "auto_indent": True,
+        "auto_brackets": True,
+        "syntax_highlighting": True,
         # Opt-in mouse support (off by default to preserve native text selection).
         "mouse": False,
+        "default_new_filename": "new_file.py",
     },
-    # Extensions Layer (data-only) switches. These mirror the [extensions] table
-    # in config.toml and gate ONLY the deterministic metadata adapters under
+    "logging": {
+        "file_level": "DEBUG",
+        "console_level": "WARNING",
+        "log_to_console": False,
+        "separate_error_log": False,
+    },
+    "linter": {
+        "enabled": True,
+        "auto_install": True,
+        "exclude": [".git", "**pycache**", ".venv"],
+    },
+    # Extensions Layer switches. These mirror the [extensions] table in
+    # config.toml and gate ONLY the imported extension adapters under
     # src/ecli/extensions/ecli_integration/. They never enable an extension
-    # runtime; syntax_engine = "legacy" preserves the regex highlighter until the
-    # #102 extension-backed syntax service replaces it. See
-    # docs/architecture/extensions-layer.md.
+    # runtime. syntax_engine = "extension" uses TextMate tokenization from the
+    # imported grammars and falls back to the legacy highlighter when a grammar
+    # or the optional tokenizer is unavailable; "legacy" forces the built-in
+    # highlighter. See docs/architecture/extensions-layer.md.
     "extensions": {
-        "enabled": True, "metadata_registry": True, "grammar_catalog": True,
-        "language_detection": True, "syntax_engine": "legacy",
+        "enabled": True,
+        "metadata_registry": True,
+        "grammar_catalog": True,
+        "language_detection": True,
+        "syntax_engine": "extension",
     },
-    "fonts": {"font_family": "monospace", "font_size": 12},
+    "fonts": {"font_family": "monospace", "font_size": 16},
     "keybindings": {
-        "delete": "del", "paste": "ctrl+v", "copy": "ctrl+c", "cut": "ctrl+x",
-        "undo": "ctrl+z", "redo": "ctrl+y", "lint": "f4", "new_file": "f2",
-        "open_file": "ctrl+o", "save_file": "ctrl+s", "save_as": "f5",
-        "select_all": "ctrl+a", "quit": "ctrl+q", "goto_line": "ctrl+g",
-        "git_menu": "f9", "cancel_operation": "esc", "find": "ctrl+f",
-        "find_next": "f3", "search_and_replace": "f6", "help": "f1",
+        "delete": "del",
+        "paste": "ctrl+v",
+        "copy": "ctrl+c",
+        "cut": "ctrl+x",
+        "undo": "ctrl+z",
+        "redo": "ctrl+y",
+        "lint": "f4",
+        "new_file": "f2",
+        "open_file": "ctrl+o",
+        "save_file": "ctrl+s",
+        "save_as": "f5",
+        "select_all": "ctrl+a",
+        "quit": "ctrl+q",
+        "goto_line": "ctrl+g",
+        "git_menu": "f9",
+        "cancel_operation": "esc",
+        "find": "ctrl+f",
+        "find_next": "f3",
+        "search_and_replace": "f6",
+        "help": "f1",
         "extend_selection_left": ["shift+left", "alt-h"],
         "extend_selection_right": ["shift+right", "alt-l"],
         "extend_selection_up": ["shift+up", "alt-k"],
         "extend_selection_down": ["shift+down", "alt-j"],
-        "handle_up": ["up"], "handle_down": ["down"], "handle_left": ["left"],
+        "handle_up": ["up"],
+        "handle_down": ["down"],
+        "handle_left": ["left"],
         "handle_right": ["right"],
     },
     "ai": {"default_provider": "gemini"},
     "ai.keys": {
-        "openai": "", "gemini": "", "mistral": "", "claude": "", "grok": "", "huggingface": ""
+        "openai": "",
+        "gemini": "",
+        "mistral": "",
+        "claude": "",
+        "grok": "",
+        "huggingface": "",
+        "deepseek": "",
+        "qwen": "",
+        "kimi": "",
     },
+    # Coding-optimized default model per provider.
     "ai.models": {
         "openai": "gpt-5-codex",
         "gemini": "gemini-2.5-pro",
-        "mistral": "magistral-medium-1.2",
-        "claude": "claude-4-opus",
-        "grok": "grok-4-fast",
-        "huggingface": "meta-llama/Meta-Llama-3.1-405B-Instruct",
+        "mistral": "codestral-latest",
+        "claude": "claude-sonnet-4-6",
+        "grok": "grok-code-fast-1",
+        "huggingface": "Qwen/Qwen2.5-Coder-32B-Instruct",
+        "deepseek": "deepseek-chat",
+        "qwen": "qwen3-coder-plus",
+        "kimi": "kimi-k2-0905-preview",
     },
     "git": {"enabled": True},
     "settings": {"auto_save_interval": 5, "show_git_info": True},
     "file_icons": {
-        "docs": "📘", "python": "🐍", "toml": "❄️", "javascript": "📜", "typescript": "📑",
-        "php": "🐘", "ruby": "♦️", "css": "🎨", "html": "🌐", "json": "📊", "yaml": "⚙️",
-        "xml": "📰", "markdown": "📗", "text": "📝", "shell": "💫", "dart": "🎯", "go": "🐹",
-        "c": "🇨", "cpp": "🇨➕", "java": "☕", "julia": "🧮", "rust": "🦀", "csharp": "♯",
-        "scala": "💎", "r": "📉", "swift": "🐦", "dockerfile": "🐳", "terraform": "🛠️",
-        "jenkins": "🧑‍✈️", "puppet": "🎎", "saltstack": "🧂", "git": "🔖", "notebook": "📒",
-        "diff": "↔️", "makefile": "🛠️", "ini": "🔩", "csv": "🗂️", "sql": "💾",
-        "graphql": "📈", "kotlin": "📱", "lua": "🌙", "perl": "🐪", "powershell": "💻",
-        "nix": "❄️", "image": "🖼️", "audio": "🎵", "video": "🎞️", "archive": "📦",
-        "font": "🖋️", "binary": "⚙️", "document": "📄", "folder": "📁", "folder_open": "📂",
+        "docs": "📘",
+        "text": "📝",
+        "code": "💻",
+        "python": "🐍",
+        "toml": "❄️",
+        "javascript": "📜",
+        "typescript": "📑",
+        "php": "🐘",
+        "ruby": "♦️",
+        "css": "🎨",
+        "html": "🌐",
+        "json": "📊",
+        "yaml": "⚙️",
+        "xml": "📰",
+        "markdown": "📗",
+        "plaintext": "📄",
+        "shell": "💫",
+        "dart": "🎯",
+        "go": "🐹",
+        "c": "🇨",
+        "cpp": "🇨➕",
+        "java": "☕",
+        "julia": "🧮",
+        "rust": "🦀",
+        "csharp": "♯",
+        "scala": "💎",
+        "r": "📉",
+        "swift": "🐦",
+        "dockerfile": "🐳",
+        "terraform": "🛠️",
+        "jenkins": "🧑‍✈️",
+        "puppet": "🎎",
+        "saltstack": "🧂",
+        "git": "🔖",
+        "notebook": "📒",
+        "diff": "↔️",
+        "makefile": "🛠️",
+        "ini": "⚙️",
+        "csv": "🔩",
+        "sql": "💾",
+        "graphql": "📈",
+        "kotlin": "📱",
+        "lua": "🌙",
+        "perl": "🐪",
+        "powershell": "💻",
+        "nix": "❄️",
+        "image": "🖼️",
+        "audio": "🎵",
+        "video": "🎞️",
+        "archive": "📦",
+        "font": "🖋️",
+        "binary": "⚙️",
+        "document": "📄",
+        "folder": "📁",
+        "folder_open": "📂",
         "default": "❓",
     },
     "supported_formats": {
-        "docs": ["readme", "docs", "todo", "changelog", "license", "contributing", "code_of_conduct"],
-        "python": ["py", "pyw", "pyc", "pyd"], "toml": ["toml", "tml"],
-        "javascript": ["js", "mjs", "cjs", "jsx"], "typescript": ["ts", "tsx", "mts", "cts"],
-        "php": ["php", "php3", "php4", "php5", "phtml"], "ruby": ["rb", "erb", "rake", "rbw", "gemspec"],
-        "css": ["css"], "html": ["html", "htm", "xhtml"], "json": ["json", "jsonc", "geojson", "webmanifest"],
-        "yaml": ["yaml", "yml"], "xml": ["xml", "xsd", "xsl", "xslt", "plist", "rss", "atom", "csproj", "svg"],
-        "markdown": ["md", "markdown", "mdown", "mkd"], "text": ["txt", "log", "rst", "srt", "sub", "me"],
-        "shell": ["sh", "bash", "zsh", "fish", "ksh", "csh", "tcsh", "dash", "ash", "cmd", "command", "tool", "bat"],
-        "dart": ["dart"], "go": ["go"], "c": ["c", "h"], "cpp": ["cpp", "cxx", "cc", "hpp", "hxx", "hh", "inl", "tpp"],
-        "java": ["java", "jar", "class"], "julia": ["jl"], "rust": ["rs", "rlib"], "csharp": ["cs"],
-        "scala": ["scala", "sc"], "r": ["r", "R", "rds", "rda"], "swift": ["swift"],
-        "dockerfile": ["Dockerfile", "dockerfile"], "terraform": ["tf", "tfvars"],
-        "jenkins": ["Jenkinsfile", "jenkinsfile", "groovy"], "puppet": ["pp"], "saltstack": ["sls"],
-        "git": [".gitignore", ".gitattributes", ".gitmodules", ".gitkeep", "gitconfig", "config"],
-        "notebook": ["ipynb"], "diff": ["diff", "patch"], "makefile": ["Makefile", "makefile", "mk", "mak"],
-        "ini": ["ini", "cfg", "conf", "properties", "editorconfig"], "csv": ["csv", "tsv"], "sql": ["sql"],
-        "graphql": ["graphql", "gql"], "kotlin": ["kt", "kts"], "lua": ["lua"], "perl": ["pl", "pm", "t", "pod"],
-        "powershell": ["ps1", "psm1", "psd1"], "nix": ["nix"],
-        "image": ["jpg", "jpeg", "png", "gif", "bmp", "ico", "webp", "tiff", "tif", "heic", "heif"],
+        "docs": [
+            "readme",
+            "docs",
+            "todo",
+            "changelog",
+            "license",
+            "contributing",
+            "code_of_conduct",
+        ],
+        "python": ["py", "pyw", "pyc", "pyd"],
+        "toml": ["toml", "tml"],
+        "javascript": ["js", "mjs", "cjs", "jsx"],
+        "typescript": ["ts", "tsx", "mts", "cts"],
+        "php": ["php", "php3", "php4", "php5", "phtml"],
+        "ruby": ["rb", "erb", "rake", "rbw", "gemspec"],
+        "css": ["css"],
+        "html": ["html", "htm", "xhtml"],
+        "json": ["json", "jsonc", "geojson", "webmanifest"],
+        "yaml": ["yaml", "yml"],
+        "xml": ["xml", "xsd", "xsl", "xslt", "plist", "rss", "atom", "csproj", "svg"],
+        "markdown": ["md", "markdown", "mdown", "mkd"],
+        "text": ["txt", "log", "rst", "srt", "sub", "me"],
+        "shell": [
+            "sh",
+            "bash",
+            "zsh",
+            "fish",
+            "ksh",
+            "csh",
+            "tcsh",
+            "dash",
+            "ash",
+            "cmd",
+            "command",
+            "tool",
+            "bat",
+        ],
+        "dart": ["dart"],
+        "go": ["go"],
+        "c": ["c", "h"],
+        "cpp": ["cpp", "cxx", "cc", "hpp", "hxx", "hh", "inl", "tpp"],
+        "java": ["java", "jar", "class"],
+        "julia": ["jl"],
+        "rust": ["rs", "rlib"],
+        "csharp": ["cs"],
+        "scala": ["scala", "sc"],
+        "r": ["r", "R", "rds", "rda"],
+        "swift": ["swift"],
+        "dockerfile": ["Dockerfile", "dockerfile"],
+        "terraform": ["tf", "tfvars"],
+        "jenkins": ["Jenkinsfile", "jenkinsfile", "groovy"],
+        "puppet": ["pp"],
+        "saltstack": ["sls"],
+        "git": [
+            ".gitignore",
+            ".gitattributes",
+            ".gitmodules",
+            ".gitkeep",
+            "gitconfig",
+            "config",
+        ],
+        "notebook": ["ipynb"],
+        "diff": ["diff", "patch"],
+        "makefile": ["Makefile", "makefile", "mk", "mak"],
+        "ini": ["ini", "cfg", "conf", "properties", "editorconfig"],
+        "csv": ["csv", "tsv"],
+        "sql": ["sql"],
+        "graphql": ["graphql", "gql"],
+        "kotlin": ["kt", "kts"],
+        "lua": ["lua"],
+        "perl": ["pl", "pm", "t", "pod"],
+        "powershell": ["ps1", "psm1", "psd1"],
+        "nix": ["nix"],
+        "image": [
+            "jpg",
+            "jpeg",
+            "png",
+            "gif",
+            "bmp",
+            "ico",
+            "webp",
+            "tiff",
+            "tif",
+            "heic",
+            "heif",
+        ],
         "audio": ["mp3", "wav", "ogg", "flac", "aac", "m4a", "wma"],
         "video": ["mp4", "mkv", "avi", "mov", "webm", "flv", "wmv"],
-        "archive": ["zip", "tar", "gz", "tgz", "bz2", "rar", "7z", "xz", "iso", "deb", "rpm", "pkg"],
+        "archive": [
+            "zip",
+            "tar",
+            "gz",
+            "tgz",
+            "bz2",
+            "rar",
+            "7z",
+            "xz",
+            "iso",
+            "deb",
+            "rpm",
+            "pkg",
+        ],
         "font": ["ttf", "otf", "woff", "woff2", "eot"],
         "binary": ["exe", "dll", "so", "o", "bin", "app", "com", "msi", "dmg"],
-        "document": ["doc", "docx", "odt", "rtf", "pdf", "ppt", "pptx", "odp", "xls", "xlsx", "ods", "epub", "mobi"],
+        "document": [
+            "doc",
+            "docx",
+            "odt",
+            "rtf",
+            "pdf",
+            "ppt",
+            "pptx",
+            "odp",
+            "xls",
+            "xlsx",
+            "ods",
+            "epub",
+            "mobi",
+        ],
     },
     "comments": {
         "python": {"line_prefix": "# ", "docstring_delim": '"""'},
@@ -162,9 +365,12 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "javascript": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "typescript": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "php": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
-        "html": {"block_delims": ["<!--", "-->"]}, "xml": {"block_delims": ["<!--", "-->"]},
-        "css": {"block_delims": ["/*", "*/"]}, "scss": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
-        "graphql": {"line_prefix": "# "}, "c": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
+        "html": {"block_delims": ["<!--", "-->"]},
+        "xml": {"block_delims": ["<!--", "-->"]},
+        "css": {"block_delims": ["/*", "*/"]},
+        "scss": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
+        "graphql": {"line_prefix": "# "},
+        "c": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "cpp": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "csharp": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "java": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
@@ -175,31 +381,132 @@ DEFAULT_CONFIG: dict[str, Any] = {
         "scala": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "dart": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
         "haskell": {"line_prefix": "-- ", "block_delims": ["{-", "-}"]},
-        "elixir": {"line_prefix": "# ", "docstring_delim": '"""'}, "erlang": {"line_prefix": "% "},
-        "clojure": {"line_prefix": ";; "}, "fsharp": {"line_prefix": "// ", "block_delims": ["(*", "*)"]},
-        "ocaml": {"block_delims": ["(*", "*)"]}, "shell": {"line_prefix": "# "},
+        "elixir": {"line_prefix": "# ", "docstring_delim": '"""'},
+        "erlang": {"line_prefix": "% "},
+        "clojure": {"line_prefix": ";; "},
+        "fsharp": {"line_prefix": "// ", "block_delims": ["(*", "*)"]},
+        "ocaml": {"block_delims": ["(*", "*)"]},
+        "shell": {"line_prefix": "# "},
         "powershell": {"line_prefix": "# ", "block_delims": ["<#", "#>"]},
-        "dockerfile": {"line_prefix": "# "}, "makefile": {"line_prefix": "# "},
+        "dockerfile": {"line_prefix": "# "},
+        "makefile": {"line_prefix": "# "},
         "terraform": {"line_prefix": "# ", "block_delims": ["/*", "*/"]},
         "jenkins": {"line_prefix": "// ", "block_delims": ["/*", "*/"]},
-        "puppet": {"line_prefix": "# "}, "saltstack": {"line_prefix": "# "},
-        "nix": {"line_prefix": "# ", "block_delims": ["/*", "*/"]}, "vim": {"line_prefix": '" '},
-        "assembly": {"line_prefix": "; "}, "sql": {"line_prefix": "-- ", "block_delims": ["/*", "*/"]},
-        "yaml": {"line_prefix": "# "}, "toml": {"line_prefix": "# "}, "ini": {"line_prefix": "; "},
-        "markdown": {"block_delims": ["<!--", "-->"]}, "latex": {"line_prefix": "% "},
-        "r": {"line_prefix": "# "}, "julia": {"line_prefix": "# ", "block_delims": ["#=", "=#"]},
+        "puppet": {"line_prefix": "# "},
+        "saltstack": {"line_prefix": "# "},
+        "nix": {"line_prefix": "# ", "block_delims": ["/*", "*/"]},
+        "vim": {"line_prefix": '" '},
+        "assembly": {"line_prefix": "; "},
+        "sql": {"line_prefix": "-- ", "block_delims": ["/*", "*/"]},
+        "yaml": {"line_prefix": "# "},
+        "toml": {"line_prefix": "# "},
+        "ini": {"line_prefix": "; "},
+        "markdown": {"block_delims": ["<!--", "-->"]},
+        "latex": {"line_prefix": "% "},
+        "r": {"line_prefix": "# "},
+        "julia": {"line_prefix": "# ", "block_delims": ["#=", "=#"]},
         "matlab": {"line_prefix": "% ", "block_delims": ["%{", "%}"]},
         "nim": {"line_prefix": "# ", "block_delims": ["#[", "]#"]},
-        "crystal": {"line_prefix": "# "}, "zig": {"line_prefix": "// "}, "bat": {"line_prefix": "REM "},
+        "crystal": {"line_prefix": "# "},
+        "zig": {"line_prefix": "// "},
+        "bat": {"line_prefix": "REM "},
     },
+}
+
+_ECLI_CONFIG_DIR_RELATIVE = Path(".config") / "ecli"
+CONFIG_FILENAME = "config.toml"
+_TEXTMATE_BACKUP_FILENAME = "config.toml.pre-textmate.bak"
+_THEME_NUMBERING_BACKUP_FILENAME = "config.toml.pre-extension-theme-numbering.bak"
+_CONFIG_MIGRATION_WARNINGS: list[str] = []
+
+_OLD_THEME_ID_TO_COMPATIBILITY_ID = {
+    1: 181,
+    2: 182,
+    3: 381,
+    4: 183,
+    5: 281,
+    6: 282,
+    7: 382,
+    8: 283,
+}
+
+_PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID = {
+    101: 181,
+    102: 281,
+    103: 182,
+    104: 282,
+    105: 183,
+    106: 283,
+    107: 381,
+    108: 382,
+}
+
+_TRANSITIONAL_THEME_ID_TO_CANONICAL_ID = {
+    **{old: 100 + old for old in range(1, 11)},
+    **{old: 190 + old for old in range(11, 26)},
+    **{old: 275 + old for old in range(26, 30)},
 }
 
 
 # --- Helper Functions ---
 
+
+def _trusted_user_config_dir() -> Path:
+    """Return the trusted ECLI user config directory."""
+    return Path.home() / _ECLI_CONFIG_DIR_RELATIVE
+
+
+def _trusted_user_config_path() -> Path:
+    """Return the trusted ECLI user config file path."""
+    trusted_config_dir = _trusted_user_config_dir()
+    return trusted_config_dir / CONFIG_FILENAME
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    """Return whether ``path`` is contained in ``parent`` after resolution."""
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _trusted_config_path_for_migration(user_config_path: Path) -> Path | None:
+    """Return the trusted config path only when ``user_config_path`` resolves to it."""
+    trusted_config_dir = _trusted_user_config_dir()
+    trusted_config_path = trusted_config_dir / CONFIG_FILENAME
+    resolved_trusted_dir = trusted_config_dir.resolve()
+    resolved_trusted_config = trusted_config_path.resolve()
+    resolved_user_config = user_config_path.resolve()
+    if resolved_user_config != resolved_trusted_config or not _is_relative_to(
+        resolved_trusted_config, resolved_trusted_dir
+    ):
+        logger.warning(
+            "Skipped ECLI config migration outside trusted config path: %s",
+            user_config_path,
+        )
+        return None
+    return trusted_config_path
+
+
+def _safe_config_backup_path(backup_name: str) -> Path | None:
+    """Return a fixed-name backup path inside the trusted ECLI config directory.
+
+    Backups are constructed only from the trusted config directory and a fixed
+    backup filename. Caller-supplied path objects must not reach this function.
+    """
+    trusted_dir = _trusted_user_config_dir()
+    resolved_trusted_dir = trusted_dir.resolve()
+    resolved_config_path = (trusted_dir / CONFIG_FILENAME).resolve()
+    if not _is_relative_to(resolved_config_path, resolved_trusted_dir):
+        logger.warning("Skipped ECLI config backup outside trusted config directory.")
+        return None
+    return trusted_dir / backup_name
+
+
 def get_project_root() -> Path:
     """Determines the project's root directory for finding template files."""
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
         return Path(sys._MEIPASS)
     else:
         return Path(__file__).resolve().parents[3]
@@ -208,15 +515,15 @@ def get_project_root() -> Path:
 def ensure_user_config_exists() -> None:
     """Checks for user config files in `~/.config/ecli` and creates them if missing."""
     try:
-        config_dir = Path.home() / ".config" / "ecli"
-        user_config_path = config_dir / "config.toml"
+        config_dir = _trusted_user_config_dir()
+        user_config_path = _trusted_user_config_path()
         user_env_path = config_dir / ".env"
 
         config_dir.mkdir(parents=True, exist_ok=True)
 
         if not user_config_path.exists():
             project_root = get_project_root()
-            source_config_path = project_root / "config.toml"
+            source_config_path = project_root / CONFIG_FILENAME
             if source_config_path.exists():
                 shutil.copy(source_config_path, user_config_path)
                 logger.info(f"Created user config template at: {user_config_path}")
@@ -226,34 +533,226 @@ def ensure_user_config_exists() -> None:
             logger.info(f"Created user .env template at: {user_env_path}")
 
         migrate_legacy_theme_config(user_config_path)
+        migrate_obsolete_config_tables(user_config_path)
 
     except Exception as e:
-        logger.critical(f"Could not create user configuration files: {e}", exc_info=True)
+        logger.critical(
+            f"Could not create user configuration files: {e}", exc_info=True
+        )
 
 
-def migrate_legacy_theme_config(user_config_path: Path) -> bool:
-    """Upgrade a legacy ``[theme]``-table config to a root ``theme = N`` key.
+def migrate_obsolete_config_tables(user_config_path: Path) -> bool:
+    """Refresh a pre-#102 user config to the current production format.
 
-    Old configs used ``[theme]``/``[theme.ui]``/``[colors]`` tables that the
-    editor no longer reads, leaving users unable to switch themes by editing the
-    file. This is a one-time, backed-up, conservative migration: the dead tables
-    are commented out (never deleted) and a single editable ``theme = N`` line is
-    inserted, derived from the legacy ``name``/``id``. No-op when the config
-    already has a root ``theme`` key, has no legacy ``[theme]`` table, or cannot
-    be read. Returns True when a migration was written.
+    Older user configs carried large internal data tables (``[comments.*]``,
+    ``[[syntax_highlighting.*.patterns]]``, ``[supported_formats]``) and the
+    transitional ``syntax_engine = "legacy"`` default. Those tables now live in
+    code (``DEFAULT_CONFIG``) and the default engine is TextMate, so a user who
+    upgraded would otherwise be pinned to the old legacy highlighter and never
+    see TextMate rendering.
+
+    This one-time, backed-up migration strips those obsolete tables (text-based,
+    preserving all other settings and comments) and flips a transitional
+    ``syntax_engine = "legacy"`` to ``"extension"``. It is a no-op when none of
+    those markers are present. Returns True when a migration was written.
     """
+    trusted_config_path = _trusted_config_path_for_migration(user_config_path)
+    if trusted_config_path is None:
+        return False
+
     try:
-        text = user_config_path.read_text(encoding="utf-8")
+        text = trusted_config_path.read_text(encoding="utf-8")
     except Exception:
         return False
 
-    if re.search(r"(?m)^\s*theme\s*=\s*\d", text):
-        return False  # already has a root theme = N
-    if not re.search(r"(?m)^\s*\[theme\]", text):
-        return False  # no legacy table to migrate
+    obsolete_header = re.compile(
+        r"^\s*(\[\[syntax_highlighting\.|\[comments\.|\[supported_formats\])"
+    )
+    table_header = re.compile(r"^\s*\[")
+    has_obsolete = any(obsolete_header.match(line) for line in text.splitlines())
+    has_legacy_engine = re.search(r'(?m)^\s*syntax_engine\s*=\s*"legacy"', text)
+    if not has_obsolete and not has_legacy_engine:
+        return False
 
-    theme_id = _derive_legacy_theme_id(text)
+    out: list[str] = []
+    skipping = False
+    for line in text.splitlines(keepends=True):
+        if obsolete_header.match(line):
+            skipping = True
+            continue
+        if skipping and table_header.match(line):
+            skipping = False  # a non-obsolete table begins; keep it
+        if skipping:
+            continue
+        out.append(line)
 
+    migrated = "".join(out)
+    migrated = re.sub(
+        r'(?m)^(\s*syntax_engine\s*=\s*)"legacy"', r'\1"extension"', migrated
+    )
+    if migrated == text:
+        return False
+
+    try:
+        backup = _safe_config_backup_path(_TEXTMATE_BACKUP_FILENAME)
+        if backup is None:
+            return False
+        if not backup.exists():
+            backup.write_text(text, encoding="utf-8")
+        trusted_config_path.write_text(migrated, encoding="utf-8")
+        logger.warning(
+            "Migrated obsolete config tables and enabled the TextMate engine at "
+            "%s (backup: %s).",
+            trusted_config_path,
+            backup,
+        )
+        return True
+    except Exception:
+        logger.exception("Obsolete-config migration failed; left config unchanged.")
+        return False
+
+
+def migrate_legacy_theme_config(user_config_path: Path) -> bool:
+    """Upgrade pre-extension and transitional theme numbering in user config.
+
+    Migrations are conservative and backed up before writing:
+
+    * old ``[theme]`` table configs are converted to a root ``theme = N`` line;
+    * old pre-extension root ids ``1``-``8`` map to the preserved legacy
+      compatibility palettes;
+    * the previous in-progress professional ids ``1``-``29`` map to the new
+      100/200/300 ranges when old extension-theme comments identify that shape;
+    * previous compatibility ids ``101``-``108`` map to the reserved
+      18x/28x/38x compatibility ids when the current numbering marker is absent.
+    """
+    trusted_config_path = _trusted_config_path_for_migration(user_config_path)
+    if trusted_config_path is None:
+        return False
+
+    try:
+        text = trusted_config_path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+
+    root_match = _root_theme_match(text)
+    has_current_marker = _has_current_theme_numbering_marker(text)
+    migrated = text
+    reason = ""
+    theme_id: int | None = None
+
+    if root_match is not None:
+        existing_id = int(root_match.group("id"))
+        theme_id = _migrated_root_theme_id(existing_id, text, has_current_marker)
+        if theme_id is None:
+            return False
+        migrated = (
+            text[: root_match.start("id")]
+            + str(theme_id)
+            + text[root_match.end("id") :]
+        )
+        reason = f"theme id {existing_id} -> {theme_id}"
+    elif re.search(r"(?m)^\s*\[theme\]", text):
+        theme_id = _derive_legacy_theme_id(text)
+        migrated = _comment_legacy_theme_tables(text)
+        insertion = (
+            "# Active colour theme. See the theme-numbering policy in config.toml.\n"
+            f"theme = {theme_id}\n\n"
+        )
+        first_table = re.search(r"(?m)^\s*\[", migrated)
+        if first_table:
+            migrated = (
+                migrated[: first_table.start()]
+                + insertion
+                + migrated[first_table.start() :]
+            )
+        else:
+            migrated = insertion + migrated
+        reason = f"legacy [theme] table -> {theme_id}"
+    else:
+        return False
+
+    try:
+        backup = _safe_config_backup_path(_THEME_NUMBERING_BACKUP_FILENAME)
+        if backup is None:
+            return False
+        if not backup.exists():
+            backup.write_text(text, encoding="utf-8")
+        trusted_config_path.write_text(migrated, encoding="utf-8")
+        message = (
+            f"Migrated ECLI theme numbering in user config ({reason}); backup: {backup}"
+        )
+        _CONFIG_MIGRATION_WARNINGS.append(message)
+        logger.warning("%s", message)
+        return True
+    except Exception:
+        logger.exception("Theme-numbering migration failed; left config unchanged.")
+        return False
+
+
+def _derive_legacy_theme_id(text: str) -> int:
+    """Best-effort theme id from a legacy ``[theme]`` table's id/name."""
+    id_match = re.search(r"(?ms)^\s*\[theme\].*?^\s*id\s*=\s*(\d+)", text)
+    if id_match:
+        candidate = int(id_match.group(1))
+        if candidate in _OLD_THEME_ID_TO_COMPATIBILITY_ID:
+            return _OLD_THEME_ID_TO_COMPATIBILITY_ID[candidate]
+        if candidate in _PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID:
+            return _PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID[candidate]
+        if candidate in _TRANSITIONAL_THEME_ID_TO_CANONICAL_ID:
+            return _TRANSITIONAL_THEME_ID_TO_CANONICAL_ID[candidate]
+        if candidate in _previous_or_current_compatibility_ids():
+            return candidate
+    name_match = re.search(
+        r"(?ms)^\s*\[theme\].*?^\s*name\s*=\s*[\"']([^\"']+)[\"']", text
+    )
+    if name_match and "light" in name_match.group(1).lower():
+        return 181
+    return 281
+
+
+def _root_theme_match(text: str) -> re.Match[str] | None:
+    """Return the root-level ``theme = N`` match before the first TOML table."""
+    prefix_end = len(text)
+    table = re.search(r"(?m)^\s*\[", text)
+    if table is not None:
+        prefix_end = table.start()
+    return re.search(
+        r"(?m)^(?P<prefix>\s*theme\s*=\s*[\"']?)(?P<id>\d+)(?P<suffix>[\"']?)\s*$",
+        text[:prefix_end],
+    )
+
+
+def _has_current_theme_numbering_marker(text: str) -> bool:
+    return "100-199 = light themes" in text and "800-899" in text
+
+
+def _looks_like_transitional_extension_theme_config(text: str) -> bool:
+    markers = (
+        "professional ids 1-29",
+        "Available in the imported VS Code theme tree",
+        "Professional themes are discovered",
+        "Built-in compatibility themes:",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _migrated_root_theme_id(
+    theme_id: int, text: str, has_current_marker: bool
+) -> int | None:
+    if has_current_marker:
+        return None
+    if 1 <= theme_id <= 8:
+        if _looks_like_transitional_extension_theme_config(text):
+            return _TRANSITIONAL_THEME_ID_TO_CANONICAL_ID[theme_id]
+        return _OLD_THEME_ID_TO_COMPATIBILITY_ID[theme_id]
+    if 9 <= theme_id <= 29:
+        return _TRANSITIONAL_THEME_ID_TO_CANONICAL_ID[theme_id]
+    if theme_id in _PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID:
+        return _PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID[theme_id]
+    return None
+
+
+def _comment_legacy_theme_tables(text: str) -> str:
     lines = text.splitlines(keepends=True)
     out: list[str] = []
     commenting = False
@@ -267,73 +766,39 @@ def migrate_legacy_theme_config(user_config_path: Path) -> bool:
             out.append("# " + line)
         else:
             out.append(line)
-    migrated = "".join(out)
-
-    insertion = (
-        "# Active colour theme (1-4 light, 5-8 dark). Edit this number to switch.\n"
-        f"theme = {theme_id}\n\n"
-    )
-    first_table = re.search(r"(?m)^\s*\[", migrated)
-    if first_table:
-        migrated = migrated[: first_table.start()] + insertion + migrated[first_table.start() :]
-    else:
-        migrated = insertion + migrated
-
-    try:
-        backup = user_config_path.with_name(user_config_path.name + ".bak")
-        if not backup.exists():
-            backup.write_text(text, encoding="utf-8")
-        user_config_path.write_text(migrated, encoding="utf-8")
-        logger.warning(
-            "Migrated legacy [theme] config to 'theme = %d' at %s (backup: %s).",
-            theme_id,
-            user_config_path,
-            backup,
-        )
-        return True
-    except Exception:
-        logger.exception("Legacy theme config migration failed; left config unchanged.")
-        return False
+    return "".join(out)
 
 
-def _derive_legacy_theme_id(text: str) -> int:
-    """Best-effort theme id from a legacy ``[theme]`` table's id/name."""
-    id_match = re.search(r"(?ms)^\s*\[theme\].*?^\s*id\s*=\s*(\d+)", text)
-    if id_match:
-        candidate = int(id_match.group(1))
-        if 1 <= candidate <= 8:
-            return candidate
-    name_match = re.search(
-        r"(?ms)^\s*\[theme\].*?^\s*name\s*=\s*[\"']([^\"']+)[\"']", text
-    )
-    if name_match and "light" in name_match.group(1).lower():
-        return 1
-    return 5
-
-
+def _previous_or_current_compatibility_ids() -> set[int]:
+    return {
+        *_PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID,
+        *_OLD_THEME_ID_TO_COMPATIBILITY_ID.values(),
+    }
 
 
 def load_config() -> dict[str, Any]:
     """
     Loads and merges configurations, ensuring the application can always run.
     """
+    _CONFIG_MIGRATION_WARNINGS.clear()
     final_config = deep_merge({}, DEFAULT_CONFIG)
     logger.debug("Loaded embedded default configuration.")
 
     ensure_user_config_exists()
 
-    user_config_path = Path.home() / ".config" / "ecli" / "config.toml"
+    user_config_path = _trusted_user_config_dir() / CONFIG_FILENAME
     loaded_from = "(built-in defaults only)"
     if user_config_path.is_file():
         try:
-            user_config = toml.load(user_config_path)
+            user_config = _load_toml_file(user_config_path)
             final_config = deep_merge(final_config, user_config)
             loaded_from = str(user_config_path)
             logger.info("Loaded user config from %s", user_config_path)
             if isinstance(user_config.get("theme"), dict):
                 logger.warning(
-                    "User config %s uses the legacy [theme] table. Set a root-level "
-                    "'theme = 1..8' (or [theme] id = N), or run with ECLI_THEME=N.",
+                    "User config %s uses the legacy [theme] table. Set a "
+                    "valid root-level 'theme = N' (or [theme] id = N), "
+                    "or run with ECLI_THEME=N.",
                     user_config_path,
                 )
         except Exception as e:
@@ -347,7 +812,15 @@ def load_config() -> dict[str, Any]:
     # Record the effective config path so the runtime/UI can report which file
     # was actually loaded (root-cause aid for "my config changes do nothing").
     final_config["_loaded_config_path"] = loaded_from
+    if _CONFIG_MIGRATION_WARNINGS:
+        final_config["_migration_warnings"] = tuple(_CONFIG_MIGRATION_WARNINGS)
     return final_config
+
+
+def _load_toml_file(path: Path) -> dict[str, Any]:
+    if toml is not None:
+        return toml.load(str(path))
+    return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
 def get_file_icon(filename: Optional[str], config: dict[str, Any]) -> str:
@@ -411,7 +884,9 @@ def safe_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
     """
     timeout = kwargs.pop("timeout", None)
     if timeout is not None and not isinstance(timeout, int | float):
-        logger.warning("Invalid timeout type %s; running without timeout.", type(timeout).__name__)
+        logger.warning(
+            "Invalid timeout type %s; running without timeout.", type(timeout).__name__
+        )
         timeout = None
     elif timeout is not None and timeout <= 0:
         logger.warning("Invalid timeout value %s; using default 30s.", timeout)
@@ -419,17 +894,27 @@ def safe_run(cmd: list[str], **kwargs: Any) -> subprocess.CompletedProcess:
 
     try:
         return subprocess.run(
-            cmd, capture_output=True, text=True, check=False,
-            encoding="utf-8", errors="replace", timeout=timeout, **kwargs,
+            cmd,
+            capture_output=True,
+            text=True,
+            check=False,
+            encoding="utf-8",
+            errors="replace",
+            timeout=timeout,
+            **kwargs,
         )
     except FileNotFoundError as e:
         logger.error(f"Command not found: {cmd[0]!r}", exc_info=True)
         return subprocess.CompletedProcess(cmd, 127, stdout="", stderr=str(e))
     except subprocess.TimeoutExpired as e:
         logger.warning(f"Command timed out after {timeout}s: {' '.join(cmd)}")
-        return subprocess.CompletedProcess(cmd, -15, stdout=e.stdout or "", stderr=e.stderr or "")
+        return subprocess.CompletedProcess(
+            cmd, -15, stdout=e.stdout or "", stderr=e.stderr or ""
+        )
     except Exception as e:
-        logger.exception(f"An unexpected error occurred while running command: {' '.join(cmd)}")
+        logger.exception(
+            f"An unexpected error occurred while running command: {' '.join(cmd)}"
+        )
         return subprocess.CompletedProcess(cmd, -1, stdout="", stderr=str(e))
 
 

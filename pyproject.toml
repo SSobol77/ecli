@@ -67,6 +67,7 @@ dependencies = [
     "toml>=0.10.2",
     "tato>=0.2.3",
     "windows-curses>=2.4.0; sys_platform == 'win32'",
+    "python-textmate>=0.2.0",
 ]
 
 [project.optional-dependencies]

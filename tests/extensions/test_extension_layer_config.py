@@ -37,7 +37,7 @@ REQUIRED_EXTENSIONS_DEFAULTS = {
     "metadata_registry": True,
     "grammar_catalog": True,
     "language_detection": True,
-    "syntax_engine": "legacy",
+    "syntax_engine": "extension",
 }
 
 
@@ -65,7 +65,7 @@ def test_from_config_parses_default_config() -> None:
     assert config.metadata_registry
     assert config.grammar_catalog
     assert config.language_detection
-    assert config.syntax_engine == "legacy"
+    assert config.syntax_engine == "extension"
     assert config.diagnostics == ()
 
 
@@ -99,10 +99,14 @@ def test_syntax_engine_legacy_is_preserved() -> None:
     assert config.diagnostics == ()
 
 
-def test_syntax_engine_extension_falls_back_to_legacy() -> None:
+def test_syntax_engine_extension_is_accepted() -> None:
+    # As of #102, "extension" is a valid selection of the extension-backed
+    # syntax-service boundary. It does not enable any runtime, and rendering
+    # still falls back to legacy (proven by the syntax-service tests).
     config = ExtensionLayerConfig.from_section({"syntax_engine": "extension"})
-    assert config.syntax_engine == "legacy"
-    assert any("not available until #102" in d.message for d in config.diagnostics)
+    assert config.syntax_engine == "extension"
+    assert config.uses_legacy_syntax is False
+    assert config.diagnostics == ()
 
 
 def test_unknown_syntax_engine_falls_back_to_legacy() -> None:
@@ -140,14 +144,34 @@ def test_runtime_execution_keys_are_ignored_with_diagnostic() -> None:
 
 
 # --------------------------------------------------------------------------- #
-# Legacy regex highlighter is not removed in #101.
+# Legacy highlighter remains available; obsolete tables moved out of config.toml.
 # --------------------------------------------------------------------------- #
 
 
-def test_legacy_regex_highlighter_is_preserved() -> None:
+def test_global_highlighting_toggle_is_preserved() -> None:
     config = _config_toml()
-    # The legacy regex highlighter config and toggle remain in place.
-    assert "syntax_highlighting" in config
-    assert "python" in config["syntax_highlighting"]
+    # The global visible-highlighting switch stays in both config.toml and
+    # DEFAULT_CONFIG and applies to both engines.
     assert config["editor"]["syntax_highlighting"] is True
     assert DEFAULT_CONFIG["editor"]["syntax_highlighting"] is True
+
+
+def test_obsolete_tables_removed_from_config_toml() -> None:
+    config = _config_toml()
+    # The old internal data tables no longer ship in the user-facing config.
+    assert "syntax_highlighting" not in config
+    assert "comments" not in config
+    assert "supported_formats" not in config
+    # They remain available as internal code defaults so legacy still works.
+    assert "comments" in DEFAULT_CONFIG
+    assert "supported_formats" in DEFAULT_CONFIG
+
+
+def test_config_toml_and_default_config_agree_on_user_sections() -> None:
+    config = _config_toml()
+    # Every key the user-facing config.toml ships must have the same value in the
+    # in-code DEFAULT_CONFIG fallback (DEFAULT_CONFIG may carry extra internal
+    # keys, e.g. editor.default_new_filename).
+    for section in ("editor", "fonts", "linter", "logging", "extensions", "settings"):
+        for key, value in config[section].items():
+            assert DEFAULT_CONFIG[section].get(key) == value, f"{section}.{key}"

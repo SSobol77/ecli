@@ -500,6 +500,25 @@ class Ecli:
             self.show_line_numbers,
         )
 
+    # --- Buffer modification tracking ---
+    @property
+    def modified(self) -> bool:
+        """Whether the buffer has unsaved changes."""
+        return getattr(self, "_modified", False)
+
+    @modified.setter
+    def modified(self, value: bool) -> None:
+        """Set the modified flag and bump the monotonic buffer-edit revision.
+
+        Every assignment brackets a potential buffer edit (all edit paths set
+        ``modified = True``), so bumping the revision here gives viewport
+        highlighting a single, central invalidation signal: scroll and cursor
+        movement never touch ``modified``, so caches stay warm while scrolling,
+        and recompute exactly once per edit (#102).
+        """
+        self._modified = bool(value)
+        self._buffer_edit_revision = getattr(self, "_buffer_edit_revision", 0) + 1
+
     # --- State Initialization ---
     def _initialize_state(self) -> None:
         """Initializes all editor state attributes to their default values."""
@@ -508,7 +527,11 @@ class Ecli:
         self.cursor_y: int = 0
         self.scroll_top: int = 0
         self.scroll_left: int = 0
-        self.modified: bool = False
+        # Backing field + monotonic buffer-edit revision (see the ``modified``
+        # property). The revision lets viewport highlighting caches recompute
+        # exactly once per edit instead of once per scroll frame (#102).
+        self._modified: bool = False
+        self._buffer_edit_revision: int = 0
         self.encoding: str = "UTF-8"
         self.filename: Optional[str] = None
         self._file_loaded_from_disk: bool = False
@@ -532,6 +555,13 @@ class Ecli:
         self.current_language: Optional[str] = None
         self._lexer: Optional[TextLexer] = None
         self.custom_syntax_patterns: list[tuple[re.Pattern, str]] = []
+        # #102: extension-backed syntax metadata + TextMate line highlighter for
+        # the current file, populated by detect_language(). When the extension
+        # engine is selected and a usable TextMate grammar is available, the
+        # highlighter renders real scoped spans; otherwise these stay None and the
+        # legacy highlighter renders. Both degrade safely to None on any error.
+        self.extension_syntax: Any = None
+        self._extension_highlighter: Any = None
         self._state_lock: threading.RLock = threading.RLock()
         self._shell_cmd_q: queue.Queue[str] = queue.Queue()
         self._git_q: queue.Queue[tuple[str, str, str]] = queue.Queue()
@@ -650,15 +680,15 @@ class Ecli:
     # ---------------- Screen wiring ----------------
     def attach_screen(self, stdscr: curses.window) -> None:
         """Attach curses stdscr after construction.
-           Keeps compatibility with wrapper().
+        Keeps compatibility with wrapper().
         """
         self.stdscr = stdscr
 
     # ---------------- CLI file preloading ----------------
     def preload_cli_document(self, path: Path) -> None:
         """Preload (open or create) a buffer named after 'path',
-           even if it does not exist on disk.
-           This ensures that Save will default to that path.
+        even if it does not exist on disk.
+        This ensures that Save will default to that path.
         """
         intended = str(path.resolve())
         self._cli_intended_path = intended
@@ -686,10 +716,19 @@ class Ecli:
                 self._set_current_path(intended)
                 return
             except Exception:
-                logger.debug("open_file(%s) failed, will try creating an empty buffer", intended, exc_info=True)
+                logger.debug(
+                    "open_file(%s) failed, will try creating an empty buffer",
+                    intended,
+                    exc_info=True,
+                )
 
         # 3) Create an empty in-memory buffer with given name if API exists.
-        for meth_name in ("create_empty_buffer_with_name", "new_buffer_named", "new_file_with_name", "new_file"):
+        for meth_name in (
+            "create_empty_buffer_with_name",
+            "new_buffer_named",
+            "new_file_with_name",
+            "new_file",
+        ):
             if hasattr(self, meth_name):
                 try:
                     meth = getattr(self, meth_name)
@@ -700,7 +739,9 @@ class Ecli:
                     self._set_current_path(intended)
                     return
                 except Exception:
-                    logger.debug("%s failed, continue fallback", meth_name, exc_info=True)
+                    logger.debug(
+                        "%s failed, continue fallback", meth_name, exc_info=True
+                    )
 
         # 4) Last resort: create on disk then open (guarantees correct default name).
         try:
@@ -709,11 +750,15 @@ class Ecli:
             self.open_file(intended)
             self._set_current_path(intended)
         except Exception:
-            logger.warning("Could not preload CLI document %s; starting unnamed buffer.", intended, exc_info=True)
+            logger.warning(
+                "Could not preload CLI document %s; starting unnamed buffer.",
+                intended,
+                exc_info=True,
+            )
 
     def open_or_create(self, path: str | Path) -> None:
         """Open the file if it exists; otherwise create
-           an empty buffer with that path.
+        an empty buffer with that path.
         """
         p = str(Path(path).expanduser().resolve())
         if os.path.exists(p):
@@ -721,7 +766,12 @@ class Ecli:
             self._set_current_path(p)
             return
         # try to create a named empty buffer via your APIs
-        for meth_name in ("create_empty_buffer_with_name", "new_buffer_named", "new_file_with_name", "new_file"):
+        for meth_name in (
+            "create_empty_buffer_with_name",
+            "new_buffer_named",
+            "new_file_with_name",
+            "new_file",
+        ):
             if hasattr(self, meth_name):
                 try:
                     meth = getattr(self, meth_name)
@@ -742,13 +792,11 @@ class Ecli:
     # --------------- internal helpers ---------------
     def _set_current_path(self, abs_path: str) -> None:
         """Set common filename attributes
-           so Save/Write use the intended path by default.
+        so Save/Write use the intended path by default.
         """
         self.current_file_path = abs_path
         self.file_path = abs_path
         self.filename = abs_path
-
-
 
     # --- Clipboard Availability Check ---
     def close(self) -> None:
@@ -1196,8 +1244,7 @@ class Ecli:
             return ""
 
         if not all(
-            isinstance(value, int)
-            for value in (start_row, start_col, end_row, end_col)
+            isinstance(value, int) for value in (start_row, start_col, end_row, end_col)
         ):
             log_record_to_file_handlers(
                 logging.WARNING,
@@ -1220,9 +1267,7 @@ class Ecli:
         # Delegate to the central, buffer-coordinate-only extractor. It returns
         # file content for the (row, col) span only — never line numbers, the
         # gutter, borders, or any other rendered UI chrome.
-        return selection_to_text(
-            self.text, (start_row, start_col), (end_row, end_col)
-        )
+        return selection_to_text(self.text, (start_row, start_col), (end_row, end_col))
 
     # --- Copy selected text ---
     def copy(self) -> bool:
@@ -1517,7 +1562,9 @@ class Ecli:
         missing or non-boolean value falls back to enabled so highlighting never
         silently breaks on a malformed config.
         """
-        editor_config = self.config.get("editor", {}) if isinstance(self.config, dict) else {}
+        editor_config = (
+            self.config.get("editor", {}) if isinstance(self.config, dict) else {}
+        )
         value = editor_config.get("syntax_highlighting", True)
         return bool(value) if isinstance(value, bool) else True
 
@@ -1525,7 +1572,7 @@ class Ecli:
     def apply_syntax_highlighting_with_pygments(
         self,
         lines: list[str],
-        _line_indices: list[int],
+        line_indices: list[int],
     ) -> list[list[tuple[str, int]]]:
         """Returns a colorized representation of the requested lines.
 
@@ -1552,6 +1599,13 @@ class Ecli:
         # Ensure a lexer is set, even if it's just TextLexer.
         if self._lexer is None:
             self.detect_language()
+
+        # #102: when a TextMate line highlighter is active (extension engine +
+        # usable grammar), render real scoped spans; fall back to legacy per line
+        # if the tokenizer cannot handle a given line.
+        extension_result = self._apply_extension_highlighting(lines, line_indices)
+        if extension_result is not None:
+            return extension_result
 
         highlighted: list[list[tuple[str, int]]] = []
         lexer_id = id(self._lexer) if self._lexer else 0
@@ -1722,10 +1776,155 @@ class Ecli:
         # Clear tokenization cache if the lexer or patterns have changed
         self._clear_cache_if_changed(old_lexer_id, old_custom_patterns)
 
+        # #102: also resolve read-only extension-backed syntax metadata for the
+        # current file. This never alters the legacy highlighting above.
+        self._resolve_extension_syntax_metadata()
+
+    def _resolve_extension_syntax_metadata(self) -> None:
+        """Resolve extension-backed syntax metadata + TextMate highlighter.
+
+        Narrow, safe adapter over the #102 syntax-service boundary. It records
+        language/grammar metadata on ``self.extension_syntax`` and, when the
+        extension engine is selected and a usable TextMate grammar exists, a
+        per-line ``self._extension_highlighter`` for real scoped rendering. It
+        never executes extension code, parses activation events, invokes Node, or
+        starts background workers. Any failure degrades silently to ``None`` so the
+        legacy highlighter always remains a safe fallback.
+        """
+        self.extension_syntax = None
+        self._extension_highlighter = None
+        try:
+            from ecli.extensions.ecli_integration import (
+                TEXTMATE_AVAILABLE,
+                ExtensionLayerConfig,
+                build_syntax_service,
+            )
+
+            layer_config = ExtensionLayerConfig.from_config(self.config)
+            if not layer_config.enabled:
+                return
+            # The catalog/detector are scanned once and cached process-wide, so
+            # this is cheap after the first file and never blocks rendering.
+            service = build_syntax_service(layer_config)
+            self.extension_syntax = service.resolve(self.filename)
+            self._extension_highlighter = service.build_line_highlighter(self.filename)
+            extension_language = getattr(self.extension_syntax, "language_id", None)
+            legacy_language = (getattr(self, "current_language", None) or "").lower()
+            if extension_language and (
+                isinstance(getattr(self, "_lexer", None), TextLexer)
+                or legacy_language in {"text only", "transact-sql", "tsql"}
+                or extension_language in {"log", "ignore"}
+            ):
+                self.current_language = extension_language
+                if extension_language in {"log", "ignore"} or legacy_language in {
+                    "transact-sql",
+                    "tsql",
+                }:
+                    self._lexer = TextLexer()
+                    self.custom_syntax_patterns = []
+
+            # Deterministic one-time diagnostic so the active engine is visible in
+            # the log (and so a missing tokenizer is reported, not silent).
+            if not getattr(self, "_syntax_engine_logged", False):
+                logging.info(
+                    "ECLI syntax engine=%s textmate_tokenizer_available=%s "
+                    "active_renderer=%s",
+                    layer_config.syntax_engine,
+                    TEXTMATE_AVAILABLE,
+                    "textmate" if self._extension_highlighter else "legacy",
+                )
+                self._syntax_engine_logged = True
+        except Exception:
+            logging.debug(
+                "Extension syntax metadata resolution skipped.", exc_info=True
+            )
+            self.extension_syntax = None
+            self._extension_highlighter = None
+
+    def _apply_extension_highlighting(
+        self, lines: list[str], line_indices: list[int]
+    ) -> Optional[list[list[tuple[str, int]]]]:
+        """Render *lines* via the TextMate highlighter, or None to use legacy.
+
+        Returns ``None`` when no extension highlighter is active so the caller
+        keeps the legacy path. For each line where the tokenizer cannot produce
+        spans, that single line falls back to the legacy tokenizer, so the
+        rendered result is always complete and never crashes on tabs, Unicode,
+        empty, or very long lines.
+        """
+        highlighter = getattr(self, "_extension_highlighter", None)
+        if highlighter is None:
+            return None
+
+        default_color = self.colors.get("default", curses.A_NORMAL)
+        lexer_id = id(self._lexer) if self._lexer else 0
+        has_custom_rules = bool(getattr(self, "custom_syntax_patterns", []))
+
+        rendered: list[list[tuple[str, int]]] = []
+        highlighted_lines = self._extension_highlighted_lines(
+            highlighter, lines, line_indices
+        )
+
+        for line, spans in zip(lines, highlighted_lines, strict=False):
+            # Fall back to legacy when the extension engine produced nothing
+            # usable for a non-empty line. Some imported grammars (e.g. the YAML
+            # block grammar) yield no/only-default tokens under the per-line
+            # stateless engine; legacy/Pygments keeps such files readable instead
+            # of rendering them as flat default text.
+            if self._extension_spans_need_legacy(line, spans):
+                rendered.append(
+                    self._get_tokenized_line(line, lexer_id, has_custom_rules)
+                )
+                continue
+            mapped = self._map_extension_spans(spans, default_color)
+            rendered.append(mapped if mapped else [(line, default_color)])
+        return rendered
+
+    def _extension_highlighted_lines(
+        self, highlighter: Any, lines: list[str], line_indices: list[int]
+    ) -> list[Any]:
+        """Return TextMate spans for visible lines, or ``None`` per failed line."""
+        if hasattr(highlighter, "highlight_lines"):
+            try:
+                return highlighter.highlight_lines(
+                    lines,
+                    line_indices=line_indices,
+                    full_text=self.text,
+                    text_revision=getattr(self, "_buffer_edit_revision", 0),
+                )
+            except Exception:
+                return [None for _line in lines]
+        highlighted_lines: list[Any] = []
+        for line in lines:
+            try:
+                highlighted_lines.append(highlighter.highlight(line))
+            except Exception:
+                highlighted_lines.append(None)
+        return highlighted_lines
+
+    @staticmethod
+    def _extension_spans_need_legacy(line: str, spans: Any) -> bool:
+        """Return whether a line must use legacy highlighting."""
+        return spans is None or (
+            line and all(category == "default" for _text, category in spans)
+        )
+
+    def _map_extension_spans(
+        self, spans: list[tuple[str, str]], default_color: int
+    ) -> list[tuple[str, int]]:
+        """Map TextMate style categories to active curses colour attributes."""
+        return [
+            (text, self.colors.get(category, default_color)) for text, category in spans
+        ]
+
     def _determine_lexer(self) -> TextLexer:
         """Determines the appropriate Pygments lexer based on filename and content.
         Follows a priority: filename > content > fallback to TextLexer.
         """
+        if self._is_plain_operational_file(self.filename):
+            logging.debug("Pygments: Operational log/ignore file uses TextLexer.")
+            return TextLexer()
+
         # Detect by filename
         if self.filename and self.filename != "noname":
             try:
@@ -1740,6 +1939,15 @@ class Ecli:
         if content_sample.strip():
             try:
                 lexer = guess_lexer(content_sample, stripall=False)
+                if self._is_non_sql_filename(self.filename) and lexer.name.lower() in {
+                    "sql",
+                    "transact-sql",
+                    "tsql",
+                }:
+                    logging.debug(
+                        "Pygments: Suppressed SQL content guess for non-SQL file."
+                    )
+                    return TextLexer()
                 logging.debug(f"Pygments: Guessed '{lexer.name}' by content.")
                 return lexer
             except Exception:
@@ -1748,6 +1956,19 @@ class Ecli:
         # Fallback
         logging.debug("Pygments: Falling back to TextLexer.")
         return TextLexer()
+
+    @staticmethod
+    def _is_plain_operational_file(filename: str | None) -> bool:
+        if not filename:
+            return False
+        base = os.path.basename(filename).lower()
+        return base == ".gitignore" or base.endswith(".log")
+
+    @staticmethod
+    def _is_non_sql_filename(filename: str | None) -> bool:
+        if not filename:
+            return False
+        return not os.path.basename(filename).lower().endswith(".sql")
 
     def _load_custom_syntax_patterns(self) -> list[tuple[re.Pattern, str]]:
         """Loads and compiles custom regex syntax patterns from the config for the current language."""
@@ -5420,7 +5641,9 @@ class Ecli:
                 content_to_write += newline
 
         try:
-            encoded = content_to_write.encode(self.encoding or "utf-8", errors="replace")
+            encoded = content_to_write.encode(
+                self.encoding or "utf-8", errors="replace"
+            )
             with self.safe_open(target_filename, "wb") as f:
                 cast(BinaryIO, f).write(encoded)
 
@@ -7080,7 +7303,8 @@ class Ecli:
             ):
                 return None
             screen_y_coord = (
-                text_row_idx - self.scroll_top
+                text_row_idx
+                - self.scroll_top
                 + getattr(self, "_content_area_y_offset", 0)
             )
             try:
@@ -7348,15 +7572,26 @@ class Ecli:
         curses.use_default_colors()
 
         # Resolve the active built-in theme. Colours come exclusively from the
-        # selected palette (config key ``theme = 1..8``); the legacy free-form
+        # selected palette (config key ``theme = N``); the legacy free-form
         # ``[colors]`` table is intentionally ignored so a single, deterministic
         # source drives both the UI chrome and syntax highlighting.
-        palette: ThemePalette = resolve_theme(self.config)
+        palette: ThemePalette = resolve_theme(
+            self.config, getattr(self, "active_theme", None)
+        )
         self.active_theme = palette
+        if isinstance(self.config, dict):
+            for warning in self.config.get("_migration_warnings", ()):
+                logging.warning("%s", warning)
+                if hasattr(self, "status_message"):
+                    self.status_message = warning
+        for diagnostic in getattr(palette, "diagnostics", ()):
+            logging.warning("%s", diagnostic)
+            if hasattr(self, "status_message"):
+                self.status_message = diagnostic
         if isinstance(self.config, dict) and self.config.get("colors"):
             logging.info(
                 "Ignoring deprecated [colors] config section; using built-in "
-                "theme '%s' (theme = %d). Set 'theme = 1..8' to change palette.",
+                "theme '%s' (theme = %d). Set a valid numeric theme id to change palette.",
                 palette.name,
                 palette.theme_id,
             )
@@ -7875,6 +8110,9 @@ class Ecli:
             "4": "claude",
             "5": "grok",
             "6": "huggingface",
+            "7": "deepseek",
+            "8": "qwen",
+            "9": "kimi",
             "d": default_provider,
         }
         menu_str = " ".join([f"{k}:{v}" for k, v in menu_items.items() if k != "d"])
@@ -8048,7 +8286,7 @@ class Ecli:
         try:
             curses.setupterm()
             smcup = curses.tigetstr("smcup")  # enter alternate screen
-            smkx  = curses.tigetstr("smkx")   # application cursor keys
+            smkx = curses.tigetstr("smkx")  # application cursor keys
             if smcup:
                 curses.putp(smcup.decode("ascii", "ignore"))
             if smkx:
@@ -8093,11 +8331,15 @@ class Ecli:
                     redraw_needed: bool = self._process_events_and_input()
                     self._render_screen(redraw_needed)
                 except KeyboardInterrupt:
-                    logger.info("KeyboardInterrupt received, initiating graceful shutdown.")
+                    logger.info(
+                        "KeyboardInterrupt received, initiating graceful shutdown."
+                    )
                     self.exit_editor()
                     break
                 except Exception as e:
-                    logger.critical("Unhandled exception in main loop: %s", e, exc_info=True)
+                    logger.critical(
+                        "Unhandled exception in main loop: %s", e, exc_info=True
+                    )
                     self.exit_editor()
                     break
             # -------------------------------------------------------------------------
@@ -8133,7 +8375,7 @@ class Ecli:
 
             # --- EXIT terminal application modes (normal cursor keys + leave alt screen) ---
             try:
-                rmkx  = curses.tigetstr("rmkx")
+                rmkx = curses.tigetstr("rmkx")
                 rmcup = curses.tigetstr("rmcup")
                 if rmkx:
                     curses.putp(rmkx.decode("ascii", "ignore"))
