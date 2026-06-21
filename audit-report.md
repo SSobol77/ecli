@@ -595,3 +595,54 @@ find .github/workflows -maxdepth 1 -type f -print | sort
 nl -ba .github/workflows/*.yml | sed -n '1,260p'
 rg -n "config|ConfigService|syntax_highlighting|History|undo|redo|runtime_import|pyinstaller|artifact|freebsd|coderabbit|CodeRabbit" tests .github docs/quality docs/release pyproject.toml
 ```
+
+## Issue #102 addendum — multiline TextMate protection
+
+Implementation:
+
+- ECLI keeps TextMate scopes as the primary token source for extension-backed
+  rendering.
+- `src/ecli/extensions/ecli_integration/syntax_service.py` now applies a
+  deterministic protected-range pass for known stateless multiline gaps:
+  Python strings/docstrings, JavaScript/TypeScript block/doc/line comments and
+  strings, HTML comments, and CSS block comments/strings.
+- Protected comment/string ranges are cached by buffer revision and mapped onto
+  viewport lines before `theme_bridge.tokens_to_spans()` flattens TextMate
+  output, so protected comment/string style wins over leaked keyword, number,
+  operator, tag, selector, property, or value categories.
+
+Real tests:
+
+- `tests/extensions/test_textmate_multiline_protection.py` adds direct
+  protected-range tests, TextMate-span rendering tests, and editor-facing
+  rendering tests for Python, JavaScript, TypeScript, HTML, and CSS multiline
+  fixtures.
+- Existing performance coverage remains in
+  `tests/extensions/test_textmate_render_performance.py` and
+  `tests/extensions/test_textmate_scroll_regression.py` using real repository
+  files including `Makefile`, `logs/freebsd-0.2.2-fail.log`,
+  `logs/pr-46-body.md`, and `scripts/build_pyinstaller_linux.py`.
+
+Log/artifact analysis:
+
+- The known real artifacts for large-file acceptance remain the repository
+  `Makefile`, `logs/freebsd-0.2.2-fail.log`, and `logs/pr-46-body.md`.
+- Synthetic fixtures are intentionally used only for exact adversarial
+  multiline comment/string bodies that are not guaranteed to exist in repository
+  files.
+
+Documentation:
+
+- `docs/architecture/extensions-layer.md` documents TextMate-primary rendering,
+  the bounded language-aware protection layer, and the large-file/multiline
+  acceptance tests.
+- `docs/release/release-checklist.md` includes large-file scroll, multiline
+  rendering, no-SQL fallback, and TextMate dependency/fallback checks.
+
+Audit conclusion:
+
+- Imported upstream extension assets remain untouched.
+- F11 PySH Console Panel behavior, future F4 linter work, and VMLab/QEMU/QMP
+  scope remain untouched.
+- The issue #102 rendering gap is constrained to the ECLI-owned adapter layer,
+  with focused regression and performance evidence.

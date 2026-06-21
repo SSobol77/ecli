@@ -11,7 +11,7 @@
 # Licensed under the GNU General Public License version 2 only.
 # See the LICENSE file in the project root for full license text.
 
-"""Tests for the fixed built-in theme system and syntax-highlighting toggle."""
+"""Tests for extension-backed themes and built-in compatibility palettes."""
 
 from __future__ import annotations
 
@@ -24,6 +24,9 @@ from ecli.utils.themes import (
     get_theme,
     resolve_theme,
 )
+
+
+COMPATIBILITY_THEME_IDS = [int(member) for member in ThemeId]
 
 
 @pytest.fixture(autouse=True)
@@ -61,24 +64,25 @@ RENDERER_COLOR_KEYS = {
 }
 
 
-def test_exactly_eight_themes_exist() -> None:
-    ids = [int(member) for member in ThemeId]
-    assert ids == [1, 2, 3, 4, 5, 6, 7, 8]
+def test_exactly_eight_compatibility_themes_exist() -> None:
+    assert COMPATIBILITY_THEME_IDS == [181, 182, 183, 281, 282, 283, 381, 382]
 
 
 def test_four_light_and_four_dark_themes() -> None:
-    light = [tid for tid in range(1, 9) if not get_theme(tid).is_dark]
-    dark = [tid for tid in range(1, 9) if get_theme(tid).is_dark]
-    assert light == [1, 2, 3, 4]
-    assert dark == [5, 6, 7, 8]
+    light = [tid for tid in COMPATIBILITY_THEME_IDS if not get_theme(tid).is_dark]
+    dark = [tid for tid in COMPATIBILITY_THEME_IDS if get_theme(tid).is_dark]
+    high_contrast = [tid for tid in COMPATIBILITY_THEME_IDS if 300 <= tid <= 399]
+    assert light == [181, 182, 183, 381]
+    assert dark == [281, 282, 283, 382]
+    assert high_contrast == [381, 382]
 
 
 def test_get_theme_returns_matching_id() -> None:
-    for tid in range(1, 9):
+    for tid in [207, 208, 213, *COMPATIBILITY_THEME_IDS]:
         assert get_theme(tid).theme_id == tid
 
 
-@pytest.mark.parametrize("tid", list(range(1, 9)))
+@pytest.mark.parametrize("tid", [207, 208, 213, *COMPATIBILITY_THEME_IDS])
 def test_every_palette_defines_all_renderer_colors(tid: int) -> None:
     color_map = get_theme(tid).syntax_color_hex()
     assert RENDERER_COLOR_KEYS <= set(color_map)
@@ -90,7 +94,7 @@ def test_every_palette_defines_all_renderer_colors(tid: int) -> None:
         )
 
 
-@pytest.mark.parametrize("tid", list(range(1, 9)))
+@pytest.mark.parametrize("tid", [207, 208, 213, *COMPATIBILITY_THEME_IDS])
 def test_palette_defines_required_surfaces(tid: int) -> None:
     palette = get_theme(tid)
     for field in (
@@ -122,7 +126,7 @@ CHROME_ROLES = (
 )
 
 
-@pytest.mark.parametrize("tid", list(range(1, 9)))
+@pytest.mark.parametrize("tid", [207, 208, 213, *COMPATIBILITY_THEME_IDS])
 def test_every_theme_defines_all_chrome_roles(tid: int) -> None:
     palette = get_theme(tid)
     for role in CHROME_ROLES:
@@ -134,7 +138,7 @@ def test_every_theme_defines_all_chrome_roles(tid: int) -> None:
         )
 
 
-@pytest.mark.parametrize("tid", list(range(1, 9)))
+@pytest.mark.parametrize("tid", [207, 208, 213, *COMPATIBILITY_THEME_IDS])
 def test_chrome_color_pairs_are_complete_fg_bg_hex(tid: int) -> None:
     pairs = get_theme(tid).chrome_color_pairs()
     expected = {
@@ -159,8 +163,11 @@ def test_chrome_color_pairs_are_complete_fg_bg_hex(tid: int) -> None:
 
 
 def test_resolve_theme_reads_config_value() -> None:
-    assert resolve_theme({"theme": 1}).name == "Light Classic"
-    assert resolve_theme({"theme": 8}).name == "Dark Neon"
+    assert resolve_theme({"theme": 207}).name == "Dark+"
+    assert resolve_theme({"theme": 208}).name == "Monokai"
+    assert resolve_theme({"theme": 213}).name == "Kimbie Dark"
+    assert resolve_theme({"theme": 181}).name == "PySH Light"
+    assert resolve_theme({"theme": 382}).name == "ECLI High Contrast Dark"
 
 
 def test_resolve_theme_missing_uses_default() -> None:
@@ -172,10 +179,14 @@ def test_resolve_theme_out_of_range_falls_back() -> None:
     assert resolve_theme({"theme": 0}).theme_id == DEFAULT_THEME_ID
     assert resolve_theme({"theme": 99}).theme_id == DEFAULT_THEME_ID
     assert resolve_theme({"theme": -3}).theme_id == DEFAULT_THEME_ID
+    assert resolve_theme({"theme": 1}).theme_id == DEFAULT_THEME_ID
+    assert resolve_theme({"theme": 800}).theme_id == DEFAULT_THEME_ID
 
 
 def test_resolve_theme_integer_like_string_is_accepted() -> None:
-    assert resolve_theme({"theme": "3"}).theme_id == 3
+    assert resolve_theme({"theme": "207"}).theme_id == 207
+    assert resolve_theme({"theme": "213"}).theme_id == 213
+    assert resolve_theme({"theme": "181"}).theme_id == 181
 
 
 def test_resolve_theme_non_integer_string_falls_back() -> None:
@@ -190,34 +201,32 @@ def test_resolve_theme_boolean_is_rejected() -> None:
 
 
 def test_env_var_overrides_config_theme(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv(THEME_ENV_VAR, "7")
-    assert resolve_theme({"theme": 2}).theme_id == 7
+    monkeypatch.setenv(THEME_ENV_VAR, "208")
+    assert resolve_theme({"theme": 181}).theme_id == 208
 
 
 def test_invalid_env_var_falls_back_to_config(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(THEME_ENV_VAR, "not-a-theme")
-    assert resolve_theme({"theme": 2}).theme_id == 2
+    assert resolve_theme({"theme": 181}).theme_id == 181
 
 
 def test_blank_env_var_is_ignored(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(THEME_ENV_VAR, "   ")
-    assert resolve_theme({"theme": 4}).theme_id == 4
+    assert resolve_theme({"theme": 207}).theme_id == 207
 
 
 def test_legacy_theme_table_name_maps_to_default_dark_or_light() -> None:
     # Stale configs ship a [theme] table; map its name without forcing theme 5.
-    assert resolve_theme({"theme": {"name": "dark"}}).theme_id == int(
-        ThemeId.DARK_CLASSIC
-    )
+    assert resolve_theme({"theme": {"name": "dark"}}).theme_id == int(ThemeId.PYSH_DARK)
     assert resolve_theme({"theme": {"name": "light"}}).theme_id == int(
-        ThemeId.LIGHT_CLASSIC
+        ThemeId.PYSH_LIGHT
     )
 
 
 def test_legacy_theme_table_id_is_honoured() -> None:
-    assert resolve_theme({"theme": {"id": 3}}).theme_id == 3
+    assert resolve_theme({"theme": {"id": 3}}).theme_id == 381
     # id wins over name.
-    assert resolve_theme({"theme": {"id": 8, "name": "light"}}).theme_id == 8
+    assert resolve_theme({"theme": {"id": 8, "name": "light"}}).theme_id == 283
 
 
 def test_legacy_theme_table_without_id_or_name_uses_default() -> None:
@@ -229,5 +238,26 @@ def test_legacy_theme_table_without_id_or_name_uses_default() -> None:
 
 def test_legacy_colors_table_does_not_override_theme() -> None:
     # A [colors] table must not change the resolved built-in theme.
-    cfg = {"theme": 6, "colors": {"keyword": "red", "background": "#000000"}}
-    assert resolve_theme(cfg).theme_id == 6
+    cfg = {"theme": 208, "colors": {"keyword": "red", "background": "#000000"}}
+    assert resolve_theme(cfg).theme_id == 208
+
+
+def test_invalid_theme_preserves_current_theme() -> None:
+    current = get_theme(213)
+    resolved = resolve_theme({"theme": 999}, current_theme=current)
+    assert resolved.theme_id == 213
+    assert "keeping current theme" in resolved.diagnostics[-1]
+
+
+def test_missing_professional_theme_preserves_current_theme() -> None:
+    current = get_theme(207)
+    resolved = resolve_theme({"theme": 101}, current_theme=current)
+    assert resolved.theme_id == 207
+    assert "keeping current theme" in resolved.diagnostics[-1]
+
+
+def test_get_theme_rejects_missing_numbers() -> None:
+    with pytest.raises(KeyError):
+        get_theme(101)
+    with pytest.raises(KeyError):
+        get_theme(800)

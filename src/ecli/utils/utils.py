@@ -41,10 +41,14 @@ import re
 import shutil
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 from typing import Any, Optional
 
-import toml
+try:
+    import toml
+except ModuleNotFoundError:  # pragma: no cover - exercised in minimal envs
+    toml = None  # type: ignore[assignment]
 
 logger = logging.getLogger("ecli")
 
@@ -61,31 +65,51 @@ GEMINI_API_KEY=
 MISTRAL_API_KEY=
 CLAUDE_API_KEY=
 HUGGINGFACE_API_KEY=
+# DeepSeek: https://platform.deepseek.com
+DEEPSEEK_API_KEY=
+# Qwen (Alibaba DashScope, international): https://dashscope-intl.aliyuncs.com
+DASHSCOPE_API_KEY=
+# Kimi (Moonshot AI): https://platform.moonshot.ai
+MOONSHOT_API_KEY=
 """
 
 # This dictionary is a direct, hardcoded representation of `default_config.toml`.
 # It serves as the ultimate fallback, ensuring the application can ALWAYS start.
 DEFAULT_CONFIG: dict[str, Any] = {
-    # Built-in colour theme (1-4 light, 5-8 dark). See ecli.utils.themes.
-    "theme": 5,
+    # Professional extension-backed colour theme. 207 = Dark+ when the imported
+    # VS Code theme-defaults assets are present; built-in compatibility themes
+    # are available in reserved 18x/28x/38x ranges. See ecli.utils.themes.
+    "theme": 207,
     "colors": {"error": "red", "status": "bright_white", "green": "green"},
+    # Mirrors the [editor] table in config.toml (the global syntax_highlighting
+    # switch lives here). default_new_filename is an internal-only default.
     "editor": {
-        "use_system_clipboard": True, "default_new_filename": "new_file.py",
-        "tab_size": 4, "use_spaces": True, "syntax_highlighting": True,
+        "use_system_clipboard": True, "show_line_numbers": True,
+        "tab_size": 4, "use_spaces": True, "word_wrap": False,
+        "auto_indent": True, "auto_brackets": True, "syntax_highlighting": True,
         # Opt-in mouse support (off by default to preserve native text selection).
-        "mouse": False,
+        "mouse": False, "default_new_filename": "new_file.py",
     },
-    # Extensions Layer (data-only) switches. These mirror the [extensions] table
-    # in config.toml and gate ONLY the deterministic metadata adapters under
+    "logging": {
+        "file_level": "DEBUG", "console_level": "WARNING",
+        "log_to_console": False, "separate_error_log": False,
+    },
+    "linter": {
+        "enabled": True, "auto_install": True,
+        "exclude": [".git", "**pycache**", ".venv"],
+    },
+    # Extensions Layer switches. These mirror the [extensions] table in
+    # config.toml and gate ONLY the imported extension adapters under
     # src/ecli/extensions/ecli_integration/. They never enable an extension
-    # runtime; syntax_engine = "legacy" preserves the regex highlighter until the
-    # #102 extension-backed syntax service replaces it. See
-    # docs/architecture/extensions-layer.md.
+    # runtime. syntax_engine = "extension" uses TextMate tokenization from the
+    # imported grammars and falls back to the legacy highlighter when a grammar
+    # or the optional tokenizer is unavailable; "legacy" forces the built-in
+    # highlighter. See docs/architecture/extensions-layer.md.
     "extensions": {
         "enabled": True, "metadata_registry": True, "grammar_catalog": True,
-        "language_detection": True, "syntax_engine": "legacy",
+        "language_detection": True, "syntax_engine": "extension",
     },
-    "fonts": {"font_family": "monospace", "font_size": 12},
+    "fonts": {"font_family": "monospace", "font_size": 16},
     "keybindings": {
         "delete": "del", "paste": "ctrl+v", "copy": "ctrl+c", "cut": "ctrl+x",
         "undo": "ctrl+z", "redo": "ctrl+y", "lint": "f4", "new_file": "f2",
@@ -102,26 +126,31 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
     "ai": {"default_provider": "gemini"},
     "ai.keys": {
-        "openai": "", "gemini": "", "mistral": "", "claude": "", "grok": "", "huggingface": ""
+        "openai": "", "gemini": "", "mistral": "", "claude": "", "grok": "",
+        "huggingface": "", "deepseek": "", "qwen": "", "kimi": "",
     },
+    # Coding-optimized default model per provider.
     "ai.models": {
         "openai": "gpt-5-codex",
         "gemini": "gemini-2.5-pro",
-        "mistral": "magistral-medium-1.2",
-        "claude": "claude-4-opus",
-        "grok": "grok-4-fast",
-        "huggingface": "meta-llama/Meta-Llama-3.1-405B-Instruct",
+        "mistral": "codestral-latest",
+        "claude": "claude-sonnet-4-6",
+        "grok": "grok-code-fast-1",
+        "huggingface": "Qwen/Qwen2.5-Coder-32B-Instruct",
+        "deepseek": "deepseek-chat",
+        "qwen": "qwen3-coder-plus",
+        "kimi": "kimi-k2-0905-preview",
     },
     "git": {"enabled": True},
     "settings": {"auto_save_interval": 5, "show_git_info": True},
     "file_icons": {
-        "docs": "📘", "python": "🐍", "toml": "❄️", "javascript": "📜", "typescript": "📑",
+        "docs": "📘", "text": "📝", "code": "💻", "python": "🐍", "toml": "❄️", "javascript": "📜", "typescript": "📑",
         "php": "🐘", "ruby": "♦️", "css": "🎨", "html": "🌐", "json": "📊", "yaml": "⚙️",
-        "xml": "📰", "markdown": "📗", "text": "📝", "shell": "💫", "dart": "🎯", "go": "🐹",
+        "xml": "📰", "markdown": "📗", "plaintext": "📄", "shell": "💫", "dart": "🎯", "go": "🐹",
         "c": "🇨", "cpp": "🇨➕", "java": "☕", "julia": "🧮", "rust": "🦀", "csharp": "♯",
         "scala": "💎", "r": "📉", "swift": "🐦", "dockerfile": "🐳", "terraform": "🛠️",
         "jenkins": "🧑‍✈️", "puppet": "🎎", "saltstack": "🧂", "git": "🔖", "notebook": "📒",
-        "diff": "↔️", "makefile": "🛠️", "ini": "🔩", "csv": "🗂️", "sql": "💾",
+        "diff": "↔️", "makefile": "🛠️", "ini": "⚙️", "csv": "🔩", "sql": "💾",
         "graphql": "📈", "kotlin": "📱", "lua": "🌙", "perl": "🐪", "powershell": "💻",
         "nix": "❄️", "image": "🖼️", "audio": "🎵", "video": "🎞️", "archive": "📦",
         "font": "🖋️", "binary": "⚙️", "document": "📄", "folder": "📁", "folder_open": "📂",
@@ -194,6 +223,37 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
 }
 
+_THEME_NUMBERING_BACKUP_SUFFIX = ".pre-extension-theme-numbering.bak"
+_CONFIG_MIGRATION_WARNINGS: list[str] = []
+
+_OLD_THEME_ID_TO_COMPATIBILITY_ID = {
+    1: 181,
+    2: 182,
+    3: 381,
+    4: 183,
+    5: 281,
+    6: 282,
+    7: 382,
+    8: 283,
+}
+
+_PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID = {
+    101: 181,
+    102: 281,
+    103: 182,
+    104: 282,
+    105: 183,
+    106: 283,
+    107: 381,
+    108: 382,
+}
+
+_TRANSITIONAL_THEME_ID_TO_CANONICAL_ID = {
+    **{old: 100 + old for old in range(1, 11)},
+    **{old: 190 + old for old in range(11, 26)},
+    **{old: 275 + old for old in range(26, 30)},
+}
+
 
 # --- Helper Functions ---
 
@@ -226,34 +286,215 @@ def ensure_user_config_exists() -> None:
             logger.info(f"Created user .env template at: {user_env_path}")
 
         migrate_legacy_theme_config(user_config_path)
+        migrate_obsolete_config_tables(user_config_path)
 
     except Exception as e:
         logger.critical(f"Could not create user configuration files: {e}", exc_info=True)
 
 
-def migrate_legacy_theme_config(user_config_path: Path) -> bool:
-    """Upgrade a legacy ``[theme]``-table config to a root ``theme = N`` key.
+def migrate_obsolete_config_tables(user_config_path: Path) -> bool:
+    """Refresh a pre-#102 user config to the current production format.
 
-    Old configs used ``[theme]``/``[theme.ui]``/``[colors]`` tables that the
-    editor no longer reads, leaving users unable to switch themes by editing the
-    file. This is a one-time, backed-up, conservative migration: the dead tables
-    are commented out (never deleted) and a single editable ``theme = N`` line is
-    inserted, derived from the legacy ``name``/``id``. No-op when the config
-    already has a root ``theme`` key, has no legacy ``[theme]`` table, or cannot
-    be read. Returns True when a migration was written.
+    Older user configs carried large internal data tables (``[comments.*]``,
+    ``[[syntax_highlighting.*.patterns]]``, ``[supported_formats]``) and the
+    transitional ``syntax_engine = "legacy"`` default. Those tables now live in
+    code (``DEFAULT_CONFIG``) and the default engine is TextMate, so a user who
+    upgraded would otherwise be pinned to the old legacy highlighter and never
+    see TextMate rendering.
+
+    This one-time, backed-up migration strips those obsolete tables (text-based,
+    preserving all other settings and comments) and flips a transitional
+    ``syntax_engine = "legacy"`` to ``"extension"``. It is a no-op when none of
+    those markers are present. Returns True when a migration was written.
     """
     try:
         text = user_config_path.read_text(encoding="utf-8")
     except Exception:
         return False
 
-    if re.search(r"(?m)^\s*theme\s*=\s*\d", text):
-        return False  # already has a root theme = N
-    if not re.search(r"(?m)^\s*\[theme\]", text):
-        return False  # no legacy table to migrate
+    obsolete_header = re.compile(
+        r"^\s*(\[\[syntax_highlighting\.|\[comments\.|\[supported_formats\])"
+    )
+    table_header = re.compile(r"^\s*\[")
+    has_obsolete = any(obsolete_header.match(line) for line in text.splitlines())
+    has_legacy_engine = re.search(r'(?m)^\s*syntax_engine\s*=\s*"legacy"', text)
+    if not has_obsolete and not has_legacy_engine:
+        return False
 
-    theme_id = _derive_legacy_theme_id(text)
+    out: list[str] = []
+    skipping = False
+    for line in text.splitlines(keepends=True):
+        if obsolete_header.match(line):
+            skipping = True
+            continue
+        if skipping and table_header.match(line):
+            skipping = False  # a non-obsolete table begins; keep it
+        if skipping:
+            continue
+        out.append(line)
 
+    migrated = "".join(out)
+    migrated = re.sub(
+        r'(?m)^(\s*syntax_engine\s*=\s*)"legacy"', r'\1"extension"', migrated
+    )
+    if migrated == text:
+        return False
+
+    try:
+        backup = user_config_path.with_name(user_config_path.name + ".pre-textmate.bak")
+        if not backup.exists():
+            backup.write_text(text, encoding="utf-8")
+        user_config_path.write_text(migrated, encoding="utf-8")
+        logger.warning(
+            "Migrated obsolete config tables and enabled the TextMate engine at "
+            "%s (backup: %s).",
+            user_config_path,
+            backup,
+        )
+        return True
+    except Exception:
+        logger.exception("Obsolete-config migration failed; left config unchanged.")
+        return False
+
+
+def migrate_legacy_theme_config(user_config_path: Path) -> bool:
+    """Upgrade pre-extension and transitional theme numbering in user config.
+
+    Migrations are conservative and backed up before writing:
+
+    * old ``[theme]`` table configs are converted to a root ``theme = N`` line;
+    * old pre-extension root ids ``1``-``8`` map to the preserved legacy
+      compatibility palettes;
+    * the previous in-progress professional ids ``1``-``29`` map to the new
+      100/200/300 ranges when old extension-theme comments identify that shape;
+    * previous compatibility ids ``101``-``108`` map to the reserved
+      18x/28x/38x compatibility ids when the current numbering marker is absent.
+    """
+    try:
+        text = user_config_path.read_text(encoding="utf-8")
+    except Exception:
+        return False
+
+    root_match = _root_theme_match(text)
+    has_current_marker = _has_current_theme_numbering_marker(text)
+    migrated = text
+    reason = ""
+    theme_id: int | None = None
+
+    if root_match is not None:
+        existing_id = int(root_match.group("id"))
+        theme_id = _migrated_root_theme_id(existing_id, text, has_current_marker)
+        if theme_id is None:
+            return False
+        migrated = (
+            text[: root_match.start("id")]
+            + str(theme_id)
+            + text[root_match.end("id") :]
+        )
+        reason = f"theme id {existing_id} -> {theme_id}"
+    elif re.search(r"(?m)^\s*\[theme\]", text):
+        theme_id = _derive_legacy_theme_id(text)
+        migrated = _comment_legacy_theme_tables(text)
+        insertion = (
+            "# Active colour theme. See the theme-numbering policy in config.toml.\n"
+            f"theme = {theme_id}\n\n"
+        )
+        first_table = re.search(r"(?m)^\s*\[", migrated)
+        if first_table:
+            migrated = (
+                migrated[: first_table.start()]
+                + insertion
+                + migrated[first_table.start() :]
+            )
+        else:
+            migrated = insertion + migrated
+        reason = f"legacy [theme] table -> {theme_id}"
+    else:
+        return False
+
+    try:
+        backup = user_config_path.with_name(
+            user_config_path.name + _THEME_NUMBERING_BACKUP_SUFFIX
+        )
+        if not backup.exists():
+            backup.write_text(text, encoding="utf-8")
+        user_config_path.write_text(migrated, encoding="utf-8")
+        message = (
+            "Migrated ECLI theme numbering in user config "
+            f"({reason}); backup: {backup}"
+        )
+        _CONFIG_MIGRATION_WARNINGS.append(message)
+        logger.warning("%s", message)
+        return True
+    except Exception:
+        logger.exception("Theme-numbering migration failed; left config unchanged.")
+        return False
+
+
+def _derive_legacy_theme_id(text: str) -> int:
+    """Best-effort theme id from a legacy ``[theme]`` table's id/name."""
+    id_match = re.search(r"(?ms)^\s*\[theme\].*?^\s*id\s*=\s*(\d+)", text)
+    if id_match:
+        candidate = int(id_match.group(1))
+        if candidate in _OLD_THEME_ID_TO_COMPATIBILITY_ID:
+            return _OLD_THEME_ID_TO_COMPATIBILITY_ID[candidate]
+        if candidate in _PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID:
+            return _PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID[candidate]
+        if candidate in _TRANSITIONAL_THEME_ID_TO_CANONICAL_ID:
+            return _TRANSITIONAL_THEME_ID_TO_CANONICAL_ID[candidate]
+        if candidate in _previous_or_current_compatibility_ids():
+            return candidate
+    name_match = re.search(
+        r"(?ms)^\s*\[theme\].*?^\s*name\s*=\s*[\"']([^\"']+)[\"']", text
+    )
+    if name_match and "light" in name_match.group(1).lower():
+        return 181
+    return 281
+
+
+def _root_theme_match(text: str) -> re.Match[str] | None:
+    """Return the root-level ``theme = N`` match before the first TOML table."""
+    prefix_end = len(text)
+    table = re.search(r"(?m)^\s*\[", text)
+    if table is not None:
+        prefix_end = table.start()
+    return re.search(
+        r"(?m)^(?P<prefix>\s*theme\s*=\s*[\"']?)(?P<id>\d+)(?P<suffix>[\"']?)\s*$",
+        text[:prefix_end],
+    )
+
+
+def _has_current_theme_numbering_marker(text: str) -> bool:
+    return "100-199 = light themes" in text and "800-899" in text
+
+
+def _looks_like_transitional_extension_theme_config(text: str) -> bool:
+    markers = (
+        "professional ids 1-29",
+        "Available in the imported VS Code theme tree",
+        "Professional themes are discovered",
+        "Built-in compatibility themes:",
+    )
+    return any(marker in text for marker in markers)
+
+
+def _migrated_root_theme_id(
+    theme_id: int, text: str, has_current_marker: bool
+) -> int | None:
+    if has_current_marker:
+        return None
+    if 1 <= theme_id <= 8:
+        if _looks_like_transitional_extension_theme_config(text):
+            return _TRANSITIONAL_THEME_ID_TO_CANONICAL_ID[theme_id]
+        return _OLD_THEME_ID_TO_COMPATIBILITY_ID[theme_id]
+    if 9 <= theme_id <= 29:
+        return _TRANSITIONAL_THEME_ID_TO_CANONICAL_ID[theme_id]
+    if theme_id in _PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID:
+        return _PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID[theme_id]
+    return None
+
+
+def _comment_legacy_theme_tables(text: str) -> str:
     lines = text.splitlines(keepends=True)
     out: list[str] = []
     commenting = False
@@ -267,48 +508,14 @@ def migrate_legacy_theme_config(user_config_path: Path) -> bool:
             out.append("# " + line)
         else:
             out.append(line)
-    migrated = "".join(out)
-
-    insertion = (
-        "# Active colour theme (1-4 light, 5-8 dark). Edit this number to switch.\n"
-        f"theme = {theme_id}\n\n"
-    )
-    first_table = re.search(r"(?m)^\s*\[", migrated)
-    if first_table:
-        migrated = migrated[: first_table.start()] + insertion + migrated[first_table.start() :]
-    else:
-        migrated = insertion + migrated
-
-    try:
-        backup = user_config_path.with_name(user_config_path.name + ".bak")
-        if not backup.exists():
-            backup.write_text(text, encoding="utf-8")
-        user_config_path.write_text(migrated, encoding="utf-8")
-        logger.warning(
-            "Migrated legacy [theme] config to 'theme = %d' at %s (backup: %s).",
-            theme_id,
-            user_config_path,
-            backup,
-        )
-        return True
-    except Exception:
-        logger.exception("Legacy theme config migration failed; left config unchanged.")
-        return False
+    return "".join(out)
 
 
-def _derive_legacy_theme_id(text: str) -> int:
-    """Best-effort theme id from a legacy ``[theme]`` table's id/name."""
-    id_match = re.search(r"(?ms)^\s*\[theme\].*?^\s*id\s*=\s*(\d+)", text)
-    if id_match:
-        candidate = int(id_match.group(1))
-        if 1 <= candidate <= 8:
-            return candidate
-    name_match = re.search(
-        r"(?ms)^\s*\[theme\].*?^\s*name\s*=\s*[\"']([^\"']+)[\"']", text
-    )
-    if name_match and "light" in name_match.group(1).lower():
-        return 1
-    return 5
+def _previous_or_current_compatibility_ids() -> set[int]:
+    return {
+        *_PREVIOUS_COMPATIBILITY_ID_TO_CANONICAL_ID,
+        *_OLD_THEME_ID_TO_COMPATIBILITY_ID.values(),
+    }
 
 
 
@@ -317,6 +524,7 @@ def load_config() -> dict[str, Any]:
     """
     Loads and merges configurations, ensuring the application can always run.
     """
+    _CONFIG_MIGRATION_WARNINGS.clear()
     final_config = deep_merge({}, DEFAULT_CONFIG)
     logger.debug("Loaded embedded default configuration.")
 
@@ -326,14 +534,15 @@ def load_config() -> dict[str, Any]:
     loaded_from = "(built-in defaults only)"
     if user_config_path.is_file():
         try:
-            user_config = toml.load(user_config_path)
+            user_config = _load_toml_file(user_config_path)
             final_config = deep_merge(final_config, user_config)
             loaded_from = str(user_config_path)
             logger.info("Loaded user config from %s", user_config_path)
             if isinstance(user_config.get("theme"), dict):
                 logger.warning(
                     "User config %s uses the legacy [theme] table. Set a root-level "
-                    "'theme = 1..8' (or [theme] id = N), or run with ECLI_THEME=N.",
+                    "a valid root-level 'theme = N' (or [theme] id = N), "
+                    "or run with ECLI_THEME=N.",
                     user_config_path,
                 )
         except Exception as e:
@@ -347,7 +556,15 @@ def load_config() -> dict[str, Any]:
     # Record the effective config path so the runtime/UI can report which file
     # was actually loaded (root-cause aid for "my config changes do nothing").
     final_config["_loaded_config_path"] = loaded_from
+    if _CONFIG_MIGRATION_WARNINGS:
+        final_config["_migration_warnings"] = tuple(_CONFIG_MIGRATION_WARNINGS)
     return final_config
+
+
+def _load_toml_file(path: Path) -> dict[str, Any]:
+    if toml is not None:
+        return toml.load(path)
+    return tomllib.loads(path.read_text(encoding="utf-8"))
 
 
 def get_file_icon(filename: Optional[str], config: dict[str, Any]) -> str:

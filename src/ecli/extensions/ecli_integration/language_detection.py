@@ -39,6 +39,22 @@ MATCH_FILENAME = "filename"
 MATCH_FILENAME_PATTERN = "filename_pattern"
 MATCH_EXTENSION = "extension"
 
+_REQUIRED_FALLBACK_EXTENSIONS: tuple[tuple[str, str], ...] = (
+    (".toml", "toml"),
+    (".asm", "asm"),
+    (".s", "asm"),
+    (".adb", "ada"),
+    (".ads", "ada"),
+    (".ada", "ada"),
+    (".spark", "ada"),
+    (".f", "fortran"),
+    (".for", "fortran"),
+    (".f90", "fortran"),
+    (".f95", "fortran"),
+    (".f03", "fortran"),
+    (".f08", "fortran"),
+)
+
 
 @dataclass(frozen=True)
 class LanguageDetectionResult:
@@ -79,6 +95,18 @@ class LanguageDetector:
         if by_filename is not None:
             return by_filename
 
+        # VS Code metadata represents some leading-dot files (notably
+        # ``.gitignore``) as extension tokens. For those names, exact basename
+        # matching must still win before filename patterns and ordinary suffix
+        # detection, otherwise a dotfile has no suffix and falls through to
+        # content/legacy guessing.
+        base_lower = base.lower()
+        by_dotfile_extension = _match_tier(
+            self.extensions, lambda token: token == base_lower, MATCH_FILENAME
+        )
+        if by_dotfile_extension is not None:
+            return by_dotfile_extension
+
         by_pattern = _match_tier(
             self.filename_patterns,
             lambda token: _pattern_matches(token, base, name),
@@ -93,9 +121,16 @@ class LanguageDetector:
         by_extension = _match_tier(
             self.extensions, lambda token: token == suffix, MATCH_EXTENSION
         )
+        if by_extension is not None:
+            return by_extension
+        by_required_fallback = _match_tier(
+            _REQUIRED_FALLBACK_EXTENSIONS,
+            lambda token: token == suffix,
+            MATCH_EXTENSION,
+        )
         return (
-            by_extension
-            if by_extension is not None
+            by_required_fallback
+            if by_required_fallback is not None
             else LanguageDetectionResult.no_match()
         )
 
@@ -105,7 +140,14 @@ class LanguageDetector:
         result = _match_tier(
             self.extensions, lambda token: token == suffix, MATCH_EXTENSION
         )
-        return result if result is not None else LanguageDetectionResult.no_match()
+        if result is not None:
+            return result
+        fallback = _match_tier(
+            _REQUIRED_FALLBACK_EXTENSIONS,
+            lambda token: token == suffix,
+            MATCH_EXTENSION,
+        )
+        return fallback if fallback is not None else LanguageDetectionResult.no_match()
 
 
 def _suffix(base: str) -> str | None:

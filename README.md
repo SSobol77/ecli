@@ -673,6 +673,13 @@ Found a bug? Please help us by opening an issue on GitHub:
 
 * **Terminal**: Supports 256 colors and UTF-8
 
+* **TextMate syntax highlighting** (default): installed automatically via the
+  `python-textmate` dependency, which pulls `onigurumacffi` (the **Oniguruma**
+  regex engine). Binary wheels cover Linux, macOS, and Windows. On source-build
+  platforms (e.g. FreeBSD) install the Oniguruma development headers
+  (`devel/oniguruma`). If unavailable, ECLI falls back to the built-in legacy
+  highlighter automatically (`[extensions].syntax_engine = "legacy"`).
+
 ### Supported Platforms
 
 * Ubuntu 20.04 LTS and newer

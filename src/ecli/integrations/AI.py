@@ -22,7 +22,8 @@ It includes:
 - Centralized error handling for each provider.
 - A factory method `get_ai_client()` for dynamic client instantiation.
 
-Supported providers: OpenAI, Gemini, Mistral, Hugging Face, Claude, Grok.
+Supported providers: OpenAI, Gemini, Mistral, Hugging Face, Claude, Grok,
+DeepSeek, Qwen (DashScope), Kimi (Moonshot).
 """
 
 import asyncio
@@ -851,6 +852,130 @@ class GrokClient(BaseAiClient):
             return f"Error: Unexpected Grok error: {e}"
 
 
+# ============== OpenAI-compatible providers (DeepSeek, Qwen, Kimi) ==========
+
+
+class OpenAICompatibleClient(BaseAiClient):
+    """Base client for providers exposing an OpenAI-style chat completions API.
+
+    DeepSeek, Alibaba Qwen (DashScope compatible mode), and Moonshot Kimi all
+    speak the OpenAI ``/chat/completions`` protocol, so they share one
+    implementation. Subclasses set ``API_URL``, ``PROVIDER`` and ``KEY_ENV``.
+    """
+
+    API_URL = ""
+    PROVIDER = "OpenAI-compatible"
+    KEY_ENV = ""
+
+    def _handle_compatible_error(self, status_code: int, response_text: str) -> str:
+        """Return a user-friendly message for a non-200 response."""
+        response_lower = response_text.lower()
+        if status_code == 401:
+            return f"Error: Invalid {self.PROVIDER} API key. Please check {self.KEY_ENV}."
+        if status_code == 403:
+            return (
+                f"Error: Access to {self.PROVIDER} API forbidden (permissions or "
+                "credits). Please check your account."
+            )
+        if status_code == 429:
+            return f"Error: {self.PROVIDER} rate limit exceeded. Please try again later."
+        if status_code == 400 and "model" in response_lower:
+            return f"Error: Unsupported {self.PROVIDER} model: {self.model}"
+        if status_code == 500:
+            return f"Error: {self.PROVIDER} internal server error. Please try again later."
+        return f"{self.PROVIDER} Error {status_code}: {response_text[:200]}..."
+
+    async def ask_async(
+        self, prompt: str, system_msg: str = "You are a helpful assistant."
+    ) -> str:
+        """Send a chat completion request to an OpenAI-compatible endpoint."""
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+        body = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": prompt},
+            ],
+            "max_tokens": 2048,
+            # Lower temperature favours deterministic, correct code generation.
+            "temperature": 0.3,
+        }
+
+        logger.debug("Sending request to %s API...", self.PROVIDER)
+        try:
+            session = self._get_session()
+            timeout = aiohttp.ClientTimeout(total=90)
+            async with session.post(
+                self.API_URL, headers=headers, json=body, timeout=timeout
+            ) as response:
+                logger.info(
+                    "Received response from %s with status: %s",
+                    self.PROVIDER,
+                    response.status,
+                )
+                if response.status != 200:
+                    response_text = await response.text()
+                    logger.error(
+                        "%s API Error %s: %s",
+                        self.PROVIDER,
+                        response.status,
+                        response_text,
+                    )
+                    return self._handle_compatible_error(response.status, response_text)
+
+                data = await response.json()
+                choices = data.get("choices", [])
+                if not choices:
+                    if "error" in data:
+                        message = data["error"].get("message", "Unknown error")
+                        return f"{self.PROVIDER} API Error: {message}"
+                    return f"Error: Empty response from {self.PROVIDER}."
+                content = choices[0].get("message", {}).get("content", "Empty response")
+                return str(content).strip()
+
+        except TimeoutError:
+            logger.error("Request to %s API timed out.", self.PROVIDER)
+            return f"Error: {self.PROVIDER} request timeout. Please try again later."
+        except aiohttp.ClientError as e:
+            logger.error("Network error to %s: %s", self.PROVIDER, e, exc_info=True)
+            return f"Error: Network error connecting to {self.PROVIDER}: {e}"
+        except Exception as e:
+            logger.error(
+                "An unexpected error occurred in %s client: %s",
+                self.PROVIDER,
+                e,
+                exc_info=True,
+            )
+            return f"Error: Unexpected {self.PROVIDER} error: {e}"
+
+
+class DeepSeekClient(OpenAICompatibleClient):
+    """Client for DeepSeek (OpenAI-compatible)."""
+
+    API_URL = "https://api.deepseek.com/v1/chat/completions"
+    PROVIDER = "DeepSeek"
+    KEY_ENV = "DEEPSEEK_API_KEY"
+
+
+class QwenClient(OpenAICompatibleClient):
+    """Client for Alibaba Qwen via DashScope OpenAI-compatible mode."""
+
+    API_URL = "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
+    PROVIDER = "Qwen"
+    KEY_ENV = "DASHSCOPE_API_KEY"
+
+
+class KimiClient(OpenAICompatibleClient):
+    """Client for Moonshot AI (Kimi), OpenAI-compatible."""
+
+    API_URL = "https://api.moonshot.ai/v1/chat/completions"
+    PROVIDER = "Kimi"
+    KEY_ENV = "MOONSHOT_API_KEY"
+
+
 def get_ai_client(provider: str, config: dict[str, Any]) -> BaseAiClient:
     """Factory function for creating the appropriate AI client.
 
@@ -861,7 +986,7 @@ def get_ai_client(provider: str, config: dict[str, Any]) -> BaseAiClient:
     Args:
         provider (str): The AI service provider name (case-insensitive).
             Supported values: "openai", "gemini", "mistral", "claude",
-            "huggingface", "grok".
+            "huggingface", "grok", "deepseek", "qwen", "kimi".
         config (Dict[str, Any]): Configuration dictionary containing API keys
             and model specifications. Expected structure:
             {
@@ -926,6 +1051,12 @@ def get_ai_client(provider: str, config: dict[str, Any]) -> BaseAiClient:
         return HuggingFaceClient(model=model, api_key=api_key)
     if provider == "grok":
         return GrokClient(model=model, api_key=api_key)
+    if provider == "deepseek":
+        return DeepSeekClient(model=model, api_key=api_key)
+    if provider == "qwen":
+        return QwenClient(model=model, api_key=api_key)
+    if provider == "kimi":
+        return KimiClient(model=model, api_key=api_key)
     raise ValueError(f"Unknown AI provider: {provider}")
 
 
@@ -934,4 +1065,8 @@ def _api_key_env_var(provider: str) -> str:
         return "HUGGINGFACE_API_KEY"
     if provider == "grok":
         return "XAI_API_KEY"
-    return f"{provider.upper()}_API_KEY"
+    if provider == "qwen":
+        return "DASHSCOPE_API_KEY"
+    if provider == "kimi":
+        return "MOONSHOT_API_KEY"
+    return f"{provider.upper()}_API_KEY"  # deepseek -> DEEPSEEK_API_KEY, ...

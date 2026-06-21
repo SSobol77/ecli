@@ -105,8 +105,11 @@ are listed here so the boundary is fixed before implementation begins.
   (from `package.json` language contributions) to a language id.
 - **syntax service** — apply the resolved grammar to editor text to produce
   scope spans for rendering.
-- **scope-to-style / theme bridge** — map TextMate scopes to ECLI theme styles,
-  producing readable, deterministic colors.
+- **scope-to-style / theme bridge** — load contributed color themes from
+  `contributes.themes` and referenced theme JSON, then map TextMate scopes to
+  ECLI theme styles from that data. Imported themes are the source of truth;
+  missing themes must be diagnosed, not synthesized from hand-written color
+  dictionaries.
 - **diagnostics / linter integration path** — feed external linter/diagnostic
   output into ECLI's existing diagnostics normalization model
   (`docs/extensions/diagnostics-model.md`). The Extensions Layer supplies
@@ -134,6 +137,55 @@ The Extensions Layer reads these file kinds and **only** these as data:
 
 Any other file kind is out of scope for the Extensions Layer until this contract
 is amended.
+
+## Theme Numbering Contract
+
+Theme numbers are a stable ECLI configuration contract. The active theme is
+selected by the root `theme = N` setting in `config.toml`; imported theme JSON
+and TextMate `tokenColors` remain the source of truth for extension-backed
+professional themes.
+
+Canonical ranges:
+
+- `1`-`8`: deprecated aliases for old pre-extension-theme configs only. These
+  values are migration inputs, not selectable professional themes.
+- `100`-`199`: light themes.
+- `200`-`299`: dark themes.
+- `300`-`399`: high-contrast themes.
+- `800`-`899`: reserved for a future custom/imported special-theme feature.
+  They must not be silently assigned before that feature exists.
+
+Canonical professional theme ids:
+
+- Light: `101` GitHub Light Default, `102` GitHub Light, `103` GitHub Light
+  Colorblind (Beta), `104` Visual Studio Light, `105` Visual Studio 2017 Light
+  - C++, `106` Light Modern, `107` Light+, `108` Quiet Light, `109` Solarized
+  Light, `110` JetBrains Rider New UI Light.
+- Dark: `201` GitHub Dark Default, `202` GitHub Dark, `203` GitHub Dark
+  Dimmed, `204` Visual Studio Dark, `205` Visual Studio 2017 Dark - C++,
+  `206` Dark Modern, `207` Dark+, `208` Monokai, `209` Monokai Dimmed, `210`
+  Tomorrow Night Blue, `211` Abyss, `212` Atom One Dark, `213` Kimbie Dark,
+  `214` Solarized Dark, `215` Red.
+- High contrast: `301` Dark High Contrast, `302` GitHub Dark High Contrast,
+  `303` GitHub Light High Contrast, `304` Light High Contrast.
+
+Built-in compatibility themes preserve their existing colour values and use
+reserved compatibility ids: `181` PySH Light, `182` PySH Classic, `183` ECLI
+Legacy Light, `281` PySH Dark, `282` PySH Classic Dark, `283` ECLI Legacy Dark,
+`381` ECLI High Contrast Light, and `382` ECLI High Contrast Dark.
+
+Missing professional themes are not synthesized or mapped to unrelated themes.
+If a configured number is invalid or the imported theme is absent, ECLI keeps
+the current valid theme when one exists, emits a visible warning, and does not
+crash startup. Startup without a current theme uses the default `207` Dark+ with
+a warning.
+
+Config migrations must write
+`~/.config/ecli/config.toml.pre-extension-theme-numbering.bak` before modifying
+the user config. Old pre-extension ids `1`-`8` migrate to the matching
+compatibility ids above. Transitional ids from the previous in-progress
+implementation migrate as follows: `1`-`10` -> `101`-`110`, `11`-`25` ->
+`201`-`215`, and `26`-`29` -> `301`-`304`.
 
 ## Explicitly forbidden runtime behavior
 
@@ -240,6 +292,107 @@ new matrix entry.
   #102. Covered by `tests/extensions/test_textmate_grammar_catalog.py`,
   `tests/extensions/test_extension_language_detection.py`, and
   `tests/extensions/test_extension_layer_config.py`.
+- **Status (#102):** #101 delivered the grammar catalog and language detection;
+  #102 now delivers **real TextMate tokenization and visible editor rendering**.
+  The ECLI-owned modules under `src/ecli/extensions/ecli_integration/` are:
+  `syntax_service.py` (engine selection + per-line `LineHighlighter`),
+  `textmate_tokenizer.py` (loads the imported `.tmLanguage.json` grammars and
+  tokenizes each line into genuine TextMate scope stacks via the optional
+  `python-textmate` engine, which uses Oniguruma), `theme_registry.py`
+  (loads `contributes.themes`, follows local theme `include` chains, parses theme
+  JSON/JSONC, and resolves TextMate `tokenColors`), and `theme_bridge.py`
+  (deterministic scope → ECLI style-category mapping with specificity, flattening
+  overlapping scopes into per-line spans). The editor consumes those spans in
+  `Ecli.apply_syntax_highlighting_with_pygments`, mapping each style category onto
+  the active theme's curses colour and drawing them through the existing
+  `DrawScreen` path — so highlighting is **visibly** TextMate-driven and differs
+  by language.
+  - **Engine selection** is config-driven via `[extensions].syntax_engine`.
+    `"extension"` is the **default**; `"legacy"` forces the built-in
+    Pygments/regex highlighter. `editor.syntax_highlighting = false` disables
+    visible highlighting for both engines.
+  - **Legacy remains a always-available fallback.** Unknown files, grammars the
+    engine cannot tokenize (the imported **Markdown** and some **C** constructs
+    recurse), an uninstalled tokenizer, or any tokenizer error fall back to the
+    legacy highlighter automatically — per file and per line — so rendering is
+    never broken. Representative languages with real TextMate scopes today:
+    Python, Markdown, JSON, Dockerfile, Makefile, YAML/YML, TypeScript,
+    JavaScript, C/C++, Java, Rust, HTML, Perl, PHP, Lua, C#, BAT, logs, and
+    gitignore. TOML, assembler, Ada/SPARK, and Fortran are detected
+    deterministically but report missing imported grammar assets and use safe
+    fallback highlighting until those assets are added.
+  - **No runtime.** It reads grammar JSON only: no VS Code extension host, no
+    Node/TypeScript or Copilot runtime, no `activationEvents`, no `package.json`
+    scripts, no background workers; all engine stdout/stderr is suppressed so it
+    cannot corrupt curses. The imported upstream tree is unchanged.
+  - **Theme source of truth.** Professional theme ids are backed by real imported
+    theme contributions and theme JSON using the numbering contract above:
+    Visual Studio Light, Light Modern, Light+, Quiet Light, Solarized Light,
+    Visual Studio Dark, Dark Modern, Dark+, Monokai, Monokai Dimmed, Tomorrow
+    Night Blue, Abyss, Kimbie Dark, Solarized Dark, Red, Dark High Contrast, and
+    Light High Contrast are loaded from the asset tree when present. Target names
+    that are not present in the imported assets, including GitHub Light/Dark
+    variants, VS2017, Atom One Dark, JetBrains Rider Light, and Tokyo variants,
+    are reported as missing and are not replaced by fabricated palettes. The
+    legacy PySH/ECLI palettes are retained only as explicit compatibility ids in
+    the 18x/28x/38x ranges.
+  - **Multiline protection layer.** TextMate scopes remain the primary token
+    source. Because the current `python-textmate` adapter is line-oriented and
+    cannot carry every grammar's rule stack across viewport lines, ECLI applies
+    a bounded, language-aware protection pass over TextMate output for known
+    multiline regions: Python triple-quoted strings/docstrings and inline
+    strings; JavaScript/TypeScript `/* ... */`, `/** ... */`, `//` comments and
+    quoted/template strings; HTML `<!-- ... -->` comments; and CSS `/* ... */`
+    comments and quoted strings. The protection pass does not tokenize normal
+    code and does not replace grammar tokenization. It only gives known
+    comment/string regions priority over nested keyword, number, operator, tag,
+    selector, or property scopes that leak from stateless per-line tokenization.
+    Protected ranges are cached by buffer revision and mapped onto the current
+    viewport, so scrolling reuses the existing viewport-first/per-line cache
+    architecture instead of reparsing the file on every repaint.
+  - **Acceptance coverage.** Large-file scroll responsiveness is locked by real
+    repository-file tests over `Makefile`, `logs/freebsd-0.2.2-fail.log`,
+    `logs/pr-46-body.md`, and `scripts/build_pyinstaller_linux.py`. Multiline
+    rendering correctness is locked by synthetic fixtures for Python,
+    JavaScript, TypeScript, HTML, and CSS because those exact adversarial comment
+    bodies are not reliably present in repository files.
+  - **Limitations / staged work.** Tokenization is still per line; the
+    protection layer is a deterministic guard for known multiline
+    comment/string regions, not a general TextMate state-stack implementation.
+    Broader cross-line state for every TextMate grammar remains future
+    stabilization work. **Linter diagnostics integration remains #104**, and
+    **snippets + language-configuration metadata remain #105**.
+  - Covered by `tests/extensions/test_textmate_tokenization.py`,
+    `tests/extensions/test_extension_syntax_service.py`,
+    `tests/extensions/test_editor_syntax_adapter.py`, and
+    `tests/extensions/test_editor_syntax_rendering.py`,
+    `tests/extensions/test_textmate_multiline_protection.py`,
+    `tests/extensions/test_textmate_render_performance.py`, and
+    `tests/extensions/test_textmate_scroll_regression.py`.
+- **Dependencies (#102, release-contract).** TextMate rendering requires the
+  optional tokenizer dependency, declared in `pyproject.toml`:
+  - `python-textmate` (pure-Python TextMate grammar interpreter), which pulls
+  - `onigurumacffi` (CFFI bindings to the **Oniguruma** regex engine). On Linux,
+    macOS, and Windows, `onigurumacffi` ships binary wheels (no system library
+    needed). Where only an sdist is available (notably **FreeBSD**, or Nix builds
+    from source), the **Oniguruma** development headers/library must be present
+    (`devel/oniguruma` on FreeBSD, `oniguruma` on Debian/Ubuntu/Arch, `oniguruma`
+    in nixpkgs). Packaging surfaces must declare/install this where they build
+    from source; see `docs/install/*`, `docs/release/packaging-flows.md`, and
+    `docs/release/release-checklist.md`.
+  - **Graceful degradation:** if the tokenizer or Oniguruma is unavailable at
+    runtime, ECLI logs a deterministic diagnostic
+    (`ECLI syntax engine=… textmate_tokenizer_available=False active_renderer=legacy`)
+    and renders with the legacy highlighter. A missing tokenizer never crashes
+    startup.
+- **Config surface (#102).** `config.toml` is reduced to user-facing settings
+  only; the internal `[comments.*]`, `[[syntax_highlighting.*]]`, and
+  `[supported_formats]` tables moved into code (`DEFAULT_CONFIG`). The default is
+  `[extensions].syntax_engine = "extension"`. A one-time, backed-up migration
+  (`migrate_obsolete_config_tables`) strips those obsolete tables from an existing
+  user `~/.config/ecli/config.toml` and flips a transitional
+  `syntax_engine = "legacy"` to `"extension"`, so upgraded users actually get
+  TextMate rendering instead of being pinned to a stale legacy config.
 
 ## Sequencing
 
@@ -254,7 +407,7 @@ on the previous one and must not be skipped or merged.
 | #100 | **Manifest registry** (`package.json` contribution parsing). |
 | #101 | **TextMate grammar catalog** and **language detection**. |
 | #102 | **Syntax service** wired to editor rendering. |
-| #103 | **Theme bridge** (scope-to-style). |
+| #103 | **Theme registry / bridge** (`contributes.themes`, theme JSON, tokenColors, scope-to-style). |
 | #104 | **Linter diagnostics path**. |
 | #105 | **Snippets** and **language-configuration** metadata. |
 

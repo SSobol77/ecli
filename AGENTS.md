@@ -691,3 +691,26 @@ All agents (Codex, Claude Code, Cursor, and any other automation) must obey:
   and all active platform packaging contracts must remain green.
 * VMLab is out of scope: it moved to v0.3.5 and is blocked until the v0.3.0
   Extensions Foundation is complete.
+
+## 14. Current maintainer priority order
+
+For further ECLI work, treat extension stabilization as the first priority:
+
+1. Stabilize all Extensions and the Extensions Layer before adjacent feature
+   expansion.
+2. Finish TextMate rendering, TextMate performance, and multiline comment
+   handling.
+3. Implement F4 Diagnostics / Linter Panel.
+4. Implement F7 AI Code Assistant as an Extensions Layer feature.
+5. Implement the plugin layer for new themes, linters, and AI extensions.
+6. Implement F11 Terminal-console without duplicating PySH. Command execution
+   must remain routed through explicit ECLI services, PySH, or CommandPlan
+   surfaces; do not migrate PySH source into ECLI.
+7. Implement full mouse support.
+8. Implement F8 System Doctor / lab engineer diagnostic tools.
+9. Implement F9 Git improvements.
+
+This priority order is a sequencing rule for planning and implementation. It
+does not waive Stage 1/Stage 2 gates, P0 audit requirements, the single-writer
+screen invariant, the Extensions Layer security contract, or release/publish
+safety rules.
