@@ -197,6 +197,14 @@ new matrix entry.
   helper evidence; and the GitHub Actions workflow contract evidence.
 - The exact-21-asset count is unchanged by this layer; extension assets ship
   *inside* the wheel/sdist artifacts, not as new top-level release assets.
+- **Status (#99):** tree and package-data contract tests live in
+  `tests/extensions/` (`test_extensions_tree_contract.py`,
+  `test_extensions_package_data_contract.py`). They prove representative
+  imported extension assets are present in the repository tree and inside the
+  built wheel and sdist. Hatchling's default file selection for
+  `packages = ["src/ecli"]` already ships the imported data files, so **no
+  additional `force-include`/`include` entries were required** in
+  `pyproject.toml`.
 
 ## Sequencing
 
