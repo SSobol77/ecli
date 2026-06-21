@@ -46,6 +46,8 @@ can never corrupt the curses UI.
 from __future__ import annotations
 
 import contextlib
+import io
+import json
 import logging
 import os
 import signal
@@ -54,9 +56,6 @@ from collections.abc import Callable, Iterator
 from functools import lru_cache
 from pathlib import Path
 from typing import TypeVar
-
-import io
-import json
 
 
 logger = logging.getLogger(__name__)
@@ -127,7 +126,7 @@ def _warn_once(key: str, message: str, *args: object) -> None:
     logger.warning(message, *args)
 
 
-class _TokenizeBudgetExceeded(Exception):
+class _TokenizeBudgetExceededError(Exception):
     """Raised when a tokenization call exceeds its wall-clock budget."""
 
 
@@ -175,7 +174,7 @@ def _call_with_budget(fn: Callable[[], _T], seconds: float) -> _T:
         return fn()
 
     def _on_alarm(_signum: int, _frame: object) -> None:
-        raise _TokenizeBudgetExceeded()
+        raise _TokenizeBudgetExceededError()
 
     previous = signal.signal(signal.SIGALRM, _on_alarm)
     try:
@@ -218,7 +217,7 @@ class TextMateTokenizer:
                     lambda: self._grammar.parse(line),  # type: ignore[attr-defined]
                     _LINE_BUDGET_SECONDS,
                 )
-        except _TokenizeBudgetExceeded:
+        except _TokenizeBudgetExceededError:
             self._record_timeout(line)
             return None
         except Exception:

@@ -1844,24 +1844,9 @@ class Ecli:
         has_custom_rules = bool(getattr(self, "custom_syntax_patterns", []))
 
         rendered: list[list[tuple[str, int]]] = []
-        highlighted_lines: list[Any]
-        if hasattr(highlighter, "highlight_lines"):
-            try:
-                highlighted_lines = highlighter.highlight_lines(
-                    lines,
-                    line_indices=line_indices,
-                    full_text=self.text,
-                    text_revision=getattr(self, "_buffer_edit_revision", 0),
-                )
-            except Exception:
-                highlighted_lines = [None for _line in lines]
-        else:
-            highlighted_lines = []
-            for line in lines:
-                try:
-                    highlighted_lines.append(highlighter.highlight(line))
-                except Exception:
-                    highlighted_lines.append(None)
+        highlighted_lines = self._extension_highlighted_lines(
+            highlighter, lines, line_indices
+        )
 
         for line, spans in zip(lines, highlighted_lines, strict=False):
             # Fall back to legacy when the extension engine produced nothing
@@ -1869,19 +1854,52 @@ class Ecli:
             # block grammar) yield no/only-default tokens under the per-line
             # stateless engine; legacy/Pygments keeps such files readable instead
             # of rendering them as flat default text.
-            if spans is None or (
-                line and all(category == "default" for _text, category in spans)
-            ):
+            if self._extension_spans_need_legacy(line, spans):
                 rendered.append(
                     self._get_tokenized_line(line, lexer_id, has_custom_rules)
                 )
                 continue
-            mapped = [
-                (text, self.colors.get(category, default_color))
-                for text, category in spans
-            ]
+            mapped = self._map_extension_spans(spans, default_color)
             rendered.append(mapped if mapped else [(line, default_color)])
         return rendered
+
+    def _extension_highlighted_lines(
+        self, highlighter: Any, lines: list[str], line_indices: list[int]
+    ) -> list[Any]:
+        """Return TextMate spans for visible lines, or ``None`` per failed line."""
+        if hasattr(highlighter, "highlight_lines"):
+            try:
+                return highlighter.highlight_lines(
+                    lines,
+                    line_indices=line_indices,
+                    full_text=self.text,
+                    text_revision=getattr(self, "_buffer_edit_revision", 0),
+                )
+            except Exception:
+                return [None for _line in lines]
+        highlighted_lines: list[Any] = []
+        for line in lines:
+            try:
+                highlighted_lines.append(highlighter.highlight(line))
+            except Exception:
+                highlighted_lines.append(None)
+        return highlighted_lines
+
+    @staticmethod
+    def _extension_spans_need_legacy(line: str, spans: Any) -> bool:
+        """Return whether a line must use legacy highlighting."""
+        return spans is None or (
+            line and all(category == "default" for _text, category in spans)
+        )
+
+    def _map_extension_spans(
+        self, spans: list[tuple[str, str]], default_color: int
+    ) -> list[tuple[str, int]]:
+        """Map TextMate style categories to active curses colour attributes."""
+        return [
+            (text, self.colors.get(category, default_color))
+            for text, category in spans
+        ]
 
     def _determine_lexer(self) -> TextLexer:
         """Determines the appropriate Pygments lexer based on filename and content.

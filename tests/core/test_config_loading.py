@@ -21,7 +21,7 @@ from pathlib import Path
 import pytest
 
 from ecli.utils.themes import THEME_ENV_VAR, resolve_theme
-from ecli.utils.utils import DEFAULT_CONFIG, load_config
+from ecli.utils.utils import DEFAULT_CONFIG, load_config, migrate_legacy_theme_config
 
 
 REPO_CONFIG = Path(__file__).resolve().parents[2] / "config.toml"
@@ -96,6 +96,23 @@ def test_migration_is_noop_for_root_theme_config(isolated_home: Path) -> None:
     # No legacy table -> no migration, no backup.
     assert not cfg.with_name("config.toml.pre-extension-theme-numbering.bak").exists()
     assert "theme = 208" in cfg.read_text(encoding="utf-8")
+
+
+def test_theme_migration_refuses_backup_outside_trusted_config_dir(
+    isolated_home: Path, tmp_path: Path
+) -> None:
+    outside = tmp_path / "attacker-controlled-name.toml"
+    original = '[theme]\nname = "dark"\n'
+    outside.write_text(original, encoding="utf-8")
+
+    assert migrate_legacy_theme_config(outside) is False
+    assert outside.read_text(encoding="utf-8") == original
+    assert not (
+        tmp_path / "attacker-controlled-name.toml.pre-extension-theme-numbering.bak"
+    ).exists()
+    assert not (
+        isolated_home / "config.toml.pre-extension-theme-numbering.bak"
+    ).exists()
 
 
 def test_env_overrides_user_config_via_load(isolated_home: Path, monkeypatch) -> None:

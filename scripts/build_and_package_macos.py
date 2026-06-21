@@ -43,6 +43,7 @@ import shutil
 import subprocess
 import sys
 import tomllib
+from collections.abc import Mapping
 from pathlib import Path
 
 from packaging_common import require_tool
@@ -56,6 +57,14 @@ EXIT_MISSING_TOOL = 5
 
 APP_NAME = "ECLI"
 MACOS_ARCH = "universal2"
+ONIGURUMA_HEADER = "oniguruma.h"
+ONIGURUMA_PKG_CONFIG_NAME = "oniguruma"
+ONIGURUMA_COMMON_PREFIXES = (
+    "/opt/homebrew/opt/oniguruma",
+    "/usr/local/opt/oniguruma",
+    "/opt/homebrew",
+    "/usr/local",
+)
 
 
 def python_bin() -> str:
@@ -69,6 +78,7 @@ def read_version(root: Path) -> str:
 
 def build_arch(root: Path, spec: Path, arch_name: str, arch_flag: str) -> Path | None:
     """Build a per-arch PyInstaller binary; return its path or None on failure."""
+    native_env = macos_native_dependency_env(os.environ)
     venv_dir = root / "build" / f"macos_venv_{arch_name}"
     build_dir = root / "build" / f"macos_{arch_name}"
     dist_dir = root / "dist" / f"macos_{arch_name}"
@@ -92,6 +102,7 @@ def build_arch(root: Path, spec: Path, arch_name: str, arch_flag: str) -> Path |
             "setuptools",
         ],
         cwd=root,
+        env=native_env,
         check=True,
     )
     subprocess.run(
@@ -107,6 +118,7 @@ def build_arch(root: Path, spec: Path, arch_name: str, arch_flag: str) -> Path |
             ".[dev]",
         ],
         cwd=root,
+        env=native_env,
         check=True,
     )
 
@@ -130,7 +142,7 @@ def build_arch(root: Path, spec: Path, arch_name: str, arch_flag: str) -> Path |
         ],
         cwd=root,
         env={
-            **os.environ,
+            **native_env,
             "ECLI_REPO_ROOT": str(root),
             "ECLI_PYINSTALLER_ONEDIR": "0",
             "ECLI_BUILD_MACOS_APP": "0",
@@ -168,13 +180,135 @@ def info_plist(version: str, icon_entry: str) -> str:
 
 
 def check_packaging_prerequisites() -> int:
-    for tool in ("arch", "lipo", "codesign", "hdiutil", "shasum"):
+    for tool in ("arch", "lipo", "codesign", "hdiutil", "shasum", "pkg-config"):
         if not require_tool(tool):
             return EXIT_MISSING_TOOL
     if shutil.which(python_bin()) is None:
         print(f"ERR Missing Python interpreter: {python_bin()}", file=sys.stderr)
         return EXIT_MISSING_TOOL
+    if not check_oniguruma_prerequisites():
+        return EXIT_MISSING_TOOL
     return EXIT_OK
+
+
+def _capture_stdout(command: list[str]) -> str | None:
+    """Return stripped stdout for a command, or ``None`` on failure."""
+    try:
+        result = subprocess.run(
+            command,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    output = result.stdout.strip()
+    return output or None
+
+
+def _unique_existing_paths(paths_in_order: list[Path]) -> list[Path]:
+    """Return existing paths without duplicates, preserving order."""
+    result: list[Path] = []
+    seen: set[Path] = set()
+    for path in paths_in_order:
+        resolved = path.resolve()
+        if resolved.exists() and resolved not in seen:
+            seen.add(resolved)
+            result.append(resolved)
+    return result
+
+
+def oniguruma_prefixes() -> list[Path]:
+    """Return deterministic candidate prefixes for macOS Oniguruma."""
+    candidates: list[Path] = []
+    env_prefix = os.environ.get("ECLI_ONIGURUMA_PREFIX")
+    if env_prefix:
+        candidates.append(Path(env_prefix))
+    brew_prefix = _capture_stdout(["brew", "--prefix", "oniguruma"])
+    if brew_prefix:
+        candidates.append(Path(brew_prefix))
+    candidates.extend(Path(prefix) for prefix in ONIGURUMA_COMMON_PREFIXES)
+    return _unique_existing_paths(candidates)
+
+
+def _oniguruma_include_dirs(prefixes: list[Path]) -> list[Path]:
+    return _unique_existing_paths([prefix / "include" for prefix in prefixes])
+
+
+def _oniguruma_lib_dirs(prefixes: list[Path]) -> list[Path]:
+    return _unique_existing_paths([prefix / "lib" for prefix in prefixes])
+
+
+def _oniguruma_pkg_config_dirs(prefixes: list[Path]) -> list[Path]:
+    return _unique_existing_paths(
+        [
+            *(prefix / "lib" / "pkgconfig" for prefix in prefixes),
+            *(prefix / "share" / "pkgconfig" for prefix in prefixes),
+        ]
+    )
+
+
+def _prepend_flags(existing: str | None, flags: list[str]) -> str:
+    parts = [*flags, *(existing or "").split()]
+    return " ".join(dict.fromkeys(part for part in parts if part))
+
+
+def _prepend_path_list(existing: str | None, paths_in_order: list[Path]) -> str:
+    parts = [str(path) for path in paths_in_order]
+    if existing:
+        parts.extend(existing.split(os.pathsep))
+    return os.pathsep.join(dict.fromkeys(part for part in parts if part))
+
+
+def macos_native_dependency_env(base_env: Mapping[str, str]) -> dict[str, str]:
+    """Return env with deterministic Oniguruma build flags for pip subprocesses."""
+    env = dict(base_env)
+    prefixes = oniguruma_prefixes()
+    include_dirs = _oniguruma_include_dirs(prefixes)
+    lib_dirs = _oniguruma_lib_dirs(prefixes)
+    pkg_config_dirs = _oniguruma_pkg_config_dirs(prefixes)
+    include_flags = [f"-I{path}" for path in include_dirs]
+    lib_flags = [f"-L{path}" for path in lib_dirs]
+    env["CPPFLAGS"] = _prepend_flags(env.get("CPPFLAGS"), include_flags)
+    env["CFLAGS"] = _prepend_flags(env.get("CFLAGS"), include_flags)
+    env["LDFLAGS"] = _prepend_flags(env.get("LDFLAGS"), lib_flags)
+    env["PKG_CONFIG_PATH"] = _prepend_path_list(
+        env.get("PKG_CONFIG_PATH"), pkg_config_dirs
+    )
+    return env
+
+
+def check_oniguruma_prerequisites() -> bool:
+    """Verify native Oniguruma headers/libs are visible before pip installs."""
+    prefixes = oniguruma_prefixes()
+    include_dirs = _oniguruma_include_dirs(prefixes)
+    lib_dirs = _oniguruma_lib_dirs(prefixes)
+    header_found = any(
+        (include_dir / ONIGURUMA_HEADER).is_file() for include_dir in include_dirs
+    )
+    pkg_config_found = (
+        subprocess.run(
+            ["pkg-config", "--exists", ONIGURUMA_PKG_CONFIG_NAME],
+            check=False,
+        ).returncode
+        == 0
+    )
+    lib_found = any(
+        (lib_dir / candidate).exists()
+        for lib_dir in lib_dirs
+        for candidate in ("libonig.dylib", "libonig.a")
+    )
+    if header_found and (pkg_config_found or lib_found):
+        print("OK  Oniguruma native dependency is available for TextMate builds.")
+        return True
+    searched = ", ".join(str(prefix) for prefix in prefixes) or "<none>"
+    print(
+        "ERR Missing Oniguruma native dependency for python-textmate/onigurumacffi. "
+        "Install Homebrew packages 'oniguruma' and 'pkg-config' before macOS "
+        f"packaging. Searched prefixes: {searched}",
+        file=sys.stderr,
+    )
+    return False
 
 
 def verify_python_arches(root: Path) -> None:

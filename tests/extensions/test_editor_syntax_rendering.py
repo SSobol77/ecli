@@ -240,7 +240,7 @@ def test_textmate_spans_reach_renderer_as_distinct_attributes() -> None:
     rendered = editor.apply_syntax_highlighting_with_pygments(code, [0])
     line = rendered[0]
     # Build a quick char-offset -> attr map to read specific tokens' colours.
-    attr_by_text = {text: attr for text, attr in line}
+    attr_by_text = dict(line)
     keyword_attr = attr_by_text.get("def")
     default_attr = COLORS["default"]
 

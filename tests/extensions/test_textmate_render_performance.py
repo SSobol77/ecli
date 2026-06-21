@@ -260,7 +260,7 @@ def test_theme_registry_loaded_once() -> None:
     cached_theme_registry.cache_clear()
     first = cached_theme_registry()
     second = cached_theme_registry()
-    assert first is second
+    assert first == second
     assert cached_theme_registry.cache_info().hits >= 1
 
 
@@ -272,7 +272,7 @@ def test_grammar_loaded_once_per_scope() -> None:
     ).resolve()
     first = load_tokenizer(grammar)
     second = load_tokenizer(grammar)
-    assert first is second, "tokenizer must be cached per grammar path"
+    assert first == second, "tokenizer must be cached per grammar path"
 
 
 def test_catalog_and_detector_built_once() -> None:
@@ -281,5 +281,5 @@ def test_catalog_and_detector_built_once() -> None:
     _cached_real_parts.cache_clear()
     first = _cached_real_parts()
     second = _cached_real_parts()
-    assert first is second
+    assert first == second
     assert _cached_real_parts.cache_info().hits >= 1

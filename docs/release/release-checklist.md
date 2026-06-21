@@ -99,6 +99,9 @@ ecli_<version>_workflow_contract_evidence.tar.gz
 - [ ] Wheel/PyInstaller/AppImage/DMG/Windows artifacts include
       `python-textmate` + `onigurumacffi`, or start and fall back to the legacy
       highlighter without crashing when absent.
+- [ ] macOS workflows install Homebrew `oniguruma` and `pkg-config` before
+      package installation, and `scripts/build_and_package_macos.py` exports
+      `CPPFLAGS`, `CFLAGS`, `LDFLAGS`, and `PKG_CONFIG_PATH` for pip subprocesses.
 - [ ] Source-build platforms (FreeBSD ports/pkg, Nix from source) provide the
       **Oniguruma** dev headers/library, or document the legacy-fallback policy.
 - [ ] Startup log shows `textmate_tokenizer_available=True` on a reference build.

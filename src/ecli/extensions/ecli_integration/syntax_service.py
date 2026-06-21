@@ -257,8 +257,8 @@ def _python_string_ranges(
         for tok in tokenize.generate_tokens(stream.readline):
             if tok.type != token.STRING:
                 continue
-            start_row, start_col = tok.start
-            end_row, end_col = tok.end
+            start_row, _ = tok.start
+            end_row, _ = tok.end
             for row in range(start_row - 1, end_row):
                 if not 0 <= row < len(lines):
                     continue
@@ -302,21 +302,9 @@ def _protected_ranges_for_scope(
     if scope_name == "source.python":
         return _python_string_ranges(lines)
     if scope_name in {"source.js", "source.ts"}:
-        return _c_like_protected_ranges(
-            lines,
-            block_comments=True,
-            line_comments=True,
-            quoted_strings=True,
-            template_strings=True,
-        )
+        return _javascript_like_protected_ranges(lines)
     if scope_name == "source.css":
-        return _c_like_protected_ranges(
-            lines,
-            block_comments=True,
-            line_comments=False,
-            quoted_strings=True,
-            template_strings=False,
-        )
+        return _css_protected_ranges(lines)
     if scope_name in _HTML_SCOPES:
         return _html_comment_ranges(lines)
     return {}
@@ -387,6 +375,46 @@ def _resume_c_like_state(
     return 0, None, False
 
 
+def _scan_block_comment_start(
+    line: str,
+    row: int,
+    index: int,
+    ranges: dict[int, list[tuple[int, int, str]]],
+) -> tuple[int, tuple[str, str | None] | None]:
+    """Protect a C-like block comment that starts at ``index``."""
+    close = line.find("*/", index + 2)
+    if close == -1:
+        _append_range(ranges, row, index, len(line), "comment")
+        return len(line), ("block_comment", None)
+    end = close + 2
+    _append_range(ranges, row, index, end, "comment")
+    return end, None
+
+
+def _scan_string_start(
+    line: str,
+    row: int,
+    index: int,
+    quote: str,
+    ranges: dict[int, list[tuple[int, int, str]]],
+) -> tuple[int, tuple[str, str | None] | None]:
+    """Protect a quoted/template string that starts at ``index``."""
+    end, closed = _scan_quoted_string(line, index, quote)
+    _append_range(ranges, row, index, end, "string")
+    return (end, None) if closed else (len(line), ("string", quote))
+
+
+def _scan_line_comment_start(
+    line: str,
+    row: int,
+    index: int,
+    ranges: dict[int, list[tuple[int, int, str]]],
+) -> int:
+    """Protect a C-like line comment that starts at ``index``."""
+    _append_range(ranges, row, index, len(line), "comment")
+    return len(line)
+
+
 def _scan_c_like_line(
     line: str,
     row: int,
@@ -399,31 +427,22 @@ def _scan_c_like_line(
     while index < len(line):
         two = line[index : index + 2]
         if rules.block_comments and two == "/*":
-            close = line.find("*/", index + 2)
-            if close == -1:
-                _append_range(ranges, row, index, len(line), "comment")
-                return ("block_comment", None)
-            end = close + 2
-            _append_range(ranges, row, index, end, "comment")
-            index = end
+            index, state = _scan_block_comment_start(line, row, index, ranges)
+            if state is not None:
+                return state
             continue
         if rules.line_comments and two == "//":
-            _append_range(ranges, row, index, len(line), "comment")
+            _scan_line_comment_start(line, row, index, ranges)
             return None
         if rules.quoted_strings and line[index] in {"'", '"'}:
-            quote = line[index]
-            end, closed = _scan_quoted_string(line, index, quote)
-            _append_range(ranges, row, index, end, "string")
-            if not closed:
-                return ("string", quote)
-            index = end
+            index, state = _scan_string_start(line, row, index, line[index], ranges)
+            if state is not None:
+                return state
             continue
         if rules.template_strings and line[index] == "`":
-            end, closed = _scan_quoted_string(line, index, "`")
-            _append_range(ranges, row, index, end, "string")
-            if not closed:
-                return ("string", "`")
-            index = end
+            index, state = _scan_string_start(line, row, index, "`", ranges)
+            if state is not None:
+                return state
             continue
         index += 1
     return None
@@ -451,6 +470,32 @@ def _c_like_protected_ranges(
         if not skip_line:
             state = _scan_c_like_line(line, row, index, rules, ranges)
     return {line: tuple(spans) for line, spans in ranges.items()}
+
+
+def _javascript_like_protected_ranges(
+    lines: list[str],
+) -> dict[int, tuple[tuple[int, int, str], ...]]:
+    """Return JS/TS protected comments and strings."""
+    return _c_like_protected_ranges(
+        lines,
+        block_comments=True,
+        line_comments=True,
+        quoted_strings=True,
+        template_strings=True,
+    )
+
+
+def _css_protected_ranges(
+    lines: list[str],
+) -> dict[int, tuple[tuple[int, int, str], ...]]:
+    """Return CSS protected block comments and quoted strings."""
+    return _c_like_protected_ranges(
+        lines,
+        block_comments=True,
+        line_comments=False,
+        quoted_strings=True,
+        template_strings=False,
+    )
 
 
 def _html_comment_ranges(

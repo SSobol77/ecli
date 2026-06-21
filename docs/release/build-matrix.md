@@ -57,7 +57,9 @@ one per canonical matrix entry. Release publication is blocked unless the exact
 
 - Windows installer path requires Python 3.11+, Git, PowerShell 7, and NSIS (`makensis`). Visual Studio Build Tools are required only when native dependencies or build tooling need local compilation.
 
-- macOS DMG path relies on `hdiutil` and Python tooling.
+- macOS DMG path relies on `hdiutil`, Python tooling, Homebrew `oniguruma`, and
+  `pkg-config`; the build script validates native Oniguruma headers/libs before
+  pip can source-build `onigurumacffi`.
 
 ## GitHub Actions Workflow Contract Map
 

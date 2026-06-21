@@ -223,7 +223,10 @@ DEFAULT_CONFIG: dict[str, Any] = {
     },
 }
 
-_THEME_NUMBERING_BACKUP_SUFFIX = ".pre-extension-theme-numbering.bak"
+_ECLI_CONFIG_DIR_RELATIVE = Path(".config") / "ecli"
+_CONFIG_FILENAME = "config.toml"
+_TEXTMATE_BACKUP_FILENAME = "config.toml.pre-textmate.bak"
+_THEME_NUMBERING_BACKUP_FILENAME = "config.toml.pre-extension-theme-numbering.bak"
 _CONFIG_MIGRATION_WARNINGS: list[str] = []
 
 _OLD_THEME_ID_TO_COMPATIBILITY_ID = {
@@ -257,6 +260,39 @@ _TRANSITIONAL_THEME_ID_TO_CANONICAL_ID = {
 
 # --- Helper Functions ---
 
+def _trusted_user_config_dir() -> Path:
+    """Return the trusted ECLI user config directory."""
+    return Path.home() / _ECLI_CONFIG_DIR_RELATIVE
+
+
+def _is_relative_to(path: Path, parent: Path) -> bool:
+    """Return whether ``path`` is contained in ``parent`` after resolution."""
+    try:
+        path.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _safe_config_backup_path(user_config_path: Path, backup_name: str) -> Path | None:
+    """Return a fixed-name backup path inside the trusted ECLI config directory.
+
+    Migration callers may pass a path object, but backups must not be constructed
+    from that filename. Only the canonical config path under ``~/.config/ecli`` is
+    eligible for backup writes.
+    """
+    trusted_dir = _trusted_user_config_dir().resolve()
+    config_path = user_config_path.resolve()
+    expected_config = trusted_dir / _CONFIG_FILENAME
+    if config_path != expected_config or not _is_relative_to(config_path, trusted_dir):
+        logger.warning(
+            "Skipped ECLI config backup outside trusted config directory: %s",
+            user_config_path,
+        )
+        return None
+    return trusted_dir / backup_name
+
+
 def get_project_root() -> Path:
     """Determines the project's root directory for finding template files."""
     if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
@@ -268,8 +304,8 @@ def get_project_root() -> Path:
 def ensure_user_config_exists() -> None:
     """Checks for user config files in `~/.config/ecli` and creates them if missing."""
     try:
-        config_dir = Path.home() / ".config" / "ecli"
-        user_config_path = config_dir / "config.toml"
+        config_dir = _trusted_user_config_dir()
+        user_config_path = config_dir / _CONFIG_FILENAME
         user_env_path = config_dir / ".env"
 
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -341,7 +377,9 @@ def migrate_obsolete_config_tables(user_config_path: Path) -> bool:
         return False
 
     try:
-        backup = user_config_path.with_name(user_config_path.name + ".pre-textmate.bak")
+        backup = _safe_config_backup_path(user_config_path, _TEXTMATE_BACKUP_FILENAME)
+        if backup is None:
+            return False
         if not backup.exists():
             backup.write_text(text, encoding="utf-8")
         user_config_path.write_text(migrated, encoding="utf-8")
@@ -413,9 +451,11 @@ def migrate_legacy_theme_config(user_config_path: Path) -> bool:
         return False
 
     try:
-        backup = user_config_path.with_name(
-            user_config_path.name + _THEME_NUMBERING_BACKUP_SUFFIX
+        backup = _safe_config_backup_path(
+            user_config_path, _THEME_NUMBERING_BACKUP_FILENAME
         )
+        if backup is None:
+            return False
         if not backup.exists():
             backup.write_text(text, encoding="utf-8")
         user_config_path.write_text(migrated, encoding="utf-8")

@@ -61,6 +61,9 @@ DEFAULT_THEME_ID: int = 207
 #: Always-available fallback if the extension theme registry cannot be loaded.
 COMPATIBILITY_FALLBACK_THEME_ID: int = int(ThemeId.PYSH_DARK)
 
+STATUS_BAR_BACKGROUND_KEY = "statusBar.background"
+STATUS_BAR_FOREGROUND_KEY = "statusBar.foreground"
+
 
 @dataclass(frozen=True)
 class ThemePalette:
@@ -568,7 +571,7 @@ def _extension_theme_to_palette(theme: Any) -> ThemePalette:
         foreground=foreground,
         cursor=_first_color(colors, ("editorCursor.foreground",), foreground),
         selection=selection,
-        status=_first_color(colors, ("statusBar.foreground",), foreground),
+        status=_first_color(colors, (STATUS_BAR_FOREGROUND_KEY,), foreground),
         line_number=_first_color(colors, ("editorLineNumber.foreground",), foreground),
         current_line=current_line,
         comment=_resolved_first_token_color(
@@ -636,18 +639,18 @@ def _extension_theme_to_palette(theme: Any) -> ThemePalette:
         dim=_first_color(colors, ("descriptionForeground",), foreground),
         header_bg=_first_color(
             colors,
-            ("titleBar.activeBackground", "statusBar.background"),
+            ("titleBar.activeBackground", STATUS_BAR_BACKGROUND_KEY),
             current_line,
         ),
         header_fg=_first_color(
             colors,
-            ("titleBar.activeForeground", "statusBar.foreground"),
+            ("titleBar.activeForeground", STATUS_BAR_FOREGROUND_KEY),
             foreground,
         ),
-        status_bg=_first_color(colors, ("statusBar.background",), current_line),
-        status_fg=_first_color(colors, ("statusBar.foreground",), foreground),
-        footer_bg=_first_color(colors, ("statusBar.background",), current_line),
-        footer_fg=_first_color(colors, ("statusBar.foreground",), foreground),
+        status_bg=_first_color(colors, (STATUS_BAR_BACKGROUND_KEY,), current_line),
+        status_fg=_first_color(colors, (STATUS_BAR_FOREGROUND_KEY,), foreground),
+        footer_bg=_first_color(colors, (STATUS_BAR_BACKGROUND_KEY,), current_line),
+        footer_fg=_first_color(colors, (STATUS_BAR_FOREGROUND_KEY,), foreground),
         border=_first_color(colors, ("panel.border", "contrastBorder"), foreground),
         panel_title=_first_color(
             colors,

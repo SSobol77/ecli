@@ -243,7 +243,7 @@ def test_tokens_to_spans_tile_line_exactly() -> None:
     tokens = [("keyword.control.python", 0, 3), ("entity.name.function.python", 4, 5)]
     spans = tokens_to_spans(line, tokens)
     assert "".join(text for text, _category in spans) == line
-    categories = {text: category for text, category in spans}
+    categories = dict(spans)
     assert categories["def"] == "keyword"
     assert categories["f"] == "function"
 

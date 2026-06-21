@@ -202,47 +202,73 @@ def _diagnostic(
     return RegistryDiagnostic(level, manifest, message)
 
 
-def _strip_json_comments(text: str) -> str:  # noqa: C901
+def _append_string_char(out: list[str], char: str, escaped: bool) -> tuple[bool, bool]:
+    """Append one JSON string character and return ``(in_string, escaped)``."""
+    out.append(char)
+    if escaped:
+        return True, False
+    if char == "\\":
+        return True, True
+    if char == '"':
+        return False, False
+    return True, False
+
+
+def _skip_line_comment(text: str, index: int) -> int:
+    """Return the index after a ``//`` comment body."""
+    index += 2
+    while index < len(text) and text[index] not in "\r\n":
+        index += 1
+    return index
+
+
+def _skip_block_comment(text: str, index: int, out: list[str]) -> int:
+    """Replace a ``/* ... */`` comment body with whitespace/newlines."""
+    index += 2
+    while index + 1 < len(text) and not (
+        text[index] == "*" and text[index + 1] == "/"
+    ):
+        out.append("\n" if text[index] in "\r\n" else " ")
+        index += 1
+    return index + 2 if index + 1 < len(text) else index
+
+
+def _strip_json_comments(text: str) -> str:
     out: list[str] = []
     in_string = False
     escaped = False
     index = 0
-    length = len(text)
-    while index < length:
+    while index < len(text):
         char = text[index]
-        nxt = text[index + 1] if index + 1 < length else ""
+        nxt = text[index + 1] if index + 1 < len(text) else ""
         if in_string:
-            out.append(char)
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
+            in_string, escaped = _append_string_char(out, char, escaped)
             index += 1
-            continue
-        if char == '"':
+        elif char == '"':
             in_string = True
             out.append(char)
             index += 1
-            continue
-        if char == "/" and nxt == "/":
-            index += 2
-            while index < length and text[index] not in "\r\n":
-                index += 1
-            continue
-        if char == "/" and nxt == "*":
-            index += 2
-            while index + 1 < length and not (
-                text[index] == "*" and text[index + 1] == "/"
-            ):
-                out.append("\n" if text[index] in "\r\n" else " ")
-                index += 1
-            index += 2 if index + 1 < length else 0
-            continue
-        out.append(char)
-        index += 1
+        elif char == "/" and nxt == "/":
+            index = _skip_line_comment(text, index)
+        elif char == "/" and nxt == "*":
+            index = _skip_block_comment(text, index, out)
+        else:
+            out.append(char)
+            index += 1
     return "".join(out)
+
+
+def _next_nonspace_index(text: str, index: int) -> int:
+    """Return the first non-space index at or after ``index``."""
+    while index < len(text) and text[index].isspace():
+        index += 1
+    return index
+
+
+def _is_trailing_comma(text: str, index: int) -> bool:
+    """Return whether ``text[index]`` is followed by a closing JSON bracket."""
+    lookahead = _next_nonspace_index(text, index + 1)
+    return lookahead < len(text) and text[lookahead] in "}]"
 
 
 def _strip_trailing_commas(text: str) -> str:
@@ -250,32 +276,15 @@ def _strip_trailing_commas(text: str) -> str:
     in_string = False
     escaped = False
     index = 0
-    length = len(text)
-    while index < length:
+    while index < len(text):
         char = text[index]
         if in_string:
-            out.append(char)
-            if escaped:
-                escaped = False
-            elif char == "\\":
-                escaped = True
-            elif char == '"':
-                in_string = False
-            index += 1
-            continue
-        if char == '"':
+            in_string, escaped = _append_string_char(out, char, escaped)
+        elif char == '"':
             in_string = True
             out.append(char)
-            index += 1
-            continue
-        if char == ",":
-            lookahead = index + 1
-            while lookahead < length and text[lookahead].isspace():
-                lookahead += 1
-            if lookahead < length and text[lookahead] in "}]":
-                index += 1
-                continue
-        out.append(char)
+        elif char != "," or not _is_trailing_comma(text, index):
+            out.append(char)
         index += 1
     return "".join(out)
 

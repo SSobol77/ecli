@@ -49,4 +49,16 @@ def test_macos_dmg_naming_and_validation_workflow(
     validate = read_repo_text(".github/workflows/macos-validate.yml")
 
     assert_tokens_present(macos_script, ["ecli_<version>_macos_universal2.dmg"])
+    assert_tokens_present(
+        macos_script,
+        [
+            "ONIGURUMA_HEADER",
+            "macos_native_dependency_env",
+            "check_oniguruma_prerequisites",
+            "CPPFLAGS",
+            "LDFLAGS",
+            "PKG_CONFIG_PATH",
+        ],
+    )
     assert "macOS Contract Validate" in validate
+    assert "brew install oniguruma pkg-config" in validate

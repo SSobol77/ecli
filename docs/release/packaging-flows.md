@@ -174,6 +174,15 @@ Governance rule:
 ## macOS
 
 - DMG flow: `scripts/build_and_package_macos.py`
+- Native TextMate dependency: install Homebrew `oniguruma` and `pkg-config`
+  before any `pip install` of ECLI or `.[dev]`. The macOS workflows do this
+  explicitly, and `scripts/build_and_package_macos.py` fails early if
+  `oniguruma.h` plus the Oniguruma library/pkg-config metadata are not visible.
+- The macOS build script passes deterministic native build environment to pip:
+  `CPPFLAGS`/`CFLAGS` include the Oniguruma include directory, `LDFLAGS` include
+  the library directory, and `PKG_CONFIG_PATH` includes the discovered
+  `pkgconfig` directory. Common Intel (`/usr/local`) and Apple Silicon
+  (`/opt/homebrew`) Homebrew prefixes are supported.
 
 ## Windows
 
@@ -188,12 +197,15 @@ ECLI's default syntax engine (`[extensions].syntax_engine = "extension"`) tokeni
 with the imported TextMate grammars via the `python-textmate` dependency, which
 pulls `onigurumacffi` (CFFI bindings to the **Oniguruma** regex library).
 
-- **Wheel/sdist, Linux/macOS/Windows PyInstaller, AppImage, Docker helpers:**
-  `onigurumacffi` ships binary wheels for manylinux/musllinux, macOS
-  (universal2), and Windows — no system library is required. PyInstaller/AppImage
+- **Wheel/sdist, Linux/Windows PyInstaller, AppImage, Docker helpers:**
+  `onigurumacffi` ships binary wheels for manylinux/musllinux and Windows in
+  the common case, so no system library is normally required. PyInstaller/AppImage
   bundles must include `python-textmate` and `onigurumacffi`; verify the app
   starts and, if the tokenizer is absent, falls back to the legacy highlighter
   without crashing.
+- **macOS PyInstaller/DMG:** CI and the build script install/require Homebrew
+  `oniguruma` and `pkg-config` before pip installs the project, because
+  `onigurumacffi` may fall back to a source build and require native headers.
 - **Source builds (FreeBSD ports/pkg, Nix from source, musl edge cases):** the
   **Oniguruma** development headers/library must be available at build time
   (`devel/oniguruma` on FreeBSD, `oniguruma`/`libonig-dev` on Debian/Ubuntu,
