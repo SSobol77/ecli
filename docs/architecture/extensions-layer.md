@@ -206,6 +206,22 @@ new matrix entry.
   additional `force-include`/`include` entries were required** in
   `pyproject.toml`.
 
+## Adapter status
+
+- **Status (#100):** ECLI now has a deterministic, **data-only** `package.json`
+  contribution registry under `src/ecli/extensions/ecli_integration/`
+  (`paths.py`, `manifest.py`, `registry.py`). It discovers direct-child
+  extension folders that contain a `package.json` (no recursion into nested
+  language-server/node `package.json` files), parses
+  `contributes.languages|grammars|snippets|configuration` into typed, immutable
+  metadata, resolves contribution target paths safely under
+  `src/ecli/extensions/` (rejecting traversal), and exposes read-only lookups by
+  language id, file extension, grammar, and snippet, plus deterministic
+  diagnostics for malformed manifests. It executes **no** extension code: no
+  extension host, no Node/TypeScript or Copilot runtime, no `activationEvents`,
+  and no `package.json` scripts. Covered by
+  `tests/extensions/test_extension_manifest_registry.py`.
+
 ## Sequencing
 
 The Extensions Foundation is delivered as an ordered series. Each issue depends
