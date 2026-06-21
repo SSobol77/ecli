@@ -11,17 +11,36 @@
 # Licensed under the GNU General Public License version 2 only.
 # See the LICENSE file in the project root for full license text.
 
-"""ECLI-owned deterministic adapter layer over the imported extension tree (#100).
+"""ECLI-owned deterministic adapter layer over the imported extension tree.
 
-This package reads VS Code-style ``package.json`` contribution metadata from the
-read-only imported extension tree under ``src/ecli/extensions/`` and exposes it
-as typed, immutable Python data. It is data-only: it never starts a VS Code
-extension host, never activates a Node/TypeScript or Copilot runtime, never runs
-``activationEvents`` or ``package.json`` scripts, and never executes any command.
+This package reads VS Code-style extension metadata from the read-only imported
+extension tree under ``src/ecli/extensions/`` and exposes it as typed, immutable
+Python data:
+
+* #100 — ``package.json`` contribution registry (manifests, languages, grammars,
+  snippets, configuration).
+* #101 — TextMate grammar catalog, language detection, and the typed
+  ``[extensions]`` configuration surface.
+
+It is data-only: it never starts a VS Code extension host, never activates a
+Node/TypeScript or Copilot runtime, never runs ``activationEvents`` or
+``package.json`` scripts, never tokenizes or renders syntax, and never executes
+any command.
 """
 
 from __future__ import annotations
 
+from .config import ExtensionLayerConfig, SyntaxEngine
+from .grammar_catalog import (
+    GrammarCatalog,
+    TextMateGrammar,
+    build_grammar_catalog,
+)
+from .language_detection import (
+    LanguageDetectionResult,
+    LanguageDetector,
+    build_language_detector,
+)
 from .manifest import (
     ConfigurationContribution,
     ExtensionManifest,
@@ -41,12 +60,20 @@ from .registry import (
 
 __all__ = [
     "ConfigurationContribution",
+    "ExtensionLayerConfig",
     "ExtensionManifest",
     "ExtensionRegistry",
+    "GrammarCatalog",
     "GrammarContribution",
     "LanguageContribution",
+    "LanguageDetectionResult",
+    "LanguageDetector",
     "RegistryDiagnostic",
     "SnippetContribution",
+    "SyntaxEngine",
+    "TextMateGrammar",
+    "build_grammar_catalog",
+    "build_language_detector",
     "build_registry",
     "discover_manifest_directories",
     "extensions_root",

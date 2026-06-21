@@ -66,6 +66,21 @@ syntax_highlighting = true
 mouse = false
 
 
+# --- Extensions Layer (data-only) -------------------------------------------
+# Deterministic switches for the imported VS Code/TextMate extension metadata
+# adapters under src/ecli/extensions/ecli_integration/. These enable DATA-ONLY
+# behavior only; they never start a VS Code extension host, Node/TypeScript or
+# Copilot runtime, activationEvents, or package.json scripts.
+#   syntax_engine = "legacy" keeps the current regex highlighter authoritative
+#   until issue #102 ships a tested extension-backed syntax renderer.
+[extensions]
+enabled = true
+metadata_registry = true
+grammar_catalog = true
+language_detection = true
+syntax_engine = "legacy"
+
+
 [settings]
 auto_save_interval = 5
 show_git_info = true

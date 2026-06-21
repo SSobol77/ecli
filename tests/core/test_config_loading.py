@@ -102,3 +102,14 @@ def test_loaded_config_path_recorded_when_present(isolated_home: Path) -> None:
     config = load_config()
     assert "_loaded_config_path" in config
     assert config["_loaded_config_path"].endswith("config.toml")
+
+
+def test_extensions_layer_switches_default_through_loader(isolated_home: Path) -> None:
+    # The data-only Extensions Layer switches (#101) are exposed by the existing
+    # config loader via DEFAULT_CONFIG, with syntax rendering kept on "legacy".
+    extensions = load_config()["extensions"]
+    assert extensions["enabled"] is True
+    assert extensions["metadata_registry"] is True
+    assert extensions["grammar_catalog"] is True
+    assert extensions["language_detection"] is True
+    assert extensions["syntax_engine"] == "legacy"
