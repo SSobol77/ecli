@@ -30,7 +30,13 @@ SOURCE_ROOT = Path("src/ecli")
 # ECLI runtime source. The upstream tree must remain unchanged and contains
 # foreign-language code and intentionally-malformed Python fixtures, so this
 # guard must not parse it. See docs/architecture/extensions-layer.md.
-EXCLUDED_TOP_LEVEL = frozenset({"extensions"})
+#
+# Exception (issue #100): ``src/ecli/extensions/ecli_integration/`` is ECLI-owned
+# deterministic adapter code, not imported upstream, so it MUST be scanned. Every
+# other direct child of ``src/ecli/extensions/`` stays an imported upstream asset
+# tree and remains skipped.
+IMPORTED_EXTENSIONS_DIR = "extensions"
+ECLI_OWNED_EXTENSIONS_SUBDIR = "ecli_integration"
 
 
 def _forbidden_imports(path: Path) -> list[tuple[int, str]]:
@@ -57,13 +63,39 @@ def _is_forbidden_module(module_name: str) -> bool:
     return any(part in FORBIDDEN_IMPORT_PARTS for part in parts)
 
 
+def _is_imported_upstream(relative: Path) -> bool:
+    """Return ``True`` if ``relative`` (under ``src/ecli``) is an imported asset.
+
+    The imported VS Code extension tree lives under ``extensions/`` and is read
+    only (issue #98). The single ECLI-owned exception is the deterministic
+    adapter package ``extensions/ecli_integration/`` (issue #100), which is
+    scanned like any other ECLI source.
+    """
+    parts = relative.parts
+    if not parts or parts[0] != IMPORTED_EXTENSIONS_DIR:
+        return False
+    return len(parts) < 2 or parts[1] != ECLI_OWNED_EXTENSIONS_SUBDIR
+
+
+def scanned_source_files(root: Path | None = None) -> list[Path]:
+    """Return ECLI-owned ``*.py`` files under ``root``, skipping imported assets.
+
+    ``root`` defaults to the module-level ``SOURCE_ROOT`` resolved at call time,
+    so tests that monkeypatch ``SOURCE_ROOT`` are honoured.
+    """
+    base = SOURCE_ROOT if root is None else root
+    files: list[Path] = []
+    for path in sorted(base.rglob("*.py")):
+        if _is_imported_upstream(path.relative_to(base)):
+            continue
+        files.append(path)
+    return files
+
+
 def main() -> int:
     """Validate production runtime import policy."""
     violations: list[str] = []
-    for path in sorted(SOURCE_ROOT.rglob("*.py")):
-        relative = path.relative_to(SOURCE_ROOT)
-        if relative.parts and relative.parts[0] in EXCLUDED_TOP_LEVEL:
-            continue
+    for path in scanned_source_files():
         for lineno, import_text in _forbidden_imports(path):
             violations.append(
                 f"{path}:{lineno}: forbidden runtime import: {import_text}"

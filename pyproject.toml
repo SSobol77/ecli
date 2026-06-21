@@ -137,9 +137,12 @@ markers = [
 [tool.mypy]
 files = ["src/ecli", "tests"]
 # Imported, read-only VS Code / TextMate extension assets (issue #98) are not
-# ECLI Python sources and must not be type-checked. See
-# docs/architecture/extensions-layer.md.
-exclude = ['^src/ecli/extensions/']
+# ECLI Python sources and must not be type-checked. The negative lookahead keeps
+# the ECLI-owned deterministic adapter package
+# src/ecli/extensions/ecli_integration/ (issue #100) type-checked, while still
+# excluding every imported upstream extension folder beside it.
+# See docs/architecture/extensions-layer.md.
+exclude = ['^src/ecli/extensions/(?!ecli_integration/)']
 mypy_path = "src"
 python_version = "3.11"
 ignore_missing_imports = true

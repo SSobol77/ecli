@@ -80,6 +80,16 @@ jobs:
             uv run ruff check src
           fi
 
+      - name: Lint extensions adapter (ruff)
+        # The imported upstream extension tree under src/ecli/extensions/ is
+        # excluded from the broad Ruff scan above (issue #98), but the ECLI-owned
+        # adapter package src/ecli/extensions/ecli_integration/ (issue #100) is
+        # real source and must be linted explicitly. This focused check does not
+        # scan the imported upstream tree.
+        run: |
+          uv run ruff check src/ecli/extensions/ecli_integration
+          uv run ruff format --check src/ecli/extensions/ecli_integration
+
       - name: Format check (ruff)
         run: |
           if [ -d tests ]; then
