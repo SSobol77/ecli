@@ -221,6 +221,25 @@ new matrix entry.
   extension host, no Node/TypeScript or Copilot runtime, no `activationEvents`,
   and no `package.json` scripts. Covered by
   `tests/extensions/test_extension_manifest_registry.py`.
+- **Status (#101):** building on #100, ECLI now has a deterministic, **data-only**
+  TextMate grammar catalog (`grammar_catalog.py`) and language detection
+  (`language_detection.py`). The catalog lists grammar contributions, exposes
+  them by language id and TextMate scope name (plus embedded-language and
+  token-type metadata), verifies grammar files resolve under
+  `src/ecli/extensions/`, and emits deterministic diagnostics for missing files,
+  path traversal, malformed metadata, and conflicting scopes. Language detection
+  maps a file name/extension/exact-filename/filename-pattern to a language id
+  with deterministic precedence and explicit ambiguity metadata. `config.toml`
+  now exposes the data-path switches via an `[extensions]` table (`enabled`,
+  `metadata_registry`, `grammar_catalog`, `language_detection`,
+  `syntax_engine = "legacy"`), parsed through `config.py`
+  (`ExtensionLayerConfig`); no config value can enable an extension runtime.
+  **Syntax rendering remains legacy:** the existing regex/Pygments highlighter is
+  unchanged and stays authoritative — it is **not** removed or disabled in #101.
+  An extension-backed syntax service and editor rendering replacement arrive in
+  #102. Covered by `tests/extensions/test_textmate_grammar_catalog.py`,
+  `tests/extensions/test_extension_language_detection.py`, and
+  `tests/extensions/test_extension_layer_config.py`.
 
 ## Sequencing
 

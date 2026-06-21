@@ -75,6 +75,16 @@ DEFAULT_CONFIG: dict[str, Any] = {
         # Opt-in mouse support (off by default to preserve native text selection).
         "mouse": False,
     },
+    # Extensions Layer (data-only) switches. These mirror the [extensions] table
+    # in config.toml and gate ONLY the deterministic metadata adapters under
+    # src/ecli/extensions/ecli_integration/. They never enable an extension
+    # runtime; syntax_engine = "legacy" preserves the regex highlighter until the
+    # #102 extension-backed syntax service replaces it. See
+    # docs/architecture/extensions-layer.md.
+    "extensions": {
+        "enabled": True, "metadata_registry": True, "grammar_catalog": True,
+        "language_detection": True, "syntax_engine": "legacy",
+    },
     "fonts": {"font_family": "monospace", "font_size": 12},
     "keybindings": {
         "delete": "del", "paste": "ctrl+v", "copy": "ctrl+c", "cut": "ctrl+x",
