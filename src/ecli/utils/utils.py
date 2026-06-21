@@ -456,6 +456,12 @@ def _trusted_user_config_dir() -> Path:
     return Path.home() / _ECLI_CONFIG_DIR_RELATIVE
 
 
+def _trusted_user_config_path() -> Path:
+    """Return the trusted ECLI user config file path."""
+    trusted_config_dir = _trusted_user_config_dir()
+    return trusted_config_dir / CONFIG_FILENAME
+
+
 def _is_relative_to(path: Path, parent: Path) -> bool:
     """Return whether ``path`` is contained in ``parent`` after resolution."""
     try:
@@ -465,21 +471,35 @@ def _is_relative_to(path: Path, parent: Path) -> bool:
     return True
 
 
-def _safe_config_backup_path(user_config_path: Path, backup_name: str) -> Path | None:
-    """Return a fixed-name backup path inside the trusted ECLI config directory.
-
-    Migration callers may pass a path object, but backups must not be constructed
-    from that filename. Only the canonical config path under ``~/.config/ecli`` is
-    eligible for backup writes.
-    """
-    trusted_dir = _trusted_user_config_dir().resolve()
-    config_path = user_config_path.resolve()
-    expected_config = trusted_dir / CONFIG_FILENAME
-    if config_path != expected_config or not _is_relative_to(config_path, trusted_dir):
+def _trusted_config_path_for_migration(user_config_path: Path) -> Path | None:
+    """Return the trusted config path only when ``user_config_path`` resolves to it."""
+    trusted_config_dir = _trusted_user_config_dir()
+    trusted_config_path = trusted_config_dir / CONFIG_FILENAME
+    resolved_trusted_dir = trusted_config_dir.resolve()
+    resolved_trusted_config = trusted_config_path.resolve()
+    resolved_user_config = user_config_path.resolve()
+    if resolved_user_config != resolved_trusted_config or not _is_relative_to(
+        resolved_trusted_config, resolved_trusted_dir
+    ):
         logger.warning(
-            "Skipped ECLI config backup outside trusted config directory: %s",
+            "Skipped ECLI config migration outside trusted config path: %s",
             user_config_path,
         )
+        return None
+    return trusted_config_path
+
+
+def _safe_config_backup_path(backup_name: str) -> Path | None:
+    """Return a fixed-name backup path inside the trusted ECLI config directory.
+
+    Backups are constructed only from the trusted config directory and a fixed
+    backup filename. Caller-supplied path objects must not reach this function.
+    """
+    trusted_dir = _trusted_user_config_dir()
+    resolved_trusted_dir = trusted_dir.resolve()
+    resolved_config_path = (trusted_dir / CONFIG_FILENAME).resolve()
+    if not _is_relative_to(resolved_config_path, resolved_trusted_dir):
+        logger.warning("Skipped ECLI config backup outside trusted config directory.")
         return None
     return trusted_dir / backup_name
 
@@ -496,7 +516,7 @@ def ensure_user_config_exists() -> None:
     """Checks for user config files in `~/.config/ecli` and creates them if missing."""
     try:
         config_dir = _trusted_user_config_dir()
-        user_config_path = config_dir / CONFIG_FILENAME
+        user_config_path = _trusted_user_config_path()
         user_env_path = config_dir / ".env"
 
         config_dir.mkdir(parents=True, exist_ok=True)
@@ -536,8 +556,12 @@ def migrate_obsolete_config_tables(user_config_path: Path) -> bool:
     ``syntax_engine = "legacy"`` to ``"extension"``. It is a no-op when none of
     those markers are present. Returns True when a migration was written.
     """
+    trusted_config_path = _trusted_config_path_for_migration(user_config_path)
+    if trusted_config_path is None:
+        return False
+
     try:
-        text = user_config_path.read_text(encoding="utf-8")
+        text = trusted_config_path.read_text(encoding="utf-8")
     except Exception:
         return False
 
@@ -570,16 +594,16 @@ def migrate_obsolete_config_tables(user_config_path: Path) -> bool:
         return False
 
     try:
-        backup = _safe_config_backup_path(user_config_path, _TEXTMATE_BACKUP_FILENAME)
+        backup = _safe_config_backup_path(_TEXTMATE_BACKUP_FILENAME)
         if backup is None:
             return False
         if not backup.exists():
             backup.write_text(text, encoding="utf-8")
-        user_config_path.write_text(migrated, encoding="utf-8")
+        trusted_config_path.write_text(migrated, encoding="utf-8")
         logger.warning(
             "Migrated obsolete config tables and enabled the TextMate engine at "
             "%s (backup: %s).",
-            user_config_path,
+            trusted_config_path,
             backup,
         )
         return True
@@ -601,8 +625,12 @@ def migrate_legacy_theme_config(user_config_path: Path) -> bool:
     * previous compatibility ids ``101``-``108`` map to the reserved
       18x/28x/38x compatibility ids when the current numbering marker is absent.
     """
+    trusted_config_path = _trusted_config_path_for_migration(user_config_path)
+    if trusted_config_path is None:
+        return False
+
     try:
-        text = user_config_path.read_text(encoding="utf-8")
+        text = trusted_config_path.read_text(encoding="utf-8")
     except Exception:
         return False
 
@@ -644,14 +672,12 @@ def migrate_legacy_theme_config(user_config_path: Path) -> bool:
         return False
 
     try:
-        backup = _safe_config_backup_path(
-            user_config_path, _THEME_NUMBERING_BACKUP_FILENAME
-        )
+        backup = _safe_config_backup_path(_THEME_NUMBERING_BACKUP_FILENAME)
         if backup is None:
             return False
         if not backup.exists():
             backup.write_text(text, encoding="utf-8")
-        user_config_path.write_text(migrated, encoding="utf-8")
+        trusted_config_path.write_text(migrated, encoding="utf-8")
         message = (
             f"Migrated ECLI theme numbering in user config ({reason}); backup: {backup}"
         )

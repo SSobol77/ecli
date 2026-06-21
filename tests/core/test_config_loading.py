@@ -26,6 +26,7 @@ from ecli.utils.utils import (
     DEFAULT_CONFIG,
     load_config,
     migrate_legacy_theme_config,
+    migrate_obsolete_config_tables,
 )
 
 
@@ -136,6 +137,22 @@ def test_theme_migration_writes_fixed_backup_inside_trusted_config_dir(
     backup = isolated_home / "config.toml.pre-extension-theme-numbering.bak"
     assert backup.exists()
     assert backup.read_text(encoding="utf-8") == original
+
+
+def test_obsolete_config_migration_refuses_external_config_path(
+    isolated_home: Path, tmp_path: Path
+) -> None:
+    outside = tmp_path / "attacker-controlled-name.toml"
+    original = (
+        '[extensions]\nsyntax_engine = "legacy"\n'
+        '[comments.python]\nline_prefix = "# "\n'
+    )
+    outside.write_text(original, encoding="utf-8")
+
+    assert migrate_obsolete_config_tables(outside) is False
+    assert outside.read_text(encoding="utf-8") == original
+    assert not (tmp_path / "attacker-controlled-name.toml.pre-textmate.bak").exists()
+    assert not (isolated_home / "config.toml.pre-textmate.bak").exists()
 
 
 def test_env_overrides_user_config_via_load(isolated_home: Path, monkeypatch) -> None:
