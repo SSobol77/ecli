@@ -32,6 +32,7 @@ import pytest
 from ecli.extensions.ecli_integration import (
     ExtensionManifest,
     ExtensionRegistry,
+    ThemeContribution,
     build_registry,
     manifest as manifest_module,
     paths as paths_module,
@@ -150,6 +151,17 @@ def test_snippet_lookup_where_present(registry: ExtensionRegistry) -> None:
         for s in bat_snippets
     )
     assert registry.find_snippets_by_language("cpp"), "expected cpp snippets"
+
+
+def test_theme_contributions_are_metadata_only(registry: ExtensionRegistry) -> None:
+    themes = registry.list_themes()
+    assert themes, "expected imported theme contributions"
+    assert all(isinstance(theme, ThemeContribution) for theme in themes)
+    monokai = registry.find_theme_by_id("Monokai")
+    assert monokai is not None
+    assert monokai.path_repo_relative == (
+        "src/ecli/extensions/theme-monokai/themes/monokai-color-theme.json"
+    )
 
 
 def test_configuration_contributions_are_metadata_only(
@@ -307,6 +319,7 @@ def test_resolved_paths_stay_under_extensions_root(
         records = (
             [g.path_repo_relative for g in manifest.grammars]
             + [s.path_repo_relative for s in manifest.snippets]
+            + [theme.path_repo_relative for theme in manifest.themes]
             + [language.configuration_repo_path for language in manifest.languages]
         )
         for repo_path in records:

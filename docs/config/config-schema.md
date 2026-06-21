@@ -31,6 +31,7 @@ flowchart LR
 
 ```text
 root
+  theme
   logging
     file_level
     console_level
@@ -50,11 +51,33 @@ root
   settings
     auto_save_interval
     show_git_info
-  colors
-  comments.<language>
-  supported_formats
   file_icons
 ```
+
+Internal comment delimiters, syntax fallback data, supported-format tables, and
+keybinding defaults live in code. They are not public template sections in
+`config.toml`.
+
+## Theme Numbering Policy
+
+The root `theme = N` value uses the stable Extensions Layer numbering contract:
+
+- `1`-`8`: deprecated aliases for old pre-extension-theme configs only.
+- `100`-`199`: light themes.
+- `200`-`299`: dark themes.
+- `300`-`399`: high-contrast themes.
+- `800`-`899`: reserved for future custom/imported special themes.
+
+The repository default is `theme = 207` (`Dark+`). Existing user configs with
+old pre-extension aliases `1`-`8` are migrated to preserved built-in
+compatibility themes in the `18x`/`28x`/`38x` ranges. Transitional ids from the
+previous in-progress implementation migrate as `1`-`10` -> `101`-`110`,
+`11`-`25` -> `201`-`215`, and `26`-`29` -> `301`-`304`.
+
+Before modifying a user config, migration writes
+`~/.config/ecli/config.toml.pre-extension-theme-numbering.bak`. Missing or
+invalid theme numbers must keep the current valid theme when one exists, emit a
+visible ECLI warning, and never map to an unrelated theme.
 
 ## Current-State vs Target-State
 
@@ -76,6 +99,7 @@ root
 | `logging.file_level` | string(enum log level) | No | `DEBUG` | defaults/user | must be valid log level token | normalize case | warn + fallback |
 | `logging.console_level` | string(enum) | No | `WARNING` | defaults/user | valid token | normalize case | warn + fallback |
 | `logging.log_to_console` | bool | No | `true` | defaults/user | boolean coercion disallowed unless explicit | none | warn + fallback |
+| `theme` | int | No | `207` | defaults/user/env | must resolve to an imported or compatibility theme id | see theme numbering policy | warn + keep current/default |
 | `ai.default_provider` | string | No | implementation default | defaults/user | must map to known provider set | legacy alias mapping allowed | warn + fallback |
 | `ai.models.<provider>` | string | Provider-dependent | none | defaults/user | non-empty model id | provider alias normalization | warn; runtime feature degraded |
 | `editor.tab_size` | int | No | `4` | defaults/user | integer > 0 | clamp policy allowed | warn + fallback |
@@ -90,8 +114,7 @@ root
 | `editor` | No | invalid types fail strict schema check | fallback per key |
 | `settings` | No | invalid numeric constraints fail strict check | fallback with warning |
 | `ai` | No (core editor) | malformed provider/model keys fail strict check | AI degraded, editor continues |
-| `supported_formats` | No | unknown structure fails strict check | generic format fallback |
-| `comments` | No | invalid per-language map fails strict check | comment feature degrade |
+| `file_icons` | No | unknown structure fails strict check | generic icon fallback |
 
 ## Unknown-Key Handling Policy
 

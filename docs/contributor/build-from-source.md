@@ -37,6 +37,24 @@ flowchart LR
 
 ## Build Dependencies
 
+### TextMate syntax engine
+
+The default syntax engine is extension-backed and depends on `python-textmate`;
+that dependency pulls `onigurumacffi`, which uses the Oniguruma regular-expression
+engine. Binary wheels cover common Linux, macOS, and Windows builds, but source
+builds need the Oniguruma development headers/library available before dependency
+sync.
+
+Use the platform package where required:
+
+- Debian/Ubuntu-style systems: `libonig-dev` or `oniguruma`.
+- Arch and Nix: `oniguruma`.
+- FreeBSD: `devel/oniguruma`.
+
+Packaging and smoke validation must accept only two outcomes: TextMate rendering
+is available, or ECLI logs the deterministic fallback diagnostic and starts with
+the legacy highlighter. A missing tokenizer must not crash startup.
+
 ### SUSE / openSUSE
 
 Install the local RPM/package build toolchain:

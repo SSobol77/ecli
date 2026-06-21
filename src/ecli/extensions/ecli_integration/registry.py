@@ -33,6 +33,7 @@ from .manifest import (
     LanguageContribution,
     RegistryDiagnostic,
     SnippetContribution,
+    ThemeContribution,
     parse_manifest,
 )
 
@@ -121,6 +122,18 @@ class ExtensionRegistry:
             for snippet in manifest.snippets
             if snippet.language_id == language_id
         )
+
+    def list_themes(self) -> tuple[ThemeContribution, ...]:
+        """Return all contributed colour themes in deterministic manifest order."""
+        return tuple(theme for manifest in self.manifests for theme in manifest.themes)
+
+    def find_theme_by_id(self, theme_id: str) -> ThemeContribution | None:
+        """Return the first theme contribution with ``id == theme_id``."""
+        for manifest in self.manifests:
+            for theme in manifest.themes:
+                if theme.theme_id == theme_id:
+                    return theme
+        return None
 
 
 def discover_manifest_directories(root: Path) -> tuple[Path, ...]:

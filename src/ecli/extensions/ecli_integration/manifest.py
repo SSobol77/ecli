@@ -80,6 +80,17 @@ class SnippetContribution:
 
 
 @dataclass(frozen=True)
+class ThemeContribution:
+    """A single ``contributes.themes[]`` entry (metadata only)."""
+
+    theme_id: str | None
+    label: str | None
+    ui_theme: str | None
+    path: str | None
+    path_repo_relative: str | None = None
+
+
+@dataclass(frozen=True)
 class ConfigurationContribution:
     """A ``contributes.configuration`` block, reduced to declarative metadata.
 
@@ -106,6 +117,7 @@ class ExtensionManifest:
     languages: tuple[LanguageContribution, ...] = field(default_factory=tuple)
     grammars: tuple[GrammarContribution, ...] = field(default_factory=tuple)
     snippets: tuple[SnippetContribution, ...] = field(default_factory=tuple)
+    themes: tuple[ThemeContribution, ...] = field(default_factory=tuple)
     configuration: tuple[ConfigurationContribution, ...] = field(default_factory=tuple)
 
 
@@ -233,6 +245,26 @@ def _parse_snippets(
     return tuple(result)
 
 
+def _parse_themes(raw: object, context: _ParseContext) -> tuple[ThemeContribution, ...]:
+    if not isinstance(raw, list):
+        return ()
+    result: list[ThemeContribution] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            continue
+        theme_path = _as_str(entry.get("path"))
+        result.append(
+            ThemeContribution(
+                theme_id=_as_str(entry.get("id")),
+                label=_as_str(entry.get("label")),
+                ui_theme=_as_str(entry.get("uiTheme")),
+                path=theme_path,
+                path_repo_relative=context.resolve_target(theme_path, "theme"),
+            )
+        )
+    return tuple(result)
+
+
 def _parse_configuration(raw: object) -> tuple[ConfigurationContribution, ...]:
     blocks = raw if isinstance(raw, list) else [raw]
     result: list[ConfigurationContribution] = []
@@ -302,6 +334,7 @@ def parse_manifest(
         languages=_parse_languages(contributes.get("languages"), context),
         grammars=_parse_grammars(contributes.get("grammars"), context),
         snippets=_parse_snippets(contributes.get("snippets"), context),
+        themes=_parse_themes(contributes.get("themes"), context),
         configuration=_parse_configuration(contributes.get("configuration")),
     )
     return manifest, context.diagnostics

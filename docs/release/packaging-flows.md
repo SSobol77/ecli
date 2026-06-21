@@ -181,3 +181,43 @@ Governance rule:
   - build prerequisites: Python 3.11+, Git, PowerShell 7, NSIS for installer builds, and Visual Studio Build Tools only when native compilation is required.
 
 - NSIS script: `packaging/windows/nsis/ecli.nsi`
+
+## TextMate syntax engine dependency (Oniguruma)
+
+ECLI's default syntax engine (`[extensions].syntax_engine = "extension"`) tokenizes
+with the imported TextMate grammars via the `python-textmate` dependency, which
+pulls `onigurumacffi` (CFFI bindings to the **Oniguruma** regex library).
+
+- **Wheel/sdist, Linux/macOS/Windows PyInstaller, AppImage, Docker helpers:**
+  `onigurumacffi` ships binary wheels for manylinux/musllinux, macOS
+  (universal2), and Windows — no system library is required. PyInstaller/AppImage
+  bundles must include `python-textmate` and `onigurumacffi`; verify the app
+  starts and, if the tokenizer is absent, falls back to the legacy highlighter
+  without crashing.
+- **Source builds (FreeBSD ports/pkg, Nix from source, musl edge cases):** the
+  **Oniguruma** development headers/library must be available at build time
+  (`devel/oniguruma` on FreeBSD, `oniguruma`/`libonig-dev` on Debian/Ubuntu,
+  `oniguruma` on Arch and in nixpkgs). Declare/install it in the corresponding
+  packaging flow, or document the explicit fallback policy (legacy highlighter).
+- **Runtime guarantee:** a missing tokenizer never crashes ECLI; it logs a
+  deterministic diagnostic and renders with the legacy highlighter.
+
+## Theme numbering and config migration contract
+
+Release artifacts must preserve the canonical theme-numbering policy documented
+in `docs/architecture/extensions-layer.md` and the shipped `config.toml`:
+
+- `1`-`8` are deprecated migration aliases only.
+- `100`-`199` are light themes.
+- `200`-`299` are dark themes.
+- `300`-`399` are high-contrast themes.
+- `800`-`899` are reserved for future custom/imported special themes.
+
+The default shipped theme is `207` (`Dark+`). Packaging must not rewrite
+`config.toml` or silently substitute missing theme numbers. User-config
+migration must write
+`~/.config/ecli/config.toml.pre-extension-theme-numbering.bak` before changing
+an existing config. Old pre-extension aliases `1`-`8` migrate to the preserved
+compatibility ids in the `18x`/`28x`/`38x` ranges; transitional ids from the
+previous in-progress implementation migrate as `1`-`10` -> `101`-`110`,
+`11`-`25` -> `201`-`215`, and `26`-`29` -> `301`-`304`.

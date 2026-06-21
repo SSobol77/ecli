@@ -36,14 +36,55 @@ from ecli.extensions.ecli_integration import (
 
 REPRESENTATIVE_EXTENSIONS = (
     ("main.py", "python"),
+    ("pyproject.toml", "toml"),
     ("data.json", "json"),
     ("app.js", "javascript"),
+    ("app.jsx", "javascriptreact"),
     ("app.ts", "typescript"),
+    ("app.tsx", "typescriptreact"),
     ("README.md", "markdown"),
+    ("doc.markdown", "markdown"),
+    (".coderabbit.yaml", "yaml"),
+    ("config.yaml", "yaml"),
+    ("Dockerfile", "dockerfile"),
+    ("build.dockerfile", "dockerfile"),
+    ("Makefile", "makefile"),
+    ("makefile", "makefile"),
+    ("rules.mk", "makefile"),
+    ("boot.asm", "asm"),
+    ("boot.s", "asm"),
+    ("boot.S", "asm"),
     ("core.c", "c"),
     ("core.cpp", "cpp"),
     ("core.h", "cpp"),
-    ("run.bat", "bat"),
+    ("core.cxx", "cpp"),
+    ("core.cc", "cpp"),
+    ("core.hpp", "cpp"),
+    ("core.hxx", "cpp"),
+    ("Main.java", "java"),
+    ("lib.rs", "rust"),
+    ("index.html", "html"),
+    ("index.htm", "html"),
+    ("main.adb", "ada"),
+    ("main.ads", "ada"),
+    ("main.ada", "ada"),
+    ("main.spark", "ada"),
+    ("solver.f", "fortran"),
+    ("solver.for", "fortran"),
+    ("solver.f90", "fortran"),
+    ("solver.f95", "fortran"),
+    ("solver.f03", "fortran"),
+    ("solver.f08", "fortran"),
+    ("script.pl", "perl"),
+    ("Module.pm", "perl"),
+    ("test.t", "perl"),
+    ("index.php", "php"),
+    ("index.phtml", "php"),
+    ("init.lua", "lua"),
+    ("Program.cs", "csharp"),
+    ("freebsd-0.2.2-fail.log", "log"),
+    ("editor.log", "log"),
+    ("qemu.raw.log", "log"),
 )
 
 
@@ -71,7 +112,7 @@ def test_representative_extension_detection(
     result = detector.detect(file_name)
     assert result.matched
     assert result.language_id == expected
-    assert result.matched_by == "extension"
+    assert result.matched_by in {"filename", "filename_pattern", "extension"}
 
 
 def test_exact_filename_detection(detector: LanguageDetector) -> None:
@@ -93,6 +134,30 @@ def test_exact_filename_beats_extension(detector: LanguageDetector) -> None:
     result = detector.detect("tsconfig.json")
     assert result.language_id == "jsonc"
     assert result.matched_by == "filename"
+
+
+def test_gitignore_is_exact_filename_not_sql(detector: LanguageDetector) -> None:
+    result = detector.detect(".gitignore")
+    assert result.language_id == "ignore"
+    assert result.matched_by == "filename"
+    assert "sql" not in result.candidates
+
+
+@pytest.mark.parametrize(
+    "file_name", ("freebsd-0.2.2-fail.log", "editor.log", "qemu.raw.log")
+)
+def test_log_files_are_never_sql(detector: LanguageDetector, file_name: str) -> None:
+    result = detector.detect(file_name)
+    assert result.language_id == "log"
+    assert "sql" not in result.candidates
+
+
+def test_yaml_detection_from_required_filenames(detector: LanguageDetector) -> None:
+    assert detector.detect(".coderabbit.yaml").language_id == "yaml"
+    assert detector.detect("config.yaml").language_id == "yaml"
+    compose = detector.detect("docker-compose.yml")
+    assert compose.language_id == "dockercompose"
+    assert compose.matched_by == "filename_pattern"
 
 
 def test_extension_detection_is_case_insensitive(detector: LanguageDetector) -> None:

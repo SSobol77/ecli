@@ -121,7 +121,7 @@ class FakeEditor:
         self.filename = "/home/user/projects/ecli/src/sample.py"
         self.modified = True
         self.is_lightweight = False
-        self.active_theme = get_theme(5)
+        self.active_theme = get_theme(281)
         self.cursor_y = 0
 
     def get_string_width(self, text: str) -> int:
@@ -157,7 +157,7 @@ def test_header_renders_app_file_and_theme_within_bounds() -> None:
     row0 = _row_text(win, 0)
     assert "ECLI" in row0
     assert "sample.py" in row0
-    assert "theme 5" in row0 or "Dark Classic" in row0
+    assert "theme 281" in row0 or "PySH Dark" in row0
     # Every write stays within the terminal width.
     assert all(0 <= x < 90 for (_y, x) in win.cells)
     # Buffer is untouched by chrome rendering.
