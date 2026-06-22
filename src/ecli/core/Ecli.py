@@ -80,6 +80,7 @@ from ecli.core.CodeCommenter import CodeCommenter
 
 # Imports from ecli package
 from ecli.core.History import History
+from ecli.extensions.ecli_integration.diagnostics import DiagnosticsService
 from ecli.integrations.GitBridge import GitBridge
 from ecli.integrations.LinterBridge import LinterBridge
 from ecli.services.registry import ServiceRegistry
@@ -362,6 +363,13 @@ class Ecli:
             Methods for commenting and uncommenting lines.
     """
 
+    #: Bounded input timeout (ms) used while an active panel needs to repaint
+    #: without user input (e.g. the F4 Diagnostics activity indicator while
+    #: collecting). Kept in the 100–250 ms band so the animation is smooth while
+    #: idle CPU stays low; outside those windows the loop returns to a blocking
+    #: read. See :meth:`_sync_input_cadence`.
+    PANEL_TICK_MS: int = 120
+
     # --- Status message and lint panel management ---
     def _set_status_message(
         self,
@@ -544,6 +552,10 @@ class Ecli:
         self.visible_lines: int = 0
         self.last_window_size: tuple[int, int] = (0, 0)
         self._force_full_redraw: bool = False
+        # Tracks whether the main loop is currently using the bounded panel-tick
+        # input timeout (see _sync_input_cadence) so it can be restored exactly
+        # once when no panel needs periodic repaints anymore.
+        self._panel_tick_active: bool = False
         self.focus: str = "editor"
         self.selection_start: Optional[tuple[int, int]] = None
         self.selection_end: Optional[tuple[int, int]] = None
@@ -584,6 +596,7 @@ class Ecli:
         # Initialize optional components to None first
         self.git: Optional[GitBridge] = None
         self.linter_bridge: Optional[LinterBridge] = None
+        self.diagnostics_service: Optional[DiagnosticsService] = None
         self.async_engine: Optional[AsyncEngine] = None
         self.panel_manager: Optional[PanelManager] = None
         self.git_panel_instance: Optional[GitPanel] = None
@@ -593,6 +606,12 @@ class Ecli:
         if not self.is_lightweight:
             self.git = GitBridge(self)
             self.linter_bridge = LinterBridge(self)
+            # F4 Diagnostics panel backend (#104). Scoped to the launch
+            # directory so the current file is linted in-workspace only; never
+            # auto-installs tools and never executes configured shell strings.
+            self.diagnostics_service = DiagnosticsService(
+                config=self.config, workspace_root=Path.cwd()
+            )
             self.async_engine = AsyncEngine(
                 to_ui_queue=self._async_results_q, config=self.config
             )
@@ -1016,6 +1035,26 @@ class Ecli:
             self._set_status_message(f"System Doctor unavailable: {exc}")
         return True
 
+    def toggle_diagnostics_panel(self) -> bool:
+        """Open or focus the F4 Diagnostics / Linter panel (#104).
+
+        Toggles the read-only diagnostics panel that lists linter findings for
+        the current file. Collection is delegated to the ECLI-owned diagnostics
+        service and runs on a background thread, so opening the panel never
+        blocks the editor render loop. This is independent of the F11 PySH
+        Console panel.
+        """
+        if not self.panel_manager:
+            self._set_status_message("Diagnostics panel not available.")
+            return True
+        try:
+            self.panel_manager.show_panel(
+                "diagnostics", service=self.diagnostics_service
+            )
+        except Exception as exc:
+            self._set_status_message(f"Diagnostics unavailable: {exc}")
+        return True
+
     def show_command_plan_panel(self, plans: list[Any]) -> bool:
         """Open a preview-only command plan panel."""
         if not self.panel_manager:
@@ -1105,63 +1144,20 @@ class Ecli:
         return True  # Return True, as we changed the status message
 
     def show_lint_panel(self) -> bool:
-        """Toggles the visibility of the linter panel.
+        """Open the F4 Diagnostics panel (legacy centered popup retired, #104).
 
-        This method acts as a user-driven toggle for the panel that displays
-        detailed linter output. Its behavior is as follows:
-        - If the panel is currently active, it will be hidden.
-        - If the panel is inactive but there is a lint message to show, it
-        will be activated and displayed.
-        - If the panel is inactive and there is no lint message, it informs
-        the user and remains hidden.
-
-        This provides an intuitive toggle action for the user, typically bound
-        to a key like F4 (which might be shared with `run_lint_async`).
+        Historically this toggled a centered overlay populated by the flake8/LSP
+        ``linter_bridge``. That overlay is retired: diagnostics now live entirely
+        in the right-side :class:`DiagnosticsPanel`. To keep a single diagnostics
+        surface, this legacy entry point simply routes to the F4 panel and never
+        raises the old centered popup. The legacy ``lint_panel_active`` flag is
+        force-cleared so no stale overlay state lingers.
 
         Returns:
-            bool: True if the panel's visibility state (`self.lint_panel_active`)
-                or the status message changed, indicating a redraw is needed.
-                False otherwise.
+            bool: Always ``True`` — the request is handled by the panel manager.
         """
-        logging.debug(
-            f"show_lint_panel called. Current state: panel_active={self.lint_panel_active}, "
-            f"message_exists={bool(self.lint_panel_message)}"
-        )
-
-        original_panel_state = self.lint_panel_active
-        original_status = self.status_message
-
-        # Logic for toggling the panel
-        if self.lint_panel_active:
-            # If the panel is currently visible, hide it.
-            self.lint_panel_active = False
-            self._set_status_message("Lint panel hidden")
-            logging.debug("show_lint_panel: Panel was active, now hidden.")
-        elif self.lint_panel_message:
-            # If the panel is hidden but there is a message to show, activate it.
-            self.lint_panel_active = True
-            # No need to set a status message here, as the panel appearing is the feedback.
-            logging.debug(
-                "show_lint_panel: Panel was inactive, now activated to show message."
-            )
-        else:
-            # If the panel is hidden and there is no message, inform the user.
-            self._set_status_message("No linting information to display.")
-            logging.debug("show_lint_panel: No lint message available to show.")
-
-        # A change occurred if the panel's state flipped or the status message was updated.
-        state_changed = (
-            self.lint_panel_active != original_panel_state
-            or self.status_message != original_status
-        )
-
-        if state_changed:
-            logging.debug(
-                f"show_lint_panel: State changed. Panel active: {self.lint_panel_active}. "
-                f"Status: '{self.status_message}'"
-            )
-
-        return state_changed
+        self.lint_panel_active = False
+        return self.toggle_diagnostics_panel()
 
     # ----- Clipboard Handling -------
     def _check_pyclip_availability(self) -> bool:  # Added return type hint
@@ -7698,7 +7694,7 @@ class Ecli:
             "find": "Ctrl+F",
             "find_next": "F3",
             "search_and_replace": "F6",
-            "lint": "F4",
+            "toggle_diagnostics_panel": "F4",
             "git_menu": "F9",
             "help": "F1",
             "toggle_system_doctor_panel": "F8",
@@ -7716,7 +7712,7 @@ class Ecli:
             "",
             "  Tools & Features:",
             f"    {_kb('file_manager', defaults['file_manager']):<22}: File Manager",
-            f"    {_kb('lint', defaults['lint']):<22}: Diagnostics (LSP/Linters)",
+            f"    {_kb('toggle_diagnostics_panel', defaults['toggle_diagnostics_panel']):<22}: Diagnostics / Linter panel",
             f"    {_kb('git_menu', defaults['git_menu']):<22}: Git menu",
             f"    {_kb('help', defaults['help']):<22}: This help screen",
             f"    {_kb('ai_assist', defaults['ai_assist']):<22}: AI Code Assistant",
@@ -8321,15 +8317,17 @@ class Ecli:
             pass
 
         try:
-            # Non-blocking input tuned for ESC-sequence parsing.
-            self.stdscr.nodelay(True)
-            self.stdscr.timeout(35)
+            # The loop owns input cadence. Start in blocking mode, but do not
+            # read from curses until the initial forced redraw has been flushed.
+            self.stdscr.nodelay(False)
+            self.stdscr.timeout(-1)
+            if self.keybinder is not None:
+                self.keybinder.active_input_timeout = -1
 
             # --------------------------- your existing loop ---------------------------
             while self.running:
                 try:
-                    redraw_needed: bool = self._process_events_and_input()
-                    self._render_screen(redraw_needed)
+                    self._run_loop_iteration()
                 except KeyboardInterrupt:
                     logger.info(
                         "KeyboardInterrupt received, initiating graceful shutdown."
@@ -8550,37 +8548,119 @@ class Ecli:
             return False
         return self.insert_pasted_text(text)
 
+    def _active_panel_wants_tick(self) -> bool:
+        """Return ``True`` when the active panel needs periodic repaints.
+
+        A panel opts in by exposing a ``wants_periodic_repaint()`` method (the F4
+        :class:`DiagnosticsPanel` does so while collecting). Panels without it —
+        including the F11 PySH Console panel — never request ticks, so their
+        blocking-input behaviour is unchanged.
+        """
+        panel_manager = getattr(self, "panel_manager", None)
+        if not panel_manager or not panel_manager.is_panel_active():
+            return False
+        wants = getattr(panel_manager.active_panel, "wants_periodic_repaint", None)
+        try:
+            return bool(wants()) if callable(wants) else False
+        except Exception:
+            return False
+
+    def _sync_input_cadence(self, pending_redraw: bool = False) -> None:
+        """Choose the curses input timeout for this iteration (explicit contract).
+
+        This method must be called only after pending draw work has already been
+        flushed. The main loop renders first, then selects one of two read modes:
+
+        * a panel that wants periodic repaint (F4 Diagnostics collecting) →
+          ``PANEL_TICK_MS`` so the activity bar animates and completion is polled
+          without any keypress;
+        * otherwise → ``-1`` (block until input) for a low-CPU idle.
+
+        ``pending_redraw`` is retained as a defensive compatibility parameter for
+        tests and older callers. It no longer selects ``timeout(0)``; redraws are
+        rendered before this method is allowed to arm a blocking read.
+
+        The chosen value is shared with :class:`KeyBinder` so its escape/paste
+        read helpers restore to it instead of clobbering it back to blocking.
+        """
+        stdscr = getattr(self, "stdscr", None)
+        if stdscr is None:
+            return
+        wants_tick = self._active_panel_wants_tick()
+        if wants_tick:
+            timeout_ms = self.PANEL_TICK_MS
+        else:
+            timeout_ms = -1
+        if pending_redraw:
+            logging.debug(
+                "Input cadence requested with pending_redraw=True; redraw should "
+                "already have been flushed before input wait."
+            )
+        try:
+            stdscr.timeout(timeout_ms)
+        except Exception:
+            logging.debug("Could not set input timeout.", exc_info=True)
+        keybinder = getattr(self, "keybinder", None)
+        if keybinder is not None:
+            keybinder.active_input_timeout = timeout_ms
+        # Log only the transition into tick mode (once per collection), never the
+        # per-iteration ticks, to keep the debug log non-noisy.
+        if wants_tick and not self._panel_tick_active:
+            logging.debug(
+                "diagnostics: entering periodic repaint, input timeout=%dms", timeout_ms
+            )
+        self._panel_tick_active = wants_tick
+
+    def _pre_input_redraw_needed(self) -> bool:
+        """Process autonomous work and decide whether to render before input."""
+        redraw_needed = bool(self._process_all_queues())
+        if self._active_panel_wants_tick():
+            redraw_needed = True
+        return redraw_needed
+
+    def _run_loop_iteration(self) -> None:
+        """Run one render-before-read editor-loop iteration.
+
+        The invariant is strict: if queues, panel ticks, or forced/full redraw
+        flags require a visible update, that update is drawn and flushed before
+        the loop arms any blocking curses input read. This prevents a blank
+        startup screen and prevents completed Diagnostics state from waiting for
+        an unrelated keypress.
+        """
+        redraw_needed = self._pre_input_redraw_needed()
+        if redraw_needed or self._force_full_redraw:
+            self._render_screen(redraw_needed)
+
+        self._sync_input_cadence(pending_redraw=False)
+
+        input_redraw_needed = self._read_and_dispatch_input()
+        if input_redraw_needed or self._force_full_redraw:
+            self._render_screen(input_redraw_needed)
+            if self._active_panel_wants_tick():
+                self._sync_input_cadence(pending_redraw=False)
+
     def _process_events_and_input(self) -> bool:
-        """Processes all non-UI events for a single main loop iteration, including
-        background task results and user input.
+        """Compatibility wrapper for one pre-input pass plus one input read.
 
-        This method acts as the central hub for event processing and is the first
-        phase of the main loop. It performs the following steps:
-
-        1.  It begins by polling all asynchronous queues (`_process_all_queues`)
-            for results from background tasks like Git operations, shell commands,
-            or AI requests.
-        2.  Next, it reads a key press from the terminal using the KeyBinder.
-        3.  Crucially, it provides special handling for the `curses.KEY_RESIZE`
-            event. This event is intercepted and handled globally by calling
-            `self.handle_resize()` directly, ensuring that both the main editor
-            and any active panels are correctly resized regardless of the current
-            focus.
-        4.  All other key events are passed to `_handle_input_dispatch` to be
-            routed to the appropriate component (the editor or the active panel)
-            based on the current focus.
+        ``run()`` uses :meth:`_run_loop_iteration` so pending redraws are rendered
+        before a blocking read. This method remains for older tests/callers: when
+        autonomous work or a forced redraw is pending, it returns ``True`` without
+        reading input so the caller can render first.
 
         Returns:
             bool: True if any processed event or input resulted in a state change
                   that requires a UI redraw. False if no changes occurred.
         """
+        redraw_needed = self._pre_input_redraw_needed()
+        if redraw_needed or self._force_full_redraw:
+            return True
+
+        self._sync_input_cadence(pending_redraw=False)
+        return self._read_and_dispatch_input()
+
+    def _read_and_dispatch_input(self) -> bool:
+        """Read one key event and dispatch it to the focused component."""
         redraw_needed = False
-
-        # First, process any results from background tasks (Git, AI, shell, etc.).
-        if self._process_all_queues():
-            redraw_needed = True
-
-        # Then, attempt to read a key press from the user.
         key_input = self.keybinder.get_key_input()
 
         # Proceed only if a valid key was received (not an error or timeout).

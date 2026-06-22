@@ -51,6 +51,10 @@ root
   settings
     auto_save_interval
     show_git_info
+  linter
+    enabled
+    auto_install
+    exclude
   file_icons
 ```
 
@@ -104,6 +108,9 @@ visible ECLI warning, and never map to an unrelated theme.
 | `ai.models.<provider>` | string | Provider-dependent | none | defaults/user | non-empty model id | provider alias normalization | warn; runtime feature degraded |
 | `editor.tab_size` | int | No | `4` | defaults/user | integer > 0 | clamp policy allowed | warn + fallback |
 | `settings.auto_save_interval` | int/float | No | `5` | defaults/user | > 0 | normalize numeric | warn + fallback |
+| `linter.enabled` | bool | No | `true` | defaults/user | boolean | none | warn + fallback; `false` disables the F4 panel |
+| `linter.auto_install` | bool | No | `true` | defaults/user | boolean | none | parsed only — never acted upon (no tool is installed) |
+| `linter.exclude` | list[string] | No | `[".git", "**pycache**", ".venv"]` | defaults/user | list of glob strings | drop non-string entries | warn + fallback; matched current files are not linted |
 | `comments.<language>.line_prefix` | string | No | language-dependent | defaults/user | non-empty where used | none | warn + feature degrade |
 
 ## Section-Level Schema Summary
@@ -114,6 +121,7 @@ visible ECLI warning, and never map to an unrelated theme.
 | `editor` | No | invalid types fail strict schema check | fallback per key |
 | `settings` | No | invalid numeric constraints fail strict check | fallback with warning |
 | `ai` | No (core editor) | malformed provider/model keys fail strict check | AI degraded, editor continues |
+| `linter` | No | invalid types fail strict schema check | fallback per key; F4 panel reports a structured state |
 | `file_icons` | No | unknown structure fails strict check | generic icon fallback |
 
 ## Unknown-Key Handling Policy

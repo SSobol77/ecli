@@ -56,6 +56,12 @@ from typing import TYPE_CHECKING, Any, Optional
 import pyperclip
 from wcwidth import wcswidth
 
+from ecli.extensions.ecli_integration.diagnostics import (
+    Diagnostic,
+    DiagnosticSeverity,
+    DiagnosticsState,
+    DiagnosticsStatus,
+)
 from ecli.integrations.GitBridge import GitBridge, GitCommandResult
 from ecli.ui.design import TuiDesign
 from ecli.ui.geometry import centered_modal_rect, compute_layout
@@ -2074,6 +2080,569 @@ class ServicesPanel(_ReadOnlyRightPanel):
             lines.append("")
             lines.append(f"Config diagnostics: {len(diagnostics)}")
         return lines
+
+
+# ==================== DiagnosticsPanel Class ====================
+class DiagnosticsPanel(_ReadOnlyRightPanel):
+    """Read-only right-side panel that lists linter diagnostics (F4, #104).
+
+    The panel renders an immutable diagnostics state produced by the ECLI-owned
+    diagnostics service. Collection runs on a background daemon thread so the
+    editor render loop is never blocked by external linter execution; the
+    completed result is delivered through a one-slot queue and picked up by
+    :meth:`process_queues`, which the main loop polls every tick. The panel
+    itself never spawns processes — it only reads buffer state and delegates to
+    the service.
+    """
+
+    title = " Diagnostics "
+    panel_kind = "diagnostics"
+    close_key = getattr(curses, "KEY_F4", 268)
+
+    # Deterministic, panel-local activity indicator. A "===" segment slides
+    # inside a bracketed track whose width adapts to the panel, bounded by a safe
+    # minimum/maximum. Advanced one step per render frame while collecting.
+    _ACTIVITY_SEGMENT = "==="
+    _ACTIVITY_MIN_TRACK = 10
+    _ACTIVITY_MAX_TRACK = 30
+
+    _STATUS_LABELS = {
+        DiagnosticsStatus.NO_DIAGNOSTICS: "✓ No diagnostics — file is clean",
+        DiagnosticsStatus.NO_ACTIVE_FILE: "No active file",
+        DiagnosticsStatus.OUTSIDE_WORKSPACE: "File outside workspace",
+        DiagnosticsStatus.UNREADABLE: "File unreadable",
+        DiagnosticsStatus.UNSUPPORTED: "Unsupported file type",
+        DiagnosticsStatus.PLANNED: "Planned diagnostics provider",
+        DiagnosticsStatus.PROVIDER_UNAVAILABLE: "Linter not installed",
+        DiagnosticsStatus.DISABLED: "Diagnostics disabled",
+        DiagnosticsStatus.ERROR: "Diagnostics error",
+        DiagnosticsStatus.COLLECTING: "Collecting diagnostics…",
+    }
+
+    def __init__(
+        self, stdscr: CursesWindow, main_editor_instance: Ecli, **kwargs: Any
+    ) -> None:
+        """Create the diagnostics panel.
+
+        Keyword Args:
+            service: Optional ``DiagnosticsService``; falls back to
+                ``editor.diagnostics_service``.
+            state: Optional pre-built ``DiagnosticsState`` (used by rendering
+                tests). When supplied, no collection is started on open.
+            background: When ``True`` (default) collection runs on a worker
+                thread; tests pass ``False`` for deterministic synchronous runs.
+        """
+        super().__init__(stdscr, main_editor_instance, **kwargs)
+        self.service = kwargs.get("service") or getattr(
+            self.editor, "diagnostics_service", None
+        )
+        self.background: bool = bool(kwargs.get("background", True))
+        self.state: Optional[DiagnosticsState] = kwargs.get("state")
+        self._result_q: queue.Queue[DiagnosticsState] = queue.Queue(maxsize=1)
+        self._collecting: bool = False
+        self._activity_frame: int = 0
+        self.selected_idx: int = 0
+
+    def open(self) -> None:
+        """Open the panel and start collecting diagnostics if needed."""
+        super().open()
+        if self.state is None:
+            self.refresh(force=False)
+        self.editor._set_status_message(
+            "Diagnostics: r refresh · ↑/↓ select · PgUp/PgDn · F4/Esc/q close"
+        )
+
+    def refresh(self, *, force: bool = True) -> None:
+        """Collect diagnostics for the current file (background by default)."""
+        if self.service is None:
+            self.state = DiagnosticsState.error(
+                provider="",
+                detail="Diagnostics service is not available.",
+            )
+            return
+
+        file_path, text = self._target()
+        self._activity_frame = 0
+
+        if not self.background:
+            self.state = self.service.collect(file_path, text=text, force=force)
+            return
+
+        if self._collecting:
+            return  # one in-flight collection at a time
+        if self.state is None:
+            self.state = DiagnosticsState.collecting(file_path=file_path)
+        self._collecting = True
+        logger.debug("diagnostics: collecting started for %r (force=%s)", file_path, force)
+        worker = threading.Thread(
+            target=self._collect_worker,
+            args=(file_path, text, force),
+            name="diagnostics-collect",
+            daemon=True,
+        )
+        worker.start()
+
+    def _collect_worker(
+        self, file_path: Optional[str], text: Optional[str], force: bool
+    ) -> None:
+        try:
+            result = self.service.collect(file_path, text=text, force=force)
+        except Exception as exc:  # defensive: service is designed not to raise
+            result = DiagnosticsState.error(
+                provider="",
+                detail=f"collection failed: {exc}"[:160],
+                file_path=file_path,
+            )
+        try:
+            self._result_q.put_nowait(result)
+        except queue.Full:
+            pass
+
+    def process_queues(self) -> bool:
+        """Deliver a finished collection and keep animating while collecting.
+
+        Returns ``True`` while a background collection is in flight so the main
+        loop keeps redrawing (advancing the activity indicator), and once when a
+        result is delivered. This window is bounded by the collection timeout.
+        """
+        delivered = False
+        while True:
+            try:
+                self.state = self._result_q.get_nowait()
+            except queue.Empty:
+                break
+            self._collecting = False
+            self.selected_idx = 0
+            delivered = True
+            logger.debug(
+                "diagnostics: drained result, state=%s (no keypress required)",
+                getattr(self.state, "status", None),
+            )
+        return delivered or self._collecting
+
+    def wants_periodic_repaint(self) -> bool:
+        """Return ``True`` while the panel must keep repainting without input.
+
+        The main loop reads this to drive a bounded input timeout so the
+        collecting activity indicator animates on its own (curses input is
+        otherwise blocking). It is panel-local and deterministic: it is only true
+        while a background collection is in flight or the rendered state is the
+        ``COLLECTING`` placeholder.
+        """
+        if self._collecting:
+            return True
+        return self.state is not None and self.state.status is DiagnosticsStatus.COLLECTING
+
+    def _target(self) -> tuple[Optional[str], Optional[str]]:
+        file_path = getattr(self.editor, "filename", None)
+        buffer = getattr(self.editor, "text", None)
+        if isinstance(buffer, list):
+            text: Optional[str] = "\n".join(str(line) for line in buffer)
+        elif isinstance(buffer, str):
+            text = buffer
+        else:
+            text = None
+        return file_path, text
+
+    # -- key handling ------------------------------------------------------ #
+
+    def handle_key(self, key: Any) -> bool:
+        """Handle refresh, selection navigation, and close keys."""
+        if key in (ord("r"), ord("R")):
+            self.refresh(force=True)
+            return True
+        if key in (self.close_key, 27, ord("q")):
+            if getattr(self.editor, "panel_manager", None):
+                self.editor.panel_manager.close_active_panel()
+            else:
+                self.close()
+            return True
+        if key == getattr(curses, "KEY_F12", 276):
+            if hasattr(self.editor, "toggle_focus"):
+                self.editor.toggle_focus()
+            return True
+
+        total = self._list_total()
+        if key in (curses.KEY_UP, ord("k")):
+            self.selected_idx = max(0, self.selected_idx - 1)
+            return True
+        if key in (curses.KEY_DOWN, ord("j")):
+            self.selected_idx = min(max(0, total - 1), self.selected_idx + 1)
+            return True
+        if key == curses.KEY_PPAGE:
+            self.selected_idx = max(0, self.selected_idx - self._page_step())
+            return True
+        if key == curses.KEY_NPAGE:
+            self.selected_idx = min(
+                max(0, total - 1), self.selected_idx + self._page_step()
+            )
+            return True
+        return False
+
+    def _list_total(self) -> int:
+        if self.state is not None and self.state.status is DiagnosticsStatus.OK:
+            return self.state.total
+        return 0
+
+    def _page_step(self) -> int:
+        return max(1, self.height - 8)
+
+    # -- drawing ----------------------------------------------------------- #
+
+    def draw(self) -> None:
+        """Render the diagnostics header, list, and selected-detail area."""
+        if not self.visible or self.win is None:
+            return
+        if self.height < 5 or self.width < 25:
+            return
+        self.win.erase()
+        self._draw_frame(" r refresh · ↑↓ select · F4/Esc close ")
+
+        state = self.state
+        if state is None:
+            self._put(1, "Diagnostics not collected yet.", self.attr_dim)
+        elif state.status is DiagnosticsStatus.COLLECTING:
+            self._draw_collecting(state)
+        elif state.status is DiagnosticsStatus.OK:
+            self._draw_results(state)
+        else:
+            self._draw_empty_state(state)
+        self._refresh_window()
+
+    def _draw_collecting(self, state: DiagnosticsState) -> None:
+        """Render a centered, deterministic, animated activity bar."""
+        self._activity_frame += 1
+        mid = max(1, self.height // 2)
+        bar = self._diagnostics_activity_bar(self.width - 2, self._activity_frame)
+        self._put_center(mid - 1, "Collecting diagnostics...", self.attr_text)
+        self._put_center(mid, bar, self.attr_warning)
+        self._put_center(
+            mid + 1, "working — this does not block the editor", self.attr_dim
+        )
+
+    @classmethod
+    def _diagnostics_activity_bar(cls, width: int, frame: int) -> str:
+        """Return a clean, indeterminate bracketed activity bar for *frame*.
+
+        A fixed ``===`` segment slides horizontally inside ``[ ... ]``. The
+        indicator is **indeterminate**: there is deliberately no percentage, no
+        progress number and no schematic ``||``/``<``/``>`` — collection progress
+        for an external linter is not knowable, so any number would be fake. The
+        segment position changes with ``frame`` so the bar visibly moves on every
+        render tick without user input. Pure text; renders in any terminal and is
+        deterministic in ``frame`` for testing. The track width adapts to *width*
+        between a safe minimum and maximum.
+        """
+        segment = cls._ACTIVITY_SEGMENT
+        overhead = len("[]")  # just the brackets — nothing trailing
+        track = max(
+            cls._ACTIVITY_MIN_TRACK,
+            min(cls._ACTIVITY_MAX_TRACK, width - overhead),
+        )
+        travel = max(1, track - len(segment))
+        pos = frame % (travel + 1)
+        filled = (" " * pos) + segment + (" " * (travel - pos))
+        return f"[{filled}]"
+
+    def _draw_empty_state(self, state: DiagnosticsState) -> None:
+        """Render an actionable explanation for a non-OK state inside the panel."""
+        label = self._STATUS_LABELS.get(state.status, str(state.status))
+        provider = state.provider
+        header = f"{provider}: {label}" if provider else f"Diagnostics — {label}"
+        self._put(1, header, self._state_attr(state.status))
+
+        row = 3
+        row = self._put_wrapped(row, state.detail, self.attr_text)
+        if state.file_path and state.status in (
+            DiagnosticsStatus.OUTSIDE_WORKSPACE,
+            DiagnosticsStatus.UNREADABLE,
+        ):
+            row = self._put(row, self._clip_path(state.file_path), self.attr_dim) + 1
+        row = self._put_wrapped(row, state.hint, self.attr_dim)
+        if state.status in (
+            DiagnosticsStatus.PLANNED,
+            DiagnosticsStatus.UNSUPPORTED,
+            DiagnosticsStatus.PROVIDER_UNAVAILABLE,
+        ):
+            self._put(
+                row,
+                "Diagnostics tools are never auto-installed at runtime.",
+                self.attr_dim,
+            )
+        self._draw_project_quality_footer()
+
+    def _draw_project_quality_footer(self) -> None:
+        """Render planned project-quality (e.g. SonarQube) lines at the bottom."""
+        raw: list[str] = []
+        provider_fn = getattr(self.service, "project_quality_providers", None)
+        if callable(provider_fn):
+            for metadata in provider_fn():
+                raw.extend(getattr(metadata, "summary_lines", ()) or ())
+        if not raw:
+            return
+        lines: list[str] = []
+        for line in raw:
+            lines.extend(self._wrap(line))
+        # Reserve the bottom rows; only render when there is clearly room so the
+        # footer never collides with the state explanation above.
+        top = (self.height - 2) - len(lines)
+        if top < 5:
+            return
+        self._put(top - 1, "─" * max(1, self.width - 2), self.attr_dim)
+        for offset, line in enumerate(lines):
+            self._put(top + offset, line, self.attr_dim)
+
+    def _draw_results(self, state: DiagnosticsState) -> None:
+        """Render the count header, a wrapped list, and the full detail area.
+
+        The list shows each diagnostic as a compact header line followed by its
+        message wrapped onto indented continuation lines (never ellipsis-clipped),
+        and scrolls by visual line. The bottom detail area carries the *complete*
+        information for the selected diagnostic — every field plus the full message
+        and docs URL — all wrapped to the panel width. Nothing is ever written
+        outside the panel bounds.
+        """
+        total = state.total
+        self.selected_idx = max(0, min(self.selected_idx, total - 1))
+
+        provider = state.provider or "linter"
+        counts = (
+            f"{provider}  Σ{total}  E:{state.error_count} W:{state.warning_count} "
+            f"I:{state.info_count} H:{state.hint_count}"
+        )
+        if self._collecting:
+            counts += " (refreshing…)"
+        self._put(1, counts, self.attr_text)
+        position = f"{self.selected_idx + 1}/{total} diagnostics found"
+        if state.external:
+            # The file resolves outside the workspace; it was linted safely via a
+            # current-file (stdin) provider. Flag it so the absolute path shown in
+            # the rows/detail is understood as an external file.
+            position += "  ·  external file"
+        self._put(2, position, self.attr_dim)
+
+        body_top = 4
+        body_bottom = self.height - 2
+        body_height = max(1, body_bottom - body_top + 1)
+
+        # The detail area is sized to hold the complete wrapped detail when it
+        # fits, while always leaving a few rows for the navigable list. A long
+        # message overflowing the detail area is still fully reachable in the list
+        # (which wraps and scrolls), so no information is lost or truncated.
+        detail_lines = self._detail_lines(state.diagnostics[self.selected_idx])
+        min_list = min(body_height, 4)
+        max_detail = max(0, body_height - min_list - 1)  # -1 for the separator row
+        detail_h = min(len(detail_lines), max_detail)
+        list_height = max(1, body_height - (detail_h + 1 if detail_h else 0))
+
+        visual, diag_starts = self._list_visual_lines(state.diagnostics)
+        self._scroll_list_to_selection(diag_starts, len(visual), list_height)
+
+        for offset in range(list_height):
+            vi = self.scroll + offset
+            if vi >= len(visual):
+                break
+            diag_idx, text, is_header = visual[vi]
+            if diag_idx == self.selected_idx:
+                attr = self.attr_selected
+            elif is_header:
+                attr = self._severity_attr(state.diagnostics[diag_idx].severity)
+            else:
+                attr = self.attr_text
+            self._put(body_top + offset, text, attr)
+
+        if detail_h:
+            sep_row = body_top + list_height
+            self._put(sep_row, "─" * max(1, self.width - 2), self.attr_dim)
+            for offset in range(detail_h):
+                if offset >= len(detail_lines):
+                    break
+                line_text, line_attr = detail_lines[offset]
+                self._put(sep_row + 1 + offset, line_text, line_attr)
+
+    def _list_visual_lines(
+        self, diagnostics: tuple[Diagnostic, ...]
+    ) -> tuple[list[tuple[int, str, bool]], list[int]]:
+        """Flatten diagnostics into wrapped visual lines for the list region.
+
+        Returns a ``(visual, starts)`` pair: ``visual`` is a list of
+        ``(diagnostic_index, text, is_header)`` rows where each diagnostic
+        contributes one compact header line plus the wrapped message as indented
+        continuation lines; ``starts`` maps each diagnostic index to the visual
+        line where it begins (used to keep the selection on screen).
+        """
+        visual: list[tuple[int, str, bool]] = []
+        starts: list[int] = []
+        for idx, diag in enumerate(diagnostics):
+            starts.append(len(visual))
+            visual.append((idx, self._row_header(diag), True))
+            for cont in self._wrap_continuation(diag.message):
+                visual.append((idx, cont, False))
+        return visual, starts
+
+    def _scroll_list_to_selection(
+        self, starts: list[int], total_visual: int, list_height: int
+    ) -> None:
+        """Adjust ``self.scroll`` (visual-line based) to keep the selection shown."""
+        if not starts:
+            self.scroll = 0
+            return
+        sel_start = starts[self.selected_idx]
+        if self.selected_idx + 1 < len(starts):
+            sel_end = starts[self.selected_idx + 1] - 1
+        else:
+            sel_end = total_visual - 1
+        if sel_start < self.scroll:
+            self.scroll = sel_start
+        elif sel_end >= self.scroll + list_height:
+            self.scroll = sel_end - list_height + 1
+        self.scroll = max(0, min(self.scroll, max(0, total_visual - list_height)))
+
+    def _detail_lines(self, diag: Diagnostic) -> list[tuple[str, int]]:
+        """Build the complete, wrapped ``(text, attr)`` detail for *diag*.
+
+        Every field is included so the detail area never depends on the row list
+        to carry information. The message and docs URL wrap to the panel width;
+        long file paths wrap with a hanging indent. Nothing is ellipsis-clipped.
+        """
+        lines: list[tuple[str, int]] = []
+        lines.append(
+            (f"Severity: {diag.severity.label}", self._severity_attr(diag.severity))
+        )
+        lines.append((f"Provider: {diag.source}", self.attr_dim))
+        for line in self._wrap_value("File: ", self._display_path(diag.file_path)):
+            lines.append((line, self.attr_dim))
+        column = diag.column if diag.column is not None else "—"
+        lines.append((f"Line: {diag.line}  Column: {column}", self.attr_dim))
+        lines.append((f"Rule: {diag.code or '—'}", self.attr_dim))
+        lines.append(("Message:", self.attr_dim))
+        for line in self._wrap(diag.message) or [""]:
+            lines.append((line, self.attr_text))
+        if diag.docs_url:
+            lines.append(("Docs:", self.attr_dim))
+            for line in self._wrap_url(diag.docs_url):
+                lines.append((line, self.attr_text))
+        return lines
+
+    # -- rendering helpers ------------------------------------------------- #
+
+    def _row_header(self, diag: Diagnostic) -> str:
+        """Return the compact, single-line list header for *diag* (no message)."""
+        loc = f"{self._display_path(diag.file_path)}:{diag.line}"
+        if diag.column is not None:
+            loc += f":{diag.column}"
+        code = f" [{diag.code}]" if diag.code else ""
+        return self._clip(f"{diag.severity.label:<5} {loc}{code}")
+
+    def _wrap_continuation(self, message: Optional[str]) -> list[str]:
+        """Wrap a row message onto indented continuation lines within bounds."""
+        if not message:
+            return []
+        indent = "  "
+        budget = max(1, self.width - 2 - len(indent))
+        wrapped = textwrap.wrap(message, width=budget) or [""]
+        return [indent + line for line in wrapped]
+
+    def _wrap_value(self, label: str, value: str) -> list[str]:
+        """Wrap ``label + value`` keeping continuation lines aligned under value."""
+        budget = max(1, self.width - 4)
+        text = f"{label}{value}"
+        if len(text) <= budget:
+            return [text]
+        indent = " " * len(label)
+        wrapped = textwrap.wrap(value, width=max(1, budget - len(indent))) or [""]
+        out = [f"{label}{wrapped[0]}"]
+        out.extend(indent + chunk for chunk in wrapped[1:])
+        return out
+
+    def _wrap_url(self, url: str) -> list[str]:
+        """Hard-wrap a long URL (no spaces) into indented, in-bounds chunks."""
+        indent = "  "
+        budget = max(1, self.width - 4 - len(indent))
+        chunks = (
+            textwrap.wrap(
+                url,
+                width=budget,
+                break_long_words=True,
+                break_on_hyphens=False,
+            )
+            or [""]
+        )
+        return [indent + chunk for chunk in chunks]
+
+    def _severity_attr(self, severity: DiagnosticSeverity) -> int:
+        if severity is DiagnosticSeverity.ERROR:
+            return self.attr_error
+        if severity is DiagnosticSeverity.WARNING:
+            return self.attr_warning
+        return self.attr_text
+
+    def _state_attr(self, status: DiagnosticsStatus) -> int:
+        if status in (
+            DiagnosticsStatus.PROVIDER_UNAVAILABLE,
+            DiagnosticsStatus.UNREADABLE,
+            DiagnosticsStatus.ERROR,
+        ):
+            return self.attr_error
+        if status in (
+            DiagnosticsStatus.OUTSIDE_WORKSPACE,
+            DiagnosticsStatus.UNSUPPORTED,
+            DiagnosticsStatus.PLANNED,
+            DiagnosticsStatus.DISABLED,
+        ):
+            return self.attr_warning
+        return self.attr_text
+
+    def _display_path(self, path: Optional[str]) -> str:
+        if not path:
+            return "<buffer>"
+        root = getattr(self.service, "workspace_root", None) if self.service else None
+        if root is not None:
+            try:
+                candidate = Path(path)
+                if candidate.is_absolute() and candidate.is_relative_to(root):
+                    return str(candidate.relative_to(root))
+            except (ValueError, OSError):
+                pass
+        return path
+
+    def _wrap(self, text: Optional[str]) -> list[str]:
+        if not text:
+            return []
+        budget = max(1, self.width - 4)
+        return textwrap.wrap(text, width=budget) or [""]
+
+    def _put_wrapped(self, row: int, text: Optional[str], attr: int) -> int:
+        for line in self._wrap(text):
+            row = self._put(row, line, attr) + 1
+        return row
+
+    def _put(self, row: int, text: str, attr: int, col: int = 1) -> int:
+        if row < 1 or row > self.height - 2 or self.win is None:
+            return row
+        budget = max(1, self.width - col - 1)
+        clipped = text if len(text) <= budget else text[: max(1, budget - 1)] + "…"
+        try:
+            self.win.addnstr(row, col, clipped, budget, attr)
+        except curses.error:
+            pass
+        return row
+
+    def _put_center(self, row: int, text: str, attr: int) -> int:
+        col = 1 + max(0, (self.width - 2 - len(text)) // 2)
+        return self._put(row, text, attr, col=col)
+
+    def _clip_path(self, path: str, budget: Optional[int] = None) -> str:
+        limit = budget if budget is not None else max(1, self.width - 4)
+        if len(path) <= limit:
+            return path
+        return "…" + path[-(limit - 1) :]
+
+    def _clip(self, line: str) -> str:
+        budget = max(1, self.width - 2)
+        if len(line) <= budget:
+            return line
+        return line[: max(1, budget - 1)] + "…"
 
 
 # ==================== GitPanel Class ====================

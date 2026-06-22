@@ -646,3 +646,100 @@ Audit conclusion:
   scope remain untouched.
 - The issue #102 rendering gap is constrained to the ECLI-owned adapter layer,
   with focused regression and performance evidence.
+
+## Issue #104 addendum — F4 Diagnostics / Linter panel
+
+Implementation:
+
+- New ECLI-owned, data-only diagnostics layer under
+  `src/ecli/extensions/ecli_integration/diagnostics/`: `model.py`
+  (`Diagnostic`, `DiagnosticSeverity`, `DiagnosticsState` with deterministic
+  severity normalization and sorting by severity → file → line → column →
+  message), `config.py` (`LinterLayerConfig` typed view of `[linter]`),
+  `providers.py` (`DiagnosticsProvider` protocol + `RuffDiagnosticsProvider`),
+  `store.py` (bounded, revision-keyed cache), and `service.py`
+  (`DiagnosticsService` coordinator).
+- F4 now opens/focuses the read-only `DiagnosticsPanel` in
+  `src/ecli/ui/panels.py`, registered with `PanelManager` as `"diagnostics"`
+  and wired through `Ecli.toggle_diagnostics_panel`. The default keybinding was
+  moved from the `lint` action to `toggle_diagnostics_panel` in
+  `src/ecli/ui/KeyBinder.py`; the legacy `run_lint_async`/`show_lint_panel`
+  methods remain available but no longer own F4.
+- The panel renders a severity summary (total/errors/warnings/info/hints) and a
+  sorted `file:line:col [code] message` list with clipped messages. Empty states
+  are explicit (no diagnostics, no active file, linter unavailable, diagnostics
+  disabled).
+
+Safety / security:
+
+- Collection runs on a background daemon thread and is delivered via a one-slot
+  queue picked up by `DiagnosticsPanel.process_queues()`, so the editor render
+  loop is never blocked by linter execution.
+- Ruff is invoked only through a fixed argv (`ruff check --output-format=json
+  --no-cache --stdin-filename <path> -`) with `shell=False` and a bounded
+  timeout; the buffer is fed on stdin. Missing executable, timeout, invalid
+  JSON, and internal errors map to structured states (no raw tracebacks).
+- File paths are validated and constrained to the workspace root; excluded paths
+  (`[linter].exclude`) are not linted. `[linter].auto_install` is parsed but
+  never acted upon — nothing is installed.
+
+Real tests:
+
+- `tests/extensions/test_diagnostics_model.py`,
+  `tests/extensions/test_diagnostics_config.py`,
+  `tests/extensions/test_diagnostics_service.py`,
+  `tests/extensions/test_diagnostics_ruff_provider.py` (including one real
+  end-to-end Ruff run that parses actual Ruff JSON),
+  `tests/extensions/test_diagnostics_no_runtime_execution.py`,
+  `tests/ui/test_diagnostics_panel.py`, and
+  `tests/ui/test_diagnostics_keybinding.py`.
+- `tests/characterization/test_existing_keybindings.py` updated to capture the
+  new F4 → Diagnostics panel binding.
+
+UX refinement (post manual-visual review):
+
+- State model split into explicit, non-conflated statuses: `disabled`,
+  `no_active_file`, `outside_workspace`, `unreadable`, `unsupported` (no provider
+  for the file type), `provider_unavailable` (tool missing), `collecting`,
+  `no_diagnostics`, `ok`, and `error`. Unsupported file types (`.css`, `.tsx`,
+  `.json`, …) now read "No diagnostics provider for `<ext>` files" plus
+  "Available provider: Ruff for Python files." instead of "Linter unavailable".
+- Outside-workspace files report "Current file is outside ECLI workspace." with
+  the (clipped) path; provider is not run; path validation is unchanged.
+- The panel renders a centered, deterministic, panel-local activity marquee
+  while collecting (no animation thread), a count header, list rows with
+  relative/clipped paths and `line:col`/code, and a selected-diagnostic detail
+  area (full message, location, source, rule) — shown even for a single result.
+
+Provider-framework rework (post-review direction):
+
+- The diagnostics layer was reworked into an ECLI-owned **provider-adapter
+  framework** under `src/ecli/extensions/ecli_integration/diagnostics/`:
+  `provider_metadata.py` (metadata + category/execution-mode/status enums),
+  `registry.py` (`ProviderRegistry`, active-vs-planned, project-quality),
+  `command.py` (sole subprocess site: fixed argv, `shell=False`, bounded
+  timeout), `parsers.py` (stdout → diagnostics), and `providers/` (`ruff.py`
+  active adapter + `planned.py` roadmap catalog + SonarQube).
+- ECLI ships **no custom lint rules or engines**. Ruff is the only active
+  provider; ~50 professional tools (mypy, clippy, clangd, JDT LS, PHPStan,
+  Biome/ESLint, ShellCheck, Hadolint, Taplo, yamllint, …) are planned registry
+  metadata. SonarQube is a planned `project_quality` provider that never runs
+  during F4 rendering (no scanner, no network, no token).
+- Conceptually ported from `fnando/vscode-linter` (MIT): the provider registry,
+  per-tool metadata shape, command contract, and stdout→normalized-offense
+  parser idea. No VS Code runtime code is executed and no source was vendored;
+  attribution is in `THIRD_PARTY_NOTICES.md`. The reference's `extension.ts`
+  runtime and `CodeActionProvider.ts` (quick fixes) were deliberately not ported.
+- New tests: `test_diagnostics_registry.py`, `test_diagnostics_states.py`,
+  `test_diagnostics_attribution.py`; updated regression guard for the new layout.
+
+Audit conclusion:
+
+- Imported upstream extension assets remain untouched (changes are confined to
+  `src/ecli/extensions/ecli_integration/`, `src/ecli/ui/`, `src/ecli/core/`,
+  docs, tests, and the root `THIRD_PARTY_NOTICES.md`).
+- F11 PySH Console Panel, F7 AI, TextMate rendering, theme numbering, and
+  VMLab/QEMU/QMP scopes are not changed.
+- The diagnostics framework performs no extension-runtime activation, runs no
+  manifest scripts, runs no project scan during F4 rendering, and installs
+  nothing.

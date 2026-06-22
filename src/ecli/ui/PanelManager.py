@@ -31,6 +31,7 @@ from .panels import (
     AiResponsePanel,
     BasePanel,
     CommandPlanPanel,
+    DiagnosticsPanel,
     FileBrowserPanel,
     ServicesPanel,
     SystemDoctorPanel,
@@ -87,6 +88,7 @@ class PanelManager:
         self.registered_panels: dict[str, type[BasePanel]] = {
             "ai_response": AiResponsePanel,
             "command_plan": CommandPlanPanel,
+            "diagnostics": DiagnosticsPanel,
             "file_browser": FileBrowserPanel,
             "pysh_console": PySHConsolePanel,
             "services_status": ServicesPanel,

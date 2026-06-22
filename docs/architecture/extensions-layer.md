@@ -393,6 +393,88 @@ new matrix entry.
   user `~/.config/ecli/config.toml` and flips a transitional
   `syntax_engine = "legacy"` to `"extension"`, so upgraded users actually get
   TextMate rendering instead of being pinned to a stale legacy config.
+- **Status (#104):** ECLI now has a deterministic, **data-only** diagnostics
+  **provider-adapter framework** under
+  `src/ecli/extensions/ecli_integration/diagnostics/`, surfaced as the **F4
+  Diagnostics / Linter panel**. **ECLI does not implement custom linters or lint
+  rules.** It integrates existing professional diagnostics tools (Ruff, mypy,
+  clippy, ShellCheck, SonarQube, …) through safe, ECLI-owned **provider
+  adapters**. The provider-framework concept is inspired by mature multi-linter
+  extension designs such as **`fnando/vscode-linter`** (MIT) — ECLI re-implements
+  the concept in Python and **does not execute VS Code runtime code** (see
+  `THIRD_PARTY_NOTICES.md`).
+  - **Modules.** `model.py` (provider-neutral `Diagnostic`/`DiagnosticSeverity`/
+    `DiagnosticsState`, deterministic sorting), `provider_metadata.py`
+    (`ProviderMetadata` plus category/execution-mode/status enums and the
+    `DiagnosticsProvider` protocol), `registry.py` (`ProviderRegistry`:
+    active-vs-planned lookups by language/extension, project-quality providers),
+    `command.py` (the only `subprocess` site: fixed argv, `shell=False`, bounded
+    timeout), `parsers.py` (stdout → normalized diagnostics, e.g. Ruff JSON),
+    `providers/ruff.py` (the active Ruff adapter), `providers/planned.py` (the
+    planned-provider catalog + the SonarQube project-quality provider),
+    `config.py` (`LinterLayerConfig` over the `[linter]` table), `store.py`
+    (bounded, revision-keyed cache), and `service.py` (`DiagnosticsService`
+    coordinator).
+  - **Active vs planned.** **Ruff is the first and only active provider**
+    (Python, `.py`/`.pyi`), run through a fixed argv reading the buffer from
+    stdin. Every other tool — mypy, pylint, rust-analyzer/cargo check/clippy,
+    clangd/clang-tidy/cppcheck, nasm/yasm/GNU as, JDT LS/Checkstyle/PMD/SpotBugs,
+    PHPStan/Psalm/PHP_CodeSniffer, Biome/ESLint, Stylelint, Taplo, yamllint,
+    Hadolint, ShellCheck, and more — is **roadmap metadata** in the provider
+    registry, not an executing engine.
+  - **SonarQube** is a **project-quality** provider (`category=project_quality`,
+    `status=planned`). It does **not** run during F4 rendering: no scanner, no
+    network, no token, no server URL. Its future mode is a cached/manual project
+    scan validated by System Doctor, not per-render linting.
+  - **F4 behavior.** F4 opens or focuses the read-only `DiagnosticsPanel`
+    (`src/ecli/ui/panels.py`), registered with the `PanelManager` as
+    `"diagnostics"` and wired through `Ecli.toggle_diagnostics_panel`. The panel
+    shows a count header (provider, total, E/W/I/H), a deterministically-sorted
+    list of `severity path:line:col [code] message` rows (relative path inside
+    the workspace, left-clipped absolute path otherwise), and a detail area for
+    the selected diagnostic (full message, location, source, rule). `↑/↓` and
+    `PgUp/PgDn` move the selection.
+  - **Explicit, separated states.** Each condition has its own message and is
+    never conflated: diagnostics disabled, no active file, file outside workspace
+    (`"Current file is outside ECLI workspace."` with the path), file unreadable,
+    **planned provider** (a known language whose providers are roadmap targets —
+    e.g. `"No active bundled diagnostics provider for Java in this build."` +
+    `"Planned providers: JDT LS, Checkstyle, PMD, SpotBugs, Maven/Gradle
+    diagnostics."`), **provider unavailable** (an active provider's tool is
+    missing, e.g. `"Ruff provider is registered for Python but the Ruff
+    executable is not available."`), unsupported file type (no provider known at
+    all), collecting, clean/no diagnostics, diagnostics found, project-quality
+    planned, and provider timeout/error. A known non-Python language is reported
+    as *planned* with its roadmap tools, never as a generic "Linter unavailable".
+  - **Activity indicator.** While a background collection is in flight the panel
+    renders a centered, deterministic, panel-local activity bar — a ``===``
+    segment sliding inside ``[ … ]`` with a cycling percentage
+    (``_diagnostics_activity_bar``), advanced per render frame and width-adaptive
+    — no animation thread and no blocked render loop.
+  - **Non-blocking.** Collection runs on a background daemon thread; the result
+    is delivered through a one-slot queue and picked up by the panel's
+    `process_queues()` on the main-loop tick (which also keeps redrawing while
+    collecting so the indicator animates), so the editor render loop is never
+    blocked by linter execution. Results are cached until the buffer/file
+    changes or the user presses `r` to refresh.
+  - **No runtime, no auto-install.** It reads buffer text and invokes only the
+    linter executable through a fixed argv (no shell, no extension manifest
+    scripts, no `activationEvents`, no Node/TypeScript or Copilot runtime). Ruff
+    runs on Python files only (`.py`, `.pyi`); when Ruff is not installed the
+    panel reports a structured *provider unavailable* state. Diagnostics tools are
+    **never auto-installed at runtime**: `[linter].auto_install` is parsed but
+    **never acted upon**, and a future **System Doctor / installer layer** is the
+    intended place to validate and repair missing provider toolchains.
+  - Covered by `tests/extensions/test_diagnostics_model.py`,
+    `tests/extensions/test_diagnostics_registry.py`,
+    `tests/extensions/test_diagnostics_states.py`,
+    `tests/extensions/test_diagnostics_ruff_provider.py`,
+    `tests/extensions/test_diagnostics_config.py`,
+    `tests/extensions/test_diagnostics_service.py`,
+    `tests/extensions/test_diagnostics_no_runtime_execution.py`,
+    `tests/extensions/test_diagnostics_attribution.py`,
+    `tests/ui/test_diagnostics_panel.py`, and
+    `tests/ui/test_diagnostics_keybinding.py`.
 
 ## Sequencing
 

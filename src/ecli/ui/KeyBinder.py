@@ -155,11 +155,32 @@ class KeyBinder:
         # Bracketed-paste payload captured by get_key_input (read by the editor).
         self.last_paste: str = ""
 
+        # Editor-chosen input cadence (curses read timeout, in ms). The main loop
+        # sets this every iteration via Ecli._sync_input_cadence: -1 = blocking
+        # idle, PANEL_TICK_MS = animate a collecting panel. All of get_key_input's
+        # temporary read modes restore to THIS value instead of a hardcoded
+        # blocking/35ms, so reading a key never clobbers the periodic repaint
+        # timeout while a panel (e.g. F4 Diagnostics) is collecting.
+        self.active_input_timeout: int = -1
+
     # Sentinel returned by get_key_input when a bracketed paste was captured.
     PASTE_EVENT = "\x00ecli-bracketed-paste\x00"
     # Bracketed-paste markers (xterm): ESC [ 200 ~  ...  ESC [ 201 ~
     _PASTE_START = "[200~"
     _PASTE_END = b"\x1b[201~"
+
+    def _restore_input_timeout(self, target: Any) -> None:
+        """Restore the editor-chosen input cadence after a temporary read mode.
+
+        Used by every ``finally`` that previously hardcoded ``nodelay(False)`` or
+        ``timeout(35)``. Restoring to :attr:`active_input_timeout` means a key
+        read never resets the screen to blocking mode while a panel wants periodic
+        repaint (the F4 Diagnostics tick).
+        """
+        try:
+            target.timeout(self.active_input_timeout)
+        except curses.error:
+            pass
 
     def _read_bracketed_paste(self, target: Any, initial: str) -> str:
         """Read a full bracketed-paste payload as one UTF-8 decoded string.
@@ -187,9 +208,9 @@ class KeyBinder:
                     data.append(ch)
                 # Wide/function-key codes inside a paste are ignored.
         finally:
-            # Restore the main-loop input cadence.
-            target.nodelay(True)
-            target.timeout(35)
+            # Restore the editor-chosen main-loop input cadence (never a hardcoded
+            # blocking/35ms that would freeze a collecting panel's animation).
+            self._restore_input_timeout(target)
 
         payload = bytes(data).split(self._PASTE_END, 1)[0]
         return payload.decode("utf-8", "replace")
@@ -221,7 +242,7 @@ class KeyBinder:
                     pushed_back = nx
                     break
         finally:
-            target.nodelay(False)
+            self._restore_input_timeout(target)
 
         if pushed_back is not None:
             try:
@@ -273,8 +294,7 @@ class KeyBinder:
                     pass
                 break
         finally:
-            target.nodelay(True)
-            target.timeout(35)
+            self._restore_input_timeout(target)
 
     def _handle_printable_character(self, key: str | int) -> bool:
         """Handles insertion of a printable character into the buffer."""
@@ -441,7 +461,8 @@ class KeyBinder:
             "cancel_operation": ["esc", 27],
             "tab": ["tab", 9],
             "shift_tab": ["shift+tab", 353],
-            "lint": ["f4", 268],
+            # F4 opens or focuses the ECLI-owned Diagnostics / Linter Panel (#104).
+            "toggle_diagnostics_panel": ["f4", 268],
             "toggle_comment_block": ["ctrl+\\", 28],
             "handle_home": ["home", curses.KEY_HOME, 262],
             "handle_end": ["end", getattr(curses, "KEY_END", curses.KEY_LL), 360],
@@ -855,6 +876,7 @@ class KeyBinder:
             "toggle_terminal_panel": self.editor.toggle_terminal_panel,
             "toggle_focus": self.editor.toggle_focus,
             "toggle_system_doctor_panel": self.editor.toggle_system_doctor_panel,
+            "toggle_diagnostics_panel": self.editor.toggle_diagnostics_panel,
             # --- Git ---
             "git_menu": self.editor.show_git_panel,
             # --- AI ---
@@ -971,7 +993,10 @@ class KeyBinder:
                         # Rare extended code; keep as a marker – will be stripped by regex below.
                         seq += f"<{nx}>"
             finally:
-                target.nodelay(False)
+                # Restore the editor-chosen cadence (not a hardcoded blocking
+                # read) so reading an ESC/arrow key never freezes a collecting
+                # panel's autonomous animation.
+                self._restore_input_timeout(target)
 
             # Lone ESC
             if not seq:

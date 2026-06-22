@@ -184,6 +184,9 @@ class FakeEditor:
     def toggle_system_doctor_panel(self) -> bool:
         return self._record("toggle_system_doctor_panel")
 
+    def toggle_diagnostics_panel(self) -> bool:
+        return self._record("toggle_diagnostics_panel")
+
     def run_lint_async(self) -> bool:
         return self._record("run_lint_async")
 
@@ -214,7 +217,7 @@ def test_default_keybinding_definitions_preserve_known_help_and_panel_bindings()
     assert curses.KEY_F7 in binder.keybindings["toggle_widget_panel"]
     assert curses.KEY_F10 in binder.keybindings["toggle_file_browser"]
     assert curses.KEY_F9 in binder.keybindings["git_menu"]
-    assert curses.KEY_F4 in binder.keybindings["lint"]
+    assert curses.KEY_F4 in binder.keybindings["toggle_diagnostics_panel"]
     assert curses.KEY_F8 in binder.keybindings["toggle_system_doctor_panel"]
 
 
@@ -231,7 +234,8 @@ def test_action_map_keeps_existing_help_ai_file_manager_and_git_entrypoints() ->
 def test_current_f4_behavior_remains_diagnostics_not_git_panel() -> None:
     binder = make_keybinder()
 
-    assert method_name_for_key(binder, curses.KEY_F4) == "run_lint_async"
+    # #104: F4 now opens/focuses the ECLI-owned Diagnostics / Linter panel.
+    assert method_name_for_key(binder, curses.KEY_F4) == "toggle_diagnostics_panel"
     assert method_name_for_key(binder, curses.KEY_F4) != "show_git_panel"
 
 

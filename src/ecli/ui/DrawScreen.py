@@ -642,23 +642,19 @@ class DrawScreen:
         self._next_lint_panel_hide_ts = time.time() + hold_ms / 1000.0
 
     def _maybe_hide_lint_panel(self) -> None:
-        """Deactivate the lint panel once the hold timer expires.
+        """Force the retired legacy lint overlay inactive every frame (#104).
 
-        Should be invoked once per draw frame (e.g. near the end of
-        :pymeth:`DrawScreen.draw`).  If the current time is past the moment
-        stored in ``self._next_lint_panel_hide_ts``, the helper clears
-        ``self.editor.lint_panel_active`` so the panel will no longer be painted.
-
-        This keeps the panel visible for at least the duration requested via
-        :pymeth:`_keep_lint_panel_alive` and automatically hides it afterwards.
+        The centered "Diagnostics" overlay is retired in favour of the right-side
+        F4 ``DiagnosticsPanel`` (see :pymeth:`_draw_lint_panel`). This helper now
+        unconditionally clears ``self.editor.lint_panel_active`` so that any
+        background lint path that flips the flag cannot leave a stale overlay
+        state or let ``Esc`` be swallowed by an invisible panel. The old hold
+        timer is intentionally ignored.
 
         Side Effects:
-            May set ``self.editor.lint_panel_active = False`` when the timer
-            elapses.  Does nothing if the panel was already inactive or if the
-            timer has not yet expired.
+            Sets ``self.editor.lint_panel_active = False``.
         """
-        if getattr(self, "_next_lint_panel_hide_ts", 0) < time.time():
-            self.editor.lint_panel_active = False
+        self.editor.lint_panel_active = False
 
     def _show_small_window_error(self, height: int, width: int) -> None:
         """Displays a message that the window is too small."""
@@ -739,64 +735,17 @@ class DrawScreen:
                     )
 
     def _draw_lint_panel(self) -> None:
-        """Draws a popup panel with the linter's results."""
-        if not getattr(self.editor, "lint_panel_active", False):
-            return
-        msg = self.editor.lint_panel_message
-        if not msg:
-            return
-        h, w = self.stdscr.getmaxyx()
-        panel_height = min(max(6, msg.count("\n") + 4), h - 2)
-        panel_width = min(
-            max(40, max(len(line) for line in msg.splitlines()) + 4), w - 4
-        )
-        start_y = max(1, (h - panel_height) // 2)
-        start_x = max(2, (w - panel_width) // 2)
+        """Retired: the legacy centered Diagnostics popup is disabled (#104).
 
-        # Themed, opaque panel: solid surface + title embedded in the border.
-        border = self.colors.get("ui_panel_border", curses.A_BOLD)
-        fill = self.colors.get("ui_panel", curses.A_NORMAL)
-        dim = self.colors.get("ui_panel_dim", curses.A_DIM)
-        title = " Diagnostics "
-        inner = panel_width - 2
-        try:
-            for i in range(panel_height):
-                if i == 0:
-                    label = title[: max(0, inner - 2)]
-                    rest = inner - len(label) - 1
-                    line = "┌─" + label + "─" * max(0, rest) + "┐"
-                elif i == panel_height - 1:
-                    line = "└" + "─" * inner + "┘"
-                else:
-                    line = "│" + " " * inner + "│"
-                self.stdscr.addnstr(start_y + i, start_x, line, panel_width, border)
-                # Repaint the hollow interior with the solid panel surface.
-                if 0 < i < panel_height - 1:
-                    self.stdscr.addnstr(
-                        start_y + i, start_x + 1, " " * inner, inner, fill
-                    )
-
-            # Message split into lines (on the solid surface).
-            msg_lines = msg.splitlines()
-            for idx, line in enumerate(msg_lines[: panel_height - 3]):
-                self.stdscr.addnstr(
-                    start_y + idx + 1,
-                    start_x + 2,
-                    line.strip(),
-                    panel_width - 4,
-                    fill,
-                )
-            # Footer
-            footer = "Esc: close"
-            self.stdscr.addnstr(
-                start_y + panel_height - 2,
-                start_x + 2,
-                footer,
-                panel_width - 4,
-                dim,
-            )
-        except curses.error as e:
-            logging.error(f"Curses error drawing linter panel: {e}")
+        Diagnostics now live entirely in the right-side F4 ``DiagnosticsPanel``.
+        The old flake8/LSP overlay drew a centered window titled "Diagnostics"
+        over the editor; rendering it here would produce a second, competing
+        diagnostics surface. To guarantee there is never a centered overlay for
+        F4 diagnostics this method draws nothing. The companion
+        :pymeth:`_maybe_hide_lint_panel` clears the stale legacy active flag every
+        frame. The legacy ``lint_panel_message`` plumbing is left intact for
+        compatibility but is no longer painted.
+        """
 
     def _draw_search_highlights(self) -> None:
         """Applies visual highlighting to all search matches found in the visible text area.
