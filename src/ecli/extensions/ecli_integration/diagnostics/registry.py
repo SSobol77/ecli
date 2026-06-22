@@ -28,18 +28,13 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
+from functools import lru_cache
+from importlib import import_module
 from pathlib import PurePath
 from typing import Any, cast
 
 from .provider_metadata import DiagnosticsProvider, ProviderMetadata
-from .providers import (
-    FILENAME_LANGUAGE,
-    LANGUAGE_LABELS,
-    PLANNED_NOTE_OVERRIDES,
-    PLANNED_PROVIDERS,
-    SONARQUBE_PROVIDER,
-    RuffDiagnosticsProvider,
-)
+from .providers.ruff import RuffDiagnosticsProvider
 
 
 __all__ = [
@@ -70,6 +65,7 @@ class ProviderRegistrySources:
     labels: Mapping[str, str] | None = None
     filename_language: Mapping[str, str] | None = None
     note_overrides: Mapping[str, str] | None = None
+    load_default_catalog: bool = False
 
 
 class ProviderRegistry:
@@ -82,9 +78,7 @@ class ProviderRegistry:
         **legacy_sources: Any,
     ) -> None:
         """Create a registry from active providers and planned metadata."""
-        resolved_sources = self._resolve_sources(
-            sources, legacy_args, legacy_sources
-        )
+        resolved_sources = self._resolve_sources(sources, legacy_args, legacy_sources)
         self._active: tuple[DiagnosticsProvider, ...] = tuple(
             resolved_sources.active_providers
         )
@@ -100,6 +94,8 @@ class ProviderRegistry:
             for name, lang in (resolved_sources.filename_language or {}).items()
         }
         self._note_overrides = dict(resolved_sources.note_overrides or {})
+        self._load_default_catalog = resolved_sources.load_default_catalog
+        self._default_catalog_loaded = not self._load_default_catalog
 
         self._active_metadata: tuple[ProviderMetadata, ...] = tuple(
             md
@@ -165,6 +161,36 @@ class ProviderRegistry:
             raise TypeError(f"unexpected ProviderRegistry source argument(s): {joined}")
         return replace(resolved, **legacy_sources)
 
+    def _ensure_default_catalog(self) -> None:
+        if self._default_catalog_loaded:
+            return
+
+        planned = import_module(
+            "ecli.extensions.ecli_integration.diagnostics.providers.planned"
+        )
+
+        if not self._planned:
+            self._planned = planned.PLANNED_PROVIDERS
+        if not self._project_quality:
+            self._project_quality = (planned.SONARQUBE_PROVIDER,)
+
+        labels = dict(planned.LANGUAGE_LABELS)
+        labels.update(self._labels)
+        self._labels = labels
+
+        filename_language = {
+            name.lower(): lang for name, lang in planned.FILENAME_LANGUAGE.items()
+        }
+        filename_language.update(self._filename_language)
+        self._filename_language = filename_language
+
+        note_overrides = dict(planned.PLANNED_NOTE_OVERRIDES)
+        note_overrides.update(self._note_overrides)
+        self._note_overrides = note_overrides
+
+        self._extension_language = self._build_extension_index()
+        self._default_catalog_loaded = True
+
     def _build_extension_index(self) -> dict[str, str]:
         index: dict[str, str] = {}
         for metadata in (*self._active_metadata, *self._planned):
@@ -179,6 +205,7 @@ class ProviderRegistry:
 
     def language_for(self, file_path: str) -> str | None:
         """Resolve *file_path* to a language id (filename first, then suffix)."""
+        self._ensure_default_catalog()
         if not file_path:
             return None
         pure = PurePath(file_path)
@@ -189,6 +216,7 @@ class ProviderRegistry:
 
     def language_label(self, language_id: str) -> str:
         """Return a human-readable label for *language_id*."""
+        self._ensure_default_catalog()
         return self._labels.get(language_id, language_id)
 
     # -- active providers -------------------------------------------------- #
@@ -224,10 +252,12 @@ class ProviderRegistry:
 
     def planned_for_language(self, language_id: str) -> tuple[ProviderMetadata, ...]:
         """Return planned provider metadata for *language_id* (catalog order)."""
+        self._ensure_default_catalog()
         return tuple(md for md in self._planned if language_id in md.language_ids)
 
     def planned_for_extension(self, extension: str) -> tuple[ProviderMetadata, ...]:
         """Return planned provider metadata for *extension* (catalog order)."""
+        self._ensure_default_catalog()
         ext = extension.lower()
         return tuple(md for md in self._planned if ext in md.extensions)
 
@@ -256,23 +286,25 @@ class ProviderRegistry:
 
     def project_quality_providers(self) -> tuple[ProviderMetadata, ...]:
         """Return planned project-quality providers (e.g. SonarQube)."""
+        self._ensure_default_catalog()
         return self._project_quality
 
     # -- introspection ----------------------------------------------------- #
 
     def find(self, provider_id: str) -> ProviderMetadata | None:
         """Return any provider metadata by id (active, planned, or quality)."""
-        for metadata in (
-            *self._active_metadata,
-            *self._planned,
-            *self._project_quality,
-        ):
+        for metadata in self._active_metadata:
+            if metadata.id == provider_id:
+                return metadata
+        self._ensure_default_catalog()
+        for metadata in (*self._planned, *self._project_quality):
             if metadata.id == provider_id:
                 return metadata
         return None
 
     def all_metadata(self) -> tuple[ProviderMetadata, ...]:
         """Return every known provider metadata."""
+        self._ensure_default_catalog()
         return (*self._active_metadata, *self._planned, *self._project_quality)
 
 
@@ -283,15 +315,12 @@ def _unique_labels(metadata: Sequence[ProviderMetadata]) -> list[str]:
     return list(seen.keys())
 
 
+@lru_cache(maxsize=1)
 def build_default_registry() -> ProviderRegistry:
     """Build the registry shipped with ECLI: active Ruff + planned catalog."""
     return ProviderRegistry(
         ProviderRegistrySources(
             active_providers=(RuffDiagnosticsProvider(),),
-            planned_metadata=PLANNED_PROVIDERS,
-            project_quality=(SONARQUBE_PROVIDER,),
-            labels=LANGUAGE_LABELS,
-            filename_language=FILENAME_LANGUAGE,
-            note_overrides=PLANNED_NOTE_OVERRIDES,
+            load_default_catalog=True,
         )
     )

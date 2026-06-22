@@ -40,6 +40,9 @@ runs no project scan (SonarQube) during F4 rendering.
 
 from __future__ import annotations
 
+from importlib import import_module
+from typing import Any
+
 from .command import (
     DEFAULT_TIMEOUT_SECONDS,
     CommandResult,
@@ -63,16 +66,13 @@ from .provider_metadata import (
     ProviderResult,
     ProviderStatus,
 )
-from .providers import (
-    PLANNED_PROVIDERS,
-    RUFF_METADATA,
-    SONARQUBE_PROVIDER,
-    RuffDiagnosticsProvider,
-)
+from .providers.ruff import RUFF_METADATA, RuffDiagnosticsProvider
 from .registry import PlannedSummary, ProviderRegistry, build_default_registry
 from .service import DiagnosticsService
 from .store import DiagnosticsStore
 
+
+_PLANNED_EXPORTS = frozenset({"PLANNED_PROVIDERS", "SONARQUBE_PROVIDER"})
 
 __all__ = [
     "DEFAULT_TIMEOUT_SECONDS",
@@ -104,3 +104,14 @@ __all__ = [
     "short_detail",
     "sort_diagnostics",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Load planned diagnostics catalog exports lazily."""
+    if name not in _PLANNED_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    planned = import_module(f"{__name__}.providers.planned")
+    value = getattr(planned, name)
+    globals()[name] = value
+    return value

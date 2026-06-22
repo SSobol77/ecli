@@ -20,15 +20,21 @@ this build; everything else is planned metadata in :mod:`.planned`.
 
 from __future__ import annotations
 
-from .planned import (
-    FILENAME_LANGUAGE,
-    LANGUAGE_LABELS,
-    PLANNED_NOTE_OVERRIDES,
-    PLANNED_PROVIDERS,
-    SONARQUBE_PROVIDER,
-)
+from importlib import import_module
+from typing import Any
+
 from .ruff import RUFF_METADATA, RuffDiagnosticsProvider
 
+
+_PLANNED_EXPORTS = frozenset(
+    {
+        "FILENAME_LANGUAGE",
+        "LANGUAGE_LABELS",
+        "PLANNED_NOTE_OVERRIDES",
+        "PLANNED_PROVIDERS",
+        "SONARQUBE_PROVIDER",
+    }
+)
 
 __all__ = [
     "FILENAME_LANGUAGE",
@@ -39,3 +45,14 @@ __all__ = [
     "SONARQUBE_PROVIDER",
     "RuffDiagnosticsProvider",
 ]
+
+
+def __getattr__(name: str) -> Any:
+    """Load planned-provider metadata only when callers ask for it."""
+    if name not in _PLANNED_EXPORTS:
+        raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+    planned = import_module(f"{__name__}.planned")
+    value = getattr(planned, name)
+    globals()[name] = value
+    return value
