@@ -355,9 +355,7 @@ class DiagnosticsState:
     ) -> DiagnosticsState:
         """Build an ``OK``/``NO_DIAGNOSTICS`` state from collected diagnostics."""
         ordered = sort_diagnostics(diagnostics)
-        status = (
-            DiagnosticsStatus.OK if ordered else DiagnosticsStatus.NO_DIAGNOSTICS
-        )
+        status = DiagnosticsStatus.OK if ordered else DiagnosticsStatus.NO_DIAGNOSTICS
         return cls(
             status=status,
             provider=provider,

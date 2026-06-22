@@ -159,7 +159,9 @@ def _read_exclude(
         else:
             diagnostics.append(
                 RegistryDiagnostic(
-                    "warning", source, f"exclude entries must be strings; ignored: {item!r}"
+                    "warning",
+                    source,
+                    f"exclude entries must be strings; ignored: {item!r}",
                 )
             )
     return tuple(patterns)

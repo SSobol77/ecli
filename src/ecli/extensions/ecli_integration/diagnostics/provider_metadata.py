@@ -126,10 +126,14 @@ class ProviderMetadata:
     @property
     def is_active(self) -> bool:
         """Return ``True`` for providers that can execute in this build."""
-        return self.status in (
-            ProviderStatus.BUNDLED,
-            ProviderStatus.SUPPORTED_EXTERNAL,
-        ) and self.runnable_in_build
+        return (
+            self.status
+            in (
+                ProviderStatus.BUNDLED,
+                ProviderStatus.SUPPORTED_EXTERNAL,
+            )
+            and self.runnable_in_build
+        )
 
     @property
     def is_planned(self) -> bool:

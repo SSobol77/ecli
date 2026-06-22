@@ -178,8 +178,7 @@ class DiagnosticsService:
     ) -> DiagnosticsServiceDeps:
         if deps is not None and not isinstance(deps, DiagnosticsServiceDeps):
             raise TypeError(
-                "DiagnosticsService positional argument must be "
-                "DiagnosticsServiceDeps"
+                "DiagnosticsService positional argument must be DiagnosticsServiceDeps"
             )
         resolved = deps or DiagnosticsServiceDeps()
         if not legacy_deps:
