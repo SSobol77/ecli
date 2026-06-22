@@ -455,4 +455,5 @@ def _fmt(r: Report, applied: bool, root: Path) -> str:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main() )
+
