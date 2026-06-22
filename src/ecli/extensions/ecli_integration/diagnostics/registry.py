@@ -26,9 +26,10 @@ Code runtime code.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from pathlib import PurePath
+from typing import Any, cast
 
 from .provider_metadata import DiagnosticsProvider, ProviderMetadata
 from .providers import (
@@ -41,7 +42,12 @@ from .providers import (
 )
 
 
-__all__ = ["PlannedSummary", "ProviderRegistry", "build_default_registry"]
+__all__ = [
+    "PlannedSummary",
+    "ProviderRegistry",
+    "ProviderRegistrySources",
+    "build_default_registry",
+]
 
 
 @dataclass(frozen=True)
@@ -54,27 +60,46 @@ class PlannedSummary:
     hint: str
 
 
+@dataclass(frozen=True)
+class ProviderRegistrySources:
+    """Constructor dependency group for :class:`ProviderRegistry`."""
+
+    active_providers: Sequence[DiagnosticsProvider] = ()
+    planned_metadata: Sequence[ProviderMetadata] = ()
+    project_quality: Sequence[ProviderMetadata] = ()
+    labels: Mapping[str, str] | None = None
+    filename_language: Mapping[str, str] | None = None
+    note_overrides: Mapping[str, str] | None = None
+
+
 class ProviderRegistry:
     """Registry of active executing adapters plus planned provider metadata."""
 
     def __init__(
         self,
-        active_providers: Sequence[DiagnosticsProvider] = (),
-        planned_metadata: Sequence[ProviderMetadata] = (),
-        project_quality: Sequence[ProviderMetadata] = (),
-        labels: dict[str, str] | None = None,
-        filename_language: dict[str, str] | None = None,
-        note_overrides: dict[str, str] | None = None,
+        sources: ProviderRegistrySources | Sequence[DiagnosticsProvider] | None = None,
+        *legacy_args: Any,
+        **legacy_sources: Any,
     ) -> None:
         """Create a registry from active providers and planned metadata."""
-        self._active: tuple[DiagnosticsProvider, ...] = tuple(active_providers)
-        self._planned: tuple[ProviderMetadata, ...] = tuple(planned_metadata)
-        self._project_quality: tuple[ProviderMetadata, ...] = tuple(project_quality)
-        self._labels = dict(labels or {})
+        resolved_sources = self._resolve_sources(
+            sources, legacy_args, legacy_sources
+        )
+        self._active: tuple[DiagnosticsProvider, ...] = tuple(
+            resolved_sources.active_providers
+        )
+        self._planned: tuple[ProviderMetadata, ...] = tuple(
+            resolved_sources.planned_metadata
+        )
+        self._project_quality: tuple[ProviderMetadata, ...] = tuple(
+            resolved_sources.project_quality
+        )
+        self._labels = dict(resolved_sources.labels or {})
         self._filename_language = {
-            name.lower(): lang for name, lang in (filename_language or {}).items()
+            name.lower(): lang
+            for name, lang in (resolved_sources.filename_language or {}).items()
         }
-        self._note_overrides = dict(note_overrides or {})
+        self._note_overrides = dict(resolved_sources.note_overrides or {})
 
         self._active_metadata: tuple[ProviderMetadata, ...] = tuple(
             md
@@ -84,6 +109,61 @@ class ProviderRegistry:
         self._extension_language = self._build_extension_index()
 
     # -- construction helpers --------------------------------------------- #
+
+    @staticmethod
+    def _resolve_sources(
+        sources: ProviderRegistrySources | Sequence[DiagnosticsProvider] | None,
+        legacy_args: tuple[Any, ...],
+        legacy_sources: dict[str, Any],
+    ) -> ProviderRegistrySources:
+        if isinstance(sources, ProviderRegistrySources):
+            if legacy_args:
+                raise TypeError(
+                    "ProviderRegistrySources cannot be combined with "
+                    "legacy positional arguments"
+                )
+            resolved = sources
+        else:
+            field_names = tuple(ProviderRegistrySources.__dataclass_fields__)
+            if len(legacy_args) >= len(field_names):
+                raise TypeError("too many positional ProviderRegistry arguments")
+            active_providers = sources or ()
+            planned_metadata = cast(
+                Sequence[ProviderMetadata],
+                legacy_args[0] if len(legacy_args) > 0 else (),
+            )
+            project_quality = cast(
+                Sequence[ProviderMetadata],
+                legacy_args[1] if len(legacy_args) > 1 else (),
+            )
+            labels = cast(
+                Mapping[str, str] | None,
+                legacy_args[2] if len(legacy_args) > 2 else None,
+            )
+            filename_language = cast(
+                Mapping[str, str] | None,
+                legacy_args[3] if len(legacy_args) > 3 else None,
+            )
+            note_overrides = cast(
+                Mapping[str, str] | None,
+                legacy_args[4] if len(legacy_args) > 4 else None,
+            )
+            resolved = ProviderRegistrySources(
+                active_providers=active_providers,
+                planned_metadata=planned_metadata,
+                project_quality=project_quality,
+                labels=labels,
+                filename_language=filename_language,
+                note_overrides=note_overrides,
+            )
+        if not legacy_sources:
+            return resolved
+        valid_fields = set(ProviderRegistrySources.__dataclass_fields__)
+        unknown = sorted(set(legacy_sources) - valid_fields)
+        if unknown:
+            joined = ", ".join(unknown)
+            raise TypeError(f"unexpected ProviderRegistry source argument(s): {joined}")
+        return replace(resolved, **legacy_sources)
 
     def _build_extension_index(self) -> dict[str, str]:
         index: dict[str, str] = {}
@@ -206,10 +286,12 @@ def _unique_labels(metadata: Sequence[ProviderMetadata]) -> list[str]:
 def build_default_registry() -> ProviderRegistry:
     """Build the registry shipped with ECLI: active Ruff + planned catalog."""
     return ProviderRegistry(
-        active_providers=(RuffDiagnosticsProvider(),),
-        planned_metadata=PLANNED_PROVIDERS,
-        project_quality=(SONARQUBE_PROVIDER,),
-        labels=LANGUAGE_LABELS,
-        filename_language=FILENAME_LANGUAGE,
-        note_overrides=PLANNED_NOTE_OVERRIDES,
+        ProviderRegistrySources(
+            active_providers=(RuffDiagnosticsProvider(),),
+            planned_metadata=PLANNED_PROVIDERS,
+            project_quality=(SONARQUBE_PROVIDER,),
+            labels=LANGUAGE_LABELS,
+            filename_language=FILENAME_LANGUAGE,
+            note_overrides=PLANNED_NOTE_OVERRIDES,
+        )
     )

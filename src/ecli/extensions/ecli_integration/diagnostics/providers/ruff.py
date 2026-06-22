@@ -26,7 +26,12 @@ import shutil
 import subprocess
 from pathlib import PurePath
 
-from ..command import DEFAULT_TIMEOUT_SECONDS, CommandResult, CommandRunner, default_runner
+from ..command import (
+    DEFAULT_TIMEOUT_SECONDS,
+    CommandResult,
+    CommandRunner,
+    default_runner,
+)
 from ..parsers import ParseError, parse_ruff_json, short_detail
 from ..provider_metadata import (
     ProviderCategory,

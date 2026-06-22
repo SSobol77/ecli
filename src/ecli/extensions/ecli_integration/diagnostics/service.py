@@ -35,7 +35,9 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 from .config import LinterLayerConfig
 from .model import DiagnosticsState
@@ -49,7 +51,19 @@ from .registry import ProviderRegistry, build_default_registry
 from .store import DiagnosticsStore
 
 
-__all__ = ["DiagnosticsService"]
+__all__ = ["DiagnosticsService", "DiagnosticsServiceDeps"]
+
+
+@dataclass(frozen=True)
+class DiagnosticsServiceDeps:
+    """Constructor dependency group for :class:`DiagnosticsService`."""
+
+    config: Mapping[str, object] | LinterLayerConfig | None = None
+    registry: ProviderRegistry | None = None
+    providers: Sequence[DiagnosticsProvider] | None = None
+    store: DiagnosticsStore | None = None
+    workspace_root: str | Path | None = None
+    timeout: float = DEFAULT_TIMEOUT_SECONDS
 
 
 class DiagnosticsService:
@@ -57,44 +71,50 @@ class DiagnosticsService:
 
     def __init__(
         self,
-        *,
-        config: Mapping[str, object] | LinterLayerConfig | None = None,
-        registry: ProviderRegistry | None = None,
-        providers: Sequence[DiagnosticsProvider] | None = None,
-        store: DiagnosticsStore | None = None,
-        workspace_root: str | Path | None = None,
-        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        deps: DiagnosticsServiceDeps | None = None,
+        **legacy_deps: Any,
     ) -> None:
         """Create a diagnostics service.
 
         Args:
-            config: A parsed :class:`LinterLayerConfig` or a full ECLI config
+            deps: Grouped service dependencies. Defaults preserve the shipped
+                registry, fresh cache, and standard timeout.
+            **legacy_deps: Compatibility keyword arguments matching the previous
+                constructor shape:
+            ``config``: A parsed :class:`LinterLayerConfig` or a full ECLI config
                 mapping (its ``[linter]`` table is read).
-            registry: Provider registry. Defaults to the shipped registry (active
+            ``registry``: Provider registry. Defaults to the shipped registry (active
                 Ruff + planned catalog + SonarQube project-quality metadata).
-            providers: Convenience for tests — wrap an ad-hoc list of active
+            ``providers``: Convenience for tests — wrap an ad-hoc list of active
                 providers in a registry with no planned catalog. Ignored when
                 *registry* is given.
-            store: Bounded result cache. A fresh one is created when omitted.
-            workspace_root: When set, files resolved outside this directory are
+            ``store``: Bounded result cache. A fresh one is created when omitted.
+            ``workspace_root``: When set, files resolved outside this directory are
                 reported as outside-workspace and are not linted.
-            timeout: Bounded per-collection external-process timeout, in seconds.
+            ``timeout``: Bounded per-collection external-process timeout, in seconds.
         """
-        if isinstance(config, LinterLayerConfig):
-            self.config = config
+        resolved_deps = self._resolve_deps(deps, legacy_deps)
+        if isinstance(resolved_deps.config, LinterLayerConfig):
+            self.config = resolved_deps.config
         else:
-            self.config = LinterLayerConfig.from_config(config)
-        if registry is not None:
-            self._registry = registry
-        elif providers is not None:
-            self._registry = ProviderRegistry(active_providers=providers)
+            self.config = LinterLayerConfig.from_config(resolved_deps.config)
+        if resolved_deps.registry is not None:
+            self._registry = resolved_deps.registry
+        elif resolved_deps.providers is not None:
+            self._registry = ProviderRegistry(active_providers=resolved_deps.providers)
         else:
             self._registry = build_default_registry()
-        self._store = store if store is not None else DiagnosticsStore()
-        self._workspace_root = (
-            Path(workspace_root).resolve() if workspace_root is not None else None
+        self._store = (
+            resolved_deps.store
+            if resolved_deps.store is not None
+            else DiagnosticsStore()
         )
-        self._timeout = float(timeout)
+        self._workspace_root = (
+            Path(resolved_deps.workspace_root).resolve()
+            if resolved_deps.workspace_root is not None
+            else None
+        )
+        self._timeout = float(resolved_deps.timeout)
 
     @property
     def store(self) -> DiagnosticsStore:
@@ -138,42 +158,81 @@ class DiagnosticsService:
         keyed by a content revision, so an unchanged buffer reuses the cache and
         no external process runs.
         """
+        preflight = self._preflight_collect(file_path)
+        if preflight is not None:
+            return preflight
+        kind, safe_path = self._validated_collect_path(file_path)
+        external = kind == "outside"
+        provider = self._registry.active_provider_for(safe_path)
+        provider_state = self._provider_preflight_state(provider, safe_path, external)
+        if provider_state is not None:
+            return provider_state
+        return self._collect_with_provider(
+            provider, safe_path, text if text is not None else "", force, external
+        )
+
+    @staticmethod
+    def _resolve_deps(
+        deps: DiagnosticsServiceDeps | None,
+        legacy_deps: dict[str, Any],
+    ) -> DiagnosticsServiceDeps:
+        if deps is not None and not isinstance(deps, DiagnosticsServiceDeps):
+            raise TypeError(
+                "DiagnosticsService positional argument must be "
+                "DiagnosticsServiceDeps"
+            )
+        resolved = deps or DiagnosticsServiceDeps()
+        if not legacy_deps:
+            return resolved
+        valid_fields = set(DiagnosticsServiceDeps.__dataclass_fields__)
+        unknown = sorted(set(legacy_deps) - valid_fields)
+        if unknown:
+            joined = ", ".join(unknown)
+            raise TypeError(
+                f"unexpected DiagnosticsService dependency argument(s): {joined}"
+            )
+        return replace(resolved, **legacy_deps)
+
+    def _preflight_collect(self, file_path: str | None) -> DiagnosticsState | None:
         if not self.config.enabled:
             return DiagnosticsState.disabled(
                 "Diagnostics are disabled ([linter].enabled = false)"
             )
-
         if not file_path:
             return DiagnosticsState.no_active_file("Open a file to see diagnostics")
-
         if self.config.is_excluded(file_path):
             return DiagnosticsState.disabled(
                 f"{Path(file_path).name} is excluded by [linter].exclude"
             )
-
         kind, safe_path = self._validate_path(file_path)
         if kind == "invalid" or safe_path is None:
             return DiagnosticsState.unreadable(
                 file_path=file_path,
                 detail="Current file path is invalid or cannot be read.",
             )
-        external = kind == "outside"
+        return None
 
-        provider = self._registry.active_provider_for(safe_path)
+    def _validated_collect_path(self, file_path: str | None) -> tuple[str, str]:
+        if file_path is None:
+            raise AssertionError("file_path must be preflighted before validation")
+        kind, safe_path = self._validate_path(file_path)
+        if safe_path is None:
+            raise AssertionError("safe_path must be present after collect preflight")
+        return kind, safe_path
+
+    def _provider_preflight_state(
+        self,
+        provider: DiagnosticsProvider | None,
+        safe_path: str,
+        external: bool,
+    ) -> DiagnosticsState | None:
         if provider is None:
             if external:
-                # Nothing safe applies to an out-of-workspace file: do not fall
-                # through to project/workspace tooling.
                 return DiagnosticsState.outside_workspace(
                     file_path=safe_path,
                     detail="Current file is outside ECLI workspace.",
                 )
             return self._inactive_state(safe_path)
-
-        # A provider applies. For files outside the workspace, only safe
-        # current-file (stdin) providers such as Ruff may run; workspace/project
-        # providers stay blocked at the workspace boundary, and no project scan
-        # ever runs out of tree. Path validation is never weakened here.
         if external and not self._is_current_file_provider(provider):
             return DiagnosticsState.outside_workspace(
                 file_path=safe_path,
@@ -182,8 +241,18 @@ class DiagnosticsService:
                     "the ECLI workspace; current file is outside it."
                 ),
             )
+        return None
 
-        payload = text if text is not None else ""
+    def _collect_with_provider(
+        self,
+        provider: DiagnosticsProvider | None,
+        safe_path: str,
+        payload: str,
+        force: bool,
+        external: bool,
+    ) -> DiagnosticsState:
+        if provider is None:
+            raise AssertionError("provider must be resolved before collection")
         revision = self._revision(safe_path, payload)
         cache_key = f"{provider.name}:{safe_path}"
         if not force:
