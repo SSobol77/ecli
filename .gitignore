@@ -30,9 +30,8 @@ target
 # Repository-level development log invariant.
 # Generated development logs, dry-run reports, smoke outputs,
 # test evidence, and agent debug artifacts must live only under logs/.
-logs/*
-!logs/.gitkeep
-!logs/README-logs.md
+/logs/**
+!/logs/.gitkeep
 
 # ==========================
 # OS / Editor junk
@@ -42,6 +41,11 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+
+# Logs
+
+
 
 # ==========================
 # Python
@@ -193,8 +197,6 @@ CODEX.md
 .cursor/
 .claude/settings.local.json
 audit-report.md
-logs/
-logs/*.*
 
 # Lock files (regenerate with uv)
 uv.lock

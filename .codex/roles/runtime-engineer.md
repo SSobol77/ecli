@@ -44,6 +44,8 @@ Allowed:
 
 * run runtime import checks;
 * run startup smoke checks with isolated `HOME` and `XDG_CONFIG_HOME`;
+* run `make clean-logs` before runtime/TUI/panel/rendering/input/logging
+  smoke or debug sessions;
 * inspect runtime entry points and console script contracts;
 * verify log creation paths without exposing secrets;
 * inspect runtime logs with redaction before quoting;
@@ -72,6 +74,7 @@ Forbidden:
 Use exact runtime commands:
 
 ```sh
+make clean-logs
 uv run python scripts/check_runtime_imports.py
 tmp_home="$(mktemp -d)"
 HOME="$tmp_home" XDG_CONFIG_HOME="$tmp_home/.config" uv run python -m ecli --help
@@ -91,6 +94,9 @@ rg -n "ecli =|__main__|main\\(|load_config|config.toml|logging|log" pyproject.to
 ```
 
 Do not use bare `python` when the repository workflow expects `uv run python`.
+Inspect only fresh current-run logs after reproducing the behavior. Tests are
+regression guards, not runtime truth for TUI behavior; runtime conclusions must
+be backed by fresh logs and manual smoke evidence.
 
 ## Output requirements
 

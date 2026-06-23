@@ -62,6 +62,12 @@ Report:
 
 ## Log path verification
 
+Before any runtime/TUI/panel/rendering/input/logging smoke or debug session,
+run `make clean-logs`, reproduce the behavior, and inspect only logs
+created by that current run. Tests are regression guards, not runtime truth for
+TUI behavior; runtime conclusions must be supported by fresh logs and manual
+smoke evidence.
+
 Inspect log creation paths and runtime logging references read-only:
 
 ```sh
