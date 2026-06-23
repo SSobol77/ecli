@@ -1,716 +1,217 @@
-<!--
-SPDX-License-Identifier: GPL-2.0-only
+# ECLI — Agentic AI Instructions
 
-Project: Ecli
-File: AGENTS.md
-Website: https://www.ecli.io
-Repository: https://github.com/SSobol77/ecli
-PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+This file governs all AI coding agents (Cursor, Claude Code, Codex/Copilot, Devin, etc.) working on the ECLI project.
 
-Copyright (c) 2026 Siergej Sobolewski
+## Role
 
-Licensed under the GNU General Public License version 2 only.
-See the LICENSE file in the project root for full license text.
--->
+You are a senior Python systems/build engineer working on ECLI — a terminal-based editor with AI integration, multi-platform packaging, and a curses TUI.
 
+## Source of Truth
 
-# ECLI Agent Instructions
+Always consult these files before making claims or changes:
 
-This file is the shared, tool-agnostic instruction set for agents working in the ECLI repository.
+- `Makefile`
+- `pyproject.toml`
+- `BUILD_QUICK_REFERENCE.md`
+- `BUILD_SYSTEM.md`
+- `docs/contributor/*`
+- `docs/release/*`
+- `docs/architecture/*`
+- `scripts/*`
 
-It applies to Codex-style agents, Claude Code subagents, Cursor agents, and any automation that reads repository-level agent instructions.
+Do not guess project commands, build outputs, platform support, or validation state.
 
-ECLI is a terminal-first engineering operations workbench. Treat the repository as a pre-release stabilization project. Work must be audit-aligned, evidence-first, and conservative.
+## Dirty Tree Discipline
 
-Do not treat ECLI automation as a release factory. Stage 1 automation exists to validate, diagnose, and prepare controlled fixes.
+Do not revert, overwrite, or normalize files outside the task scope. If a file is already modified (git dirty), inspect it before editing.
 
-## 1. Source of truth order
+## Build System
 
-Before changing code, tests, scripts, docs, workflows, packaging, or automation, read the relevant files in this order:
+### Preflight
 
-1. `AGENTS.md`
-2. tool-specific operating file:
-   - `CLAUDE.md` for Claude Code,
-   - `CODEX.md` for Codex,
-   - `CURSOR.md` for Cursor if present.
-3. tool-specific runbooks:
-   - `.claude/*` only for Claude Code,
-   - `.codex/*` only for Codex.
-4. `audit-report.md`
-5. `docs/planning/roadmap.md`
-6. `docs/adr/0001-single-writer-screen.md`
-7. `pyproject.toml`
-8. `Makefile`
-9. relevant source, test, script, workflow, packaging, or documentation files
-
-If a file is missing, report it honestly and continue with the available evidence.
-
-Do not invent missing contracts.
-
-## 2. Stage model
-
-### Stage 1 — Safety-first automation
-
-Stage 1 is active by default.
-
-Allowed Stage 1 work:
-
-* validation,
-* diagnostics,
-* failing-test reproduction,
-* isolated runtime smoke checks,
-* log triage with redaction,
-* static gate baseline reporting,
-* artifact/version drift reporting,
-* prepare-only release checklists,
-* documentation synchronization,
-* Stage 2 planning.
-
-Forbidden Stage 1 work:
-
-* publishing releases,
-* uploading artifacts,
-* creating GitHub Releases,
-* uploading to PyPI,
-* creating git tags,
-* pushing commits,
-* committing changes,
-* triggering GitHub workflows,
-* canceling or rerunning GitHub Actions,
-* running release targets,
-* running publish targets,
-* broad architecture rewrites,
-* broad rendering rewrites,
-* splitting `src/ecli/core/Ecli.py`,
-* splitting `src/ecli/ui/panels.py`,
-* silently mutating tracked packaging descriptors during build preparation.
-
-### Stage 1b — Narrow gated P0 fix
-
-A narrow gated fix may be allowed only when the maintainer explicitly asks for it.
-
-A Stage 1b fix must:
-
-* be tied to one audit finding or one defect,
-* have a failing test or explicit evidence first,
-* preserve current user-visible behavior unless the defect requires correction,
-* keep the diff minimal,
-* run or request validation,
-* avoid unrelated cleanup.
-
-### Stage 2 — Rendering stabilization
-
-Stage 2 is locked by default.
-
-Stage 2 may begin only after:
-
-1. AUD-001 is closed or explicitly waived.
-2. AUD-002 is closed or explicitly waived.
-3. AUD-003 is closed or explicitly waived.
-4. The relevant validation baseline is understood.
-5. The maintainer explicitly approves the Stage 2 transition.
-
-Until Stage 2 is unlocked, Stage 2-ready agents may only perform planning, inventory, and proposal work.
-
-## 3. Agent ownership model
-
-Agent responsibilities must stay separate.
-
-Do not collapse independent roles into one agent.
-
-### Stage 1 active roles
-
-#### `quality-engineer`
-
-Owns:
-
-* validation gate interpretation,
-* ruff/mypy/pytest/runtime import reporting,
-* P0-specific signal extraction,
-* baseline drift reporting,
-* curses-boundary inventory,
-* display-geometry inventory,
-* tester/log-analyst reconciliation,
-* PASS/FAIL verdict under the current Stage 1 policy.
-
-Does not own:
-
-* source-code fixes,
-* feature work,
-* release execution,
-* broad refactors.
-
-#### `tester`
-
-Owns:
-
-* failing reproduction tests,
-* behavior tests,
-* regression tests,
-* targeted P0 tests,
-* test-only changes.
-
-Does not own:
-
-* production code,
-* harness infrastructure,
-* release work,
-* build scripts.
-
-#### `log-analyst`
-
-Owns:
-
-* read-only log inspection,
-* ERROR/CRITICAL/traceback grouping,
-* asyncio warning and task exception detection,
-* curses/runtime anomaly detection,
-* stable log fingerprints,
-* secret/prompt redaction before quoting.
-
-Does not own:
-
-* production code,
-* test authoring,
-* TUI automation,
-* unredacted log reporting.
-
-#### `docs-engineer`
-
-Owns:
-
-* README synchronization,
-* install/build docs,
-* command docs,
-* release-note drafts,
-* manpage/docs drift,
-* documentation consistency with real commands.
-
-Does not own:
-
-* source-code fixes,
-* release execution,
-* publishing.
-
-#### `runtime-engineer`
-
-Owns:
-
-* isolated `HOME` startup checks,
-* runtime import checks,
-* runtime smoke checks,
-* log creation path verification,
-* installed-artifact smoke checks when explicitly provided.
-
-Does not own:
-
-* real user config writes,
-* release execution,
-* publishing,
-* interactive TUI automation unless explicitly requested.
-
-#### `build-engineer`
-
-Owns:
-
-* build target discovery,
-* Makefile/script inspection,
-* non-publishing build validation,
-* artifact contract reporting,
-* packaging drift reporting.
-
-Does not own:
-
-* release upload,
-* PyPI upload,
-* GitHub Release creation,
-* git write operations,
-* workflow triggers.
-
-#### `release-engineer`
-
-Owns:
-
-* prepare-only release readiness,
-* version consistency reports,
-* artifact contract reports,
-* changelog drafts,
-* release-note drafts,
-* manual release runbooks.
-
-Does not own:
-
-* git tag,
-* git push,
-* GitHub Release creation,
-* artifact upload,
-* PyPI upload,
-* workflow triggers,
-* release execution.
-
-### Stage 2-ready locked roles
-
-#### `software-architect`
-
-Owns architecture, contracts, ADRs, invariants, boundaries, and verification strategy.
-
-During Stage 1, it may only produce:
-
-* read-only architecture analysis,
-* ADR drafts,
-* current-vs-target maps,
-* interface proposals,
-* verification plans,
-* Stage 2 plans.
-
-It must not implement production bodies during Stage 1.
-
-#### `render-stabilizer`
-
-Owns rendering stabilization after Stage 2 approval or explicit narrow approval.
-
-During Stage 1, it may only:
-
-* inventory rendering risks,
-* review direct curses calls,
-* review display-geometry risks,
-* review resize/redraw paths,
-* identify async/render interaction risks,
-* prepare Stage 2 plans.
-
-It must not perform broad rendering rewrites during Stage 1.
-
-#### `test-harness-builder`
-
-Owns reusable test infrastructure.
-
-During Stage 1, it may only:
-
-* design harness architecture,
-* propose fixture layout,
-* propose pty/golden snapshot strategy,
-* propose Hypothesis generator strategy,
-* identify missing harness capabilities.
-
-It must not introduce broad harness infrastructure during Stage 1 unless explicitly approved.
-
-#### `feature-continuation`
-
-Owns new feature implementation only after the base is stable.
-
-It is locked during Stage 1.
-
-Feature work is blocked until:
-
-1. AUD-001 is closed or waived.
-2. AUD-002 is closed or waived.
-3. AUD-003 is closed or waived.
-4. The relevant area has a validation baseline.
-5. The maintainer explicitly approves Stage 2 or feature work.
-
-## 4. Audit-aligned P0 scope
-
-Stage 1 must track these P0 findings.
-
-### AUD-001 — Config/runtime validation drift
-
-Do not reduce this to TOML syntax.
-
-The shipped `config.toml` may parse successfully, but the typed configuration service does not validate all runtime sections consumed by the legacy runtime loader.
-
-When touching config behavior, distinguish clearly between:
-
-* shipped `config.toml`,
-* typed `ConfigService`,
-* legacy `utils.load_config()` path,
-* runtime sections such as `colors`, `syntax_highlighting`, `logging`, `theme`, `settings`, `file_icons`,
-* syntax highlighting regex compilation.
-
-A valid fix must prove the actual runtime loader path, not only typed service validation.
-
-### AUD-002 — `History.redo()` runtime safety
-
-The redo path for selection-preserving block operations must not access selection fields on the `History` object when those fields belong to the editor.
-
-Tests must exercise the real `History` class, not only `FakeHistory`.
-
-A correct fix must preserve:
-
-* text integrity,
-* cursor bounds,
-* selection bounds,
-* redo/history stack consistency,
-* modified state consistency.
-
-### AUD-003 — Release artifact contract drift
-
-Treat `pyproject.toml` as the version source of truth.
-
-Report drift in:
-
-* PyInstaller spec entry behavior,
-* package console entry behavior,
-* Nix packaging,
-* NSIS packaging,
-* Arch packaging,
-* AppImage metadata,
-* release workflows,
-* release docs,
-* generated manpage or package metadata if present.
-
-Tracked packaging descriptors must not be mutated as a side effect of packaging.
-
-Every active packaging, workflow, script, platform descriptor, Docker helper,
-and install/build document is a release-contract surface. Release readiness is
-blocked if a surface is missing from the Platform & Packaging Release Contract
-Matrix in `docs/release/artifact-contract.md`, the agent contracts, the
-build/release runbooks, or validation tests/contract checks. Empty, stale,
-decorative, or unused packaging files are forbidden; either wire them into the
-contract or remove them from active workflows/scripts.
-
-## 5. Quality baseline policy
-
-Use the canonical validation commands:
-
-```sh
-uv run ruff check . --output-format=concise
-uv run mypy src/ecli tests
-uv run pytest -ra -q
-uv run python scripts/check_runtime_imports.py
-```
-
-Interpret them correctly:
-
-* `pytest` is the primary functional baseline.
-* `ruff` failures must be reported exactly.
-* `mypy` may have known baseline debt; treat it as baseline/diff unless the task explicitly targets type cleanup.
-* P0-related mypy errors, especially in `src/ecli/core/History.py`, must be highlighted separately.
-* Do not pretend static gates are clean when they are not clean.
-
-Before build or packaging work, inspect:
-
-```sh
+```bash
 make help
 make sysinfo
 ```
 
-The root `Makefile` is the primary ECLI command surface. `make help` is the
-short developer workflow, `make help-full` is the complete target map,
-`make list-targets` lists public targets, `make doctor` checks local tools
-without building packages, and `make sysinfo` prints configured package
-variables. Release/upload Make targets are maintainer-owned and require an
-explicit confirmation guard.
+### Dependency Setup
 
-`Taskfile.yml` is an optional developer convenience wrapper only. Agents may use
-`task` when it delegates to existing `make` targets, but must not replace
-Makefile targets with Taskfile-only behavior. Makefile remains the authoritative
-build/release contract; CI and release gates continue to rely on the existing
-canonical command surfaces. Release/publish tasks must remain guarded, and
-packaging scripts must remain Python entrypoints under `scripts/*.py`.
-
-Do not use bare `python` when the repository workflow expects `uv run python`.
-
-Do not use broad commands such as:
-
-```sh
-uv run python *
-gh run *
-make *
+```bash
+uv sync
 ```
 
-Use exact commands.
+Do not rely on `make install` while `requirements.txt` is absent unless the task explicitly fixes that drift.
 
-## 6. Stage 2-ready rendering policy
+### Common Targets
 
-The following rendering rules are accepted as the future stabilization direction, but they are not a license for broad Stage 1 refactoring.
+- `make package-pypi`
+- `make package-deb-docker`
+- `make package-rpm-docker`
+- `make package-appimage`
+- `make package-tar-linux`
+- `make package-freebsd`
+- `make package-macos`
+- `make package-windows`
+- `make show-artifacts`
 
-### Single-writer screen invariant
+### Platform Constraints
 
-The screen is single-writer.
+- DEB/RPM Docker targets require Docker.
+- AppImage requires `appimagetool`.
+- Snap requires `snapcraft` and `snapcraft.yaml`.
+- FreeBSD `.pkg` requires FreeBSD host/VM/chroot or documented CI VM.
+- macOS DMG requires macOS and `hdiutil`.
+- Windows installer requires Windows, PowerShell 7, and NSIS.
 
-Exactly one approved terminal/UI writer may own the curses surface.
+### Artifact Contract
 
-Async tasks, LSP clients, AI providers, file watchers, background workers, and integration code must not mutate the terminal directly.
+All release artifacts must be emitted under `releases/<version>/` with canonical names and `.sha256` sidecars.
 
-The following operations are considered terminal-surface mutations and must be inventoried during Stage 1:
+Canonical names:
+- DEB: `ecli_<version>_amd64.deb`
+- RPM: `ecli_<version>_amd64.rpm`
+- FreeBSD: `ecli_<version>_amd64.pkg`
+- Windows: `ecli_<version>_win_x64.exe`
+- macOS: `ecli_<version>_macos_<arch>.dmg`
 
-* direct `curses` imports,
-* `stdscr.*`,
-* `refresh`,
-* `noutrefresh`,
-* `doupdate`,
-* terminal resize side effects,
-* direct panel/window redraw from non-writer code.
+Verification:
+- Linux: `sha256sum -c releases/<version>/<artifact>.sha256`
+- macOS: `shasum -c releases/<version>/<artifact>.sha256`
+- FreeBSD: `sha256 -c releases/<version>/<artifact>.sha256`
 
-In Stage 1, existing violations are baseline drift to report. New violations are forbidden.
+## Runtime Architecture
 
-### Display-width geometry invariant
+### Threading Invariants
 
-Column math must move toward terminal display width, not Python character count.
+- UI thread owns final state mutation and redraw.
+- Worker threads and async providers publish events only.
+- Integration callbacks must not mutate editor state directly.
+- Cross-queue global ordering is not guaranteed.
+- Per-queue FIFO is expected.
+- Malformed payloads must be logged and discarded.
+- Rendering code must not mutate domain state.
 
-Rendering and cursor logic must treat these as first-class cases:
+### High Blast Radius Modules
 
-* tabs,
-* CJK wide characters,
-* emoji,
-* zero-width characters,
-* combining marks,
-* long lines,
-* clipped status bars,
-* right-edge drawing.
+Treat these as high-risk — require characterization tests or focused evidence for refactors:
 
-In Stage 1, `len()`-based column, cursor, width, clipping, wrap, or status-line logic must be inventoried and reported. Stage 1 must not perform a broad rewrite unless explicitly approved.
+- `src/ecli/core/Ecli.py`
+- `src/ecli/core/History.py`
+- `src/ecli/ui/panels.py`
+- `src/ecli/ui/PanelManager.py`
+- `src/ecli/integrations/GitBridge.py`
+- `src/ecli/integrations/LinterBridge.py`
+- `src/ecli/core/AsyncEngine.py`
 
-### Stabilize before features
+### Config Precedence
 
-Feature work must not proceed in rendering-sensitive areas while the base is unstable.
+1. Embedded defaults
+2. User config at `~/.config/ecli/config.toml`
+3. Environment overrides including `~/.config/ecli/.env`
 
-### ECLI 0.2.x panel-console rule
+Secrets must come from documented env/config channels. Do not hardcode credentials or log secret-bearing values.
 
-For ECLI 0.2.x, do not implement a full PTY terminal emulator. F11 must be treated as an ECLI-owned PySH Console Panel direction. PySH is a command execution backend only. Do not migrate PySH source into ECLI and do not mix this work with VMLab/QEMU/QMP scope.
+### Failure Behavior
 
-### Tester and harness separation
+Git, linter/LSP, AI, and subprocess failures should degrade the relevant feature and continue the editor. Packaging failures should fail the build stage explicitly.
 
-Tester and test-harness-builder are separate roles.
+## Validation & Quality
 
-* `tester` writes failing reproduction tests and behavior tests.
-* `test-harness-builder` builds reusable infrastructure such as ScreenBuffer assertions, pty harnesses, snapshot tooling, deterministic fakes, and Hypothesis generators.
-* `quality-engineer` verifies gates and baseline drift.
-* `render-stabilizer` may fix rendering only after a failing test or explicit evidence exists.
+### Python Checks
 
-Do not collapse these responsibilities into one agent.
-
-## 7. Runtime and log safety
-
-Runtime checks must not write to the user's real configuration unless explicitly requested.
-
-Use an isolated temporary `HOME` for startup, runtime import, and log triage work:
-
-```sh
-tmp_home="$(mktemp -d)"
-HOME="$tmp_home" XDG_CONFIG_HOME="$tmp_home/.config" uv run python -m ecli --help
+```bash
+uv run ruff check src
+uv run ruff format --check src
+python main.py  # smoke test
 ```
 
-Logs may contain secrets or prompt content.
+### Tests
 
-Before quoting logs, redact:
-
-* API keys,
-* bearer tokens,
-* provider URLs containing credentials,
-* prompt-like content,
-* raw provider responses,
-* local sensitive paths when not required for diagnosis,
-* environment variable values that may contain secrets.
-
-## 8. Build and release safety
-
-Build work may inspect and validate local build paths.
-
-Build work must not publish.
-
-Release work is prepare-only unless the user explicitly starts a release phase.
-
-Forbidden commands:
-
-```sh
-git commit
-git push
-git tag
-git reset
-git clean
-twine upload
-uv publish
-python -m twine upload
-gh workflow run
-gh run cancel
-gh run rerun
-gh release create
-gh release upload
-gh release edit
-gh release delete
-make release
-make release-*
-make publish
-make publish-*
+```bash
+uv run pytest
 ```
 
-If a requested command may publish, upload, tag, push, or mutate public release state, do not run it. Explain that it is blocked and provide a manual checklist instead.
+Only claim pytest coverage if `pytest` actually ran. If `tests/` is absent, report the test baseline as blocked.
 
-### Shell-to-Python script migration
+### CI Reference
 
-Active packaging/build/verification scripts under `scripts/` have been migrated
-from shell to Python, preserving the release contract (artifact names, locations,
-checksum format, exit-code contracts). The migration is **complete**.
-
-* Active shell wrappers under `scripts/` have been removed. Canonical Python implementations include:
-  * `scripts/verify_artifact.py` — artifact SHA256 sidecar verifier (exit codes `0`–`5`).
-  * `scripts/verify_release_assets.py` — exact 21 physical GitHub Release asset verifier.
-  * `scripts/sign_checksums.py` — writes basename-only `<artifact>.sha256` sidecars (SHA256 only; not GPG signing).
-  * `scripts/check_log_invariant.py` — read-only development log-location invariant.
-  * `scripts/verify_runtime.py` — cross-artifact launcher validation.
-  * `scripts/build_pyinstaller_linux.py`, `scripts/build_and_package_{deb,rpm,opensuse_rpm,arch,slackware,macos,freebsd}.py`,
-    `scripts/package_appimage.py`, `scripts/build_freebsd_pkg.py`,
-    `scripts/build_freebsd_port.py`, `scripts/build_docker.py`,
-    `scripts/publish_pypi.py` (publish guard; never uploads).
-* Do not add active shell wrappers under `scripts/`; release readiness is
-  blocked if shell packaging/build/verification logic is reintroduced there.
-* `scripts/build-and-package-windows.ps1` is a separate Windows-native packaging
-  surface and is not part of this migration.
-* `.claude/hooks/block-mutations.sh` is a Claude hook, not a packaging script.
-* `tools/freebsd-chroot-build.sh` is a separate FreeBSD chroot helper outside
-  this migration.
-* the removed FreeBSD package-renaming shell helper was unused and removed during no-shell cleanup.
-* Python implementations use only the standard library, explicit `argparse`,
-  `pathlib.Path`, and `subprocess.run(..., check=True)` with explicit command
-  arrays. They must never publish, upload, sign with external keys, tag, push, or
-  trigger workflows.
-* Every official ECLI release must publish exactly 21 physical GitHub Release
-  assets, one per canonical matrix entry. Checksum sidecars are mandatory
-  verification evidence but are not GitHub Release assets. Release publication
-  is blocked unless `scripts/verify_release_assets.py` passes.
-* The migration contract is enforced by
-  `tests/packaging/test_scripts_python_migration_contract.py` and documented in
-  `docs/release/artifact-contract.md` under `Shell-to-Python Script Migration`.
-
-## 9. Dirty tree preservation
-
-Before edits, inspect the working tree if command execution is available:
-
-```sh
-git status --short
+```bash
+uv sync --frozen
+uv run ruff check src tests
+uv run ruff format --check src tests
+uv run pytest --cov -q
 ```
 
-Never discard user changes.
+### Documentation Quality
 
-Do not run destructive commands such as:
+When changing commands, paths, artifact names, or platform support, update:
 
-```sh
-git reset
-git checkout -- .
-git clean
+- `BUILD_QUICK_REFERENCE.md`
+- `BUILD_SYSTEM.md`
+- `docs/contributor/*`
+- `docs/release/*`
+- `docs/quality/*`
+
+## Log Evidence Discipline
+
+### Before Investigation
+
+```bash
+./scripts/clean_logs.sh
 ```
 
-If the working tree is dirty:
+### Rules
 
-1. Identify files changed by the user.
-2. Avoid overwriting them.
-3. Prefer patch-style edits.
-4. Report conflicts before editing.
+- Inspect only logs produced by the current run.
+- Never remove logging to make a bug disappear.
+- Never silence logs globally.
+- Never write runtime logs to stdout or stderr during curses runtime.
+- File-backed logging is the only acceptable channel once curses owns the screen.
 
-The user performs git commits manually. Agents must not commit.
+### Bug-Fix Reporting
 
-## 10. Code change policy
+Do not claim a runtime bug is fixed unless the report includes:
 
-For Stage 1:
+1. Exact command used to reproduce/verify.
+2. Exact log file inspected.
+3. Relevant log excerpts confirming the fix.
+4. Manual smoke result for TUI/visual issues.
 
-* prefer tests, diagnostics, and reports,
-* do not perform broad refactors,
-* do not change public behavior unless the task explicitly requests a gated fix,
-* keep fixes small and audit-linked,
-* name the audit finding or defect addressed by every source change,
-* include or update a test when practical,
-* do not leave TODO-only or stub implementations,
-* do not add empty methods,
-* do not hide failing gates.
+## Python Style
 
-For a source-code fix, report:
+- Python `>=3.11`; `.python-version` currently `3.11.2`
+- Ruff settings: line length 88, target `py311`, double quotes, Google pydocstyle
+- Keep changes scoped. Prefer existing patterns and helpers.
+- Avoid broad refactors in high blast radius modules.
+- Use typed, explicit boundaries for queue payloads.
+- Do not introduce UI-thread blocking I/O.
+- Do not log secrets or provider credentials.
 
-```text
-Change summary:
-- Finding:
-- Files changed:
-- Behavior before:
-- Behavior after:
-- Tests added:
-- Commands run:
-- Remaining risk:
+## Publishing Safety
+
+Do not run these without explicit operator approval:
+
+```bash
+make publish-all
+make publish-pypi
+make release-deb
+make release-rpm
+make release-appimage
+make release-freebsd
+make release-macos
+make release-windows
 ```
 
-## 11. Documentation policy
+These may create tags, GitHub releases, upload assets, or publish to PyPI.
 
-Documentation changes must match actual repository commands and scripts.
+## Communication
 
-Do not document commands that do not exist.
+Report concrete evidence:
 
-When updating docs, check:
+- commands run
+- files changed
+- validation passed/failed
+- platform or tool blockers
+- residual risk
 
-* `Makefile`,
-* `scripts/`,
-* `pyproject.toml`,
-* `.github/workflows/`,
-* relevant packaging descriptors.
-
-Prefer precise examples over vague prose.
-
-## 12. Expected final response format
-
-For any non-trivial task, finish with:
-
-```text
-Result:
-- What changed:
-- Evidence:
-- Commands run:
-- Commands blocked:
-- Files touched:
-- Remaining risks:
-- Recommended next step:
-```
-
-If no files were changed, say so explicitly.
-
-## 13. Extensions Layer contract (v0.3.0 Foundation)
-
-The ECLI Extensions Layer is the imported, data-only, VS Code / TextMate-compatible
-asset tree and the deterministic adapter code around it. Its normative contract is
-`docs/architecture/extensions-layer.md`. Until the asset tree is imported in a
-later issue, this is documentation/architecture only.
-
-All agents (Codex, Claude Code, Cursor, and any other automation) must obey:
-
-* `src/ecli/extensions/` is the **only** approved location for imported extension
-  assets. Do not invent or use `vendor/`, `third_party/`, or
-  `src/ecli/syntax/assets/`.
-* Imported/upstream files under `src/ecli/extensions/` are **read-only** from the
-  ECLI integration perspective. Do not edit, reformat, or relicense them.
-* Implement ECLI-specific behavior through **deterministic adapter code** that
-  reads those assets, never by modifying upstream files.
-* **No VS Code extension host, no Node/TypeScript activation, no
-  `activationEvents` execution, no `package.json` scripts, no Copilot runtime,
-  no network/auth side effects, no hidden command execution** through extension
-  metadata.
-* Preserve **F11 as the PySH Console Panel**; command execution stays routed
-  through explicit ECLI services / PySH / CommandPlan surfaces.
-* **No generic PTY terminal emulator.** Extensions must not reintroduce terminal
-  execution behavior.
-* Do not import the prepared asset tree in issue #97. Sequencing is #97 contract,
-  #98 import unchanged, #99 package-data tests, #100–#105 adapters.
-* When the asset tree is imported (#98) and tested (#99), extension data files
-  must be included in the wheel and sdist with explicit package-data coverage,
-  and all active platform packaging contracts must remain green.
-* VMLab is out of scope: it moved to v0.3.5 and is blocked until the v0.3.0
-  Extensions Foundation is complete.
-
-## 14. Current maintainer priority order
-
-For further ECLI work, treat extension stabilization as the first priority:
-
-1. Stabilize all Extensions and the Extensions Layer before adjacent feature
-   expansion.
-2. Finish TextMate rendering, TextMate performance, and multiline comment
-   handling.
-3. Implement F4 Diagnostics / Linter Panel.
-4. Implement F7 AI Code Assistant as an Extensions Layer feature.
-5. Implement the plugin layer for new themes, linters, and AI extensions.
-6. Implement F11 Terminal-console without duplicating PySH. Command execution
-   must remain routed through explicit ECLI services, PySH, or CommandPlan
-   surfaces; do not migrate PySH source into ECLI.
-7. Implement full mouse support.
-8. Implement F8 System Doctor / lab engineer diagnostic tools.
-9. Implement F9 Git improvements.
-
-This priority order is a sequencing rule for planning and implementation. It
-does not waive Stage 1/Stage 2 gates, P0 audit requirements, the single-writer
-screen invariant, the Extensions Layer security contract, or release/publish
-safety rules.
+Do not claim release readiness without artifact and checksum verification.

@@ -33,6 +33,8 @@ target
 logs/*
 !logs/.gitkeep
 !logs/README-logs.md
+/logs/**
+!/logs/README.md
 
 # ==========================
 # OS / Editor junk
@@ -42,6 +44,11 @@ Thumbs.db
 *.swp
 *.swo
 *~
+
+
+# Logs
+
+
 
 # ==========================
 # Python
