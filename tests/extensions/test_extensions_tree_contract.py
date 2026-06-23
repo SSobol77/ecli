@@ -299,14 +299,16 @@ def test_forbidden_runtime_artifacts_absent() -> None:
 
         if not path.is_file():
             continue
-        if _matches_any(path.name, FORBIDDEN_FILE_PATTERNS):
-            offenders.append(relative.as_posix())
-        elif path.suffix in FORBIDDEN_SOURCE_SUFFIXES:
-            offenders.append(relative.as_posix())
-        elif any(
-            "screenshot" in part.lower() or "demo" in part.lower()
-            for part in relative.parts
-        ):
+        is_forbidden_file = (
+            _matches_any(path.name, FORBIDDEN_FILE_PATTERNS)
+            or path.suffix in FORBIDDEN_SOURCE_SUFFIXES
+            or any(
+                "screenshot" in part.lower() or "demo" in part.lower()
+                for part in relative.parts
+            )
+        )
+
+        if is_forbidden_file:
             offenders.append(relative.as_posix())
 
     assert offenders == [], (
