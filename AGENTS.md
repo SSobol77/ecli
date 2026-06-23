@@ -157,7 +157,7 @@ When changing commands, paths, artifact names, or platform support, update:
 ### Before Investigation
 
 ```bash
-./scripts/clean_logs.sh
+make clean-logs
 ```
 
 ### Rules
@@ -203,6 +203,30 @@ make release-windows
 ```
 
 These may create tags, GitHub releases, upload assets, or publish to PyPI.
+
+## Test reality and runtime evidence policy
+
+For ECLI runtime, TUI, rendering, panel, input, logging, and extension-layer bugs:
+
+- Tests are regression guards, not runtime truth.
+- Use `docs/testing-reality-policy.md` as the detailed keep/rewrite/delete and
+  runtime-evidence policy.
+- For runtime/TUI/panel/rendering/input/logging issues, clean logs first,
+  reproduce, inspect only fresh logs from the current run, and report only
+  conclusions supported by those logs and manual smoke evidence.
+- A mock-based test is valid only when it checks an isolated contract or a deterministic failure mode.
+- A mock-based test is invalid if it replaces the behavior being claimed as fixed.
+- Do not report "fixed" only because tests pass.
+- For runtime/TUI issues, the report must include:
+  - fresh logs from the current run,
+  - exact command used,
+  - manual smoke result,
+  - visible behavior observed,
+  - relevant log excerpt or absence of the previous failure marker.
+- Stale logs are invalid evidence.
+- Do not remove logging to hide failures.
+- Do not silence errors globally to make tests pass.
+- Tests that only assert mock calls, duplicate old behavior, or do not represent real ECLI behavior must be removed or rewritten.
 
 ## Communication
 

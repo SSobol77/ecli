@@ -307,7 +307,14 @@ clean-release:
 distclean: clean clean-release
 	@echo "--> Distclean completed."
 
-
+.PHONY: clean-logs
+clean-logs:
+	@mkdir -p logs
+	@find logs -mindepth 1 -type f ! -name ".gitkeep" ! -name "README.md" -delete
+	@find logs -mindepth 1 -type d -empty -delete
+	@: > logs/editor.log
+	@printf 'Cleaned runtime logs in %s\n' "$(CURDIR)/logs"
+	
 # =============================================================================
 # 4. Python / PyPI packaging
 # =============================================================================

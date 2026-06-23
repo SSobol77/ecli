@@ -19,7 +19,7 @@ These assert that F11 now opens/focuses the PySH Console Panel while the legacy
 
 from __future__ import annotations
 
-import inspect
+import threading
 from pathlib import Path
 from typing import Any, cast
 
@@ -56,6 +56,38 @@ class _FakePanelManager:
         self.active_panel = panel
         self.shown.append(panel)
         panel.visible = True  # type: ignore[attr-defined]
+
+
+class _KeyBinderEditor:
+    def __init__(self) -> None:
+        self.history = type("History", (), {"undo": self._ok, "redo": self._ok})()
+        self.config: dict[str, Any] = {}
+        self.stdscr = _FakeWin()
+        self.status_message = "Ready"
+        self._state_lock = threading.RLock()
+        self._force_full_redraw = False
+        self.is_lightweight = True
+        self.linter_bridge = None
+        self._lexer = None
+        self.terminal_panel_toggles = 0
+
+    def __getattr__(self, _name: str) -> Any:
+        return self._ok
+
+    def _ok(self, *_args: Any, **_kwargs: Any) -> bool:
+        return True
+
+    def _set_status_message(self, message: str) -> None:
+        self.status_message = message
+
+    def insert_text(self, text: str) -> bool:
+        self.status_message = f"inserted {text}"
+        return True
+
+    def toggle_terminal_panel(self) -> bool:
+        self.terminal_panel_toggles += 1
+        self.status_message = "PySH Console Panel opened."
+        return True
 
 
 def test_toggle_terminal_panel_opens_pysh_console_panel() -> None:
@@ -96,10 +128,12 @@ def test_toggle_terminal_panel_focuses_existing_pysh_console_panel() -> None:
 
 
 def test_f11_opens_pysh_console_panel_action() -> None:
-    source = inspect.getsource(KeyBinder)
-    assert '"toggle_terminal_panel"' in source
-    assert "f11" in source
-    assert "self.editor.toggle_terminal_panel" in source
+    editor = _KeyBinderEditor()
+    binder = KeyBinder(editor)  # type: ignore[arg-type]
+
+    assert binder.handle_input(275) is True
+    assert editor.terminal_panel_toggles == 1
+    assert editor.status_message == "PySH Console Panel opened."
 
 
 # --- PySH Console Panel inherits the existing side-panel split layout ----

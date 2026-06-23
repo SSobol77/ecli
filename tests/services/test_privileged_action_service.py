@@ -279,9 +279,3 @@ def test_summaries_redact_sensitive_metadata() -> None:
         result.redacted_summary["command_metadata"][0][sensitive_key]
         == "***REDACTED***"
     )
-
-
-def test_all_test_artifacts_remain_under_logs() -> None:
-    logs_root = (Path.cwd() / "logs").resolve(strict=False)
-
-    assert logs_root.name == "logs"

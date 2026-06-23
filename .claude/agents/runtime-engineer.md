@@ -46,6 +46,8 @@ Before runtime validation:
 7. Inspect `src/ecli/utils/utils.py`.
 8. Identify all paths that may write configuration, `.env`, cache, state, or logs.
 9. Prepare an isolated temporary `HOME`.
+10. Run `make clean-logs` before runtime/TUI/panel/rendering/input/logging
+    smoke or debug sessions.
 
 ## Isolated HOME rule
 
@@ -102,6 +104,11 @@ Track these findings:
 ## Log handling
 
 Runtime logs may contain sensitive values.
+
+For runtime/TUI/panel/rendering/input/logging issues, clean logs first,
+reproduce the behavior, inspect only logs from the current run, and report only
+conclusions supported by those logs plus manual smoke evidence. Tests are
+regression guards, not runtime truth for TUI behavior.
 
 Before quoting log lines, redact:
 

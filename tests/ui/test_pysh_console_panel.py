@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Mapping
@@ -93,23 +94,6 @@ class _FakeBackend:
 
     def cancel(self) -> None:
         self.cancel_calls += 1
-
-
-class _ImmediateThread:
-    def __init__(
-        self,
-        target: Any,
-        args: tuple[Any, ...],
-        daemon: bool,
-    ) -> None:
-        self.target = target
-        self.args = args
-        self.daemon = daemon
-        self.started = False
-
-    def start(self) -> None:
-        self.started = True
-        self.target(*self.args)
 
 
 @pytest.fixture
@@ -194,7 +178,6 @@ def test_pysh_console_invalid_cd_preserves_cwd(
 def test_pysh_console_external_command_flow(
     panel_factory: Any,
     tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     result = PySHCommandResult(
         command="run tool",
@@ -205,12 +188,19 @@ def test_pysh_console_external_command_flow(
     )
     backend = _FakeBackend(result)
     panel, _editor, fake_backend = panel_factory(backend=backend, cwd=tmp_path)
-    monkeypatch.setattr("ecli.ui.pysh_console_panel.threading.Thread", _ImmediateThread)
 
     _submit(panel, "run tool")
 
     assert panel._running_command == "run tool"
-    assert panel.process_queues() is True
+    deadline = time.monotonic() + 2.0
+    processed = False
+    while time.monotonic() < deadline:
+        if panel.process_queues():
+            processed = True
+            break
+        time.sleep(0.01)
+
+    assert processed is True
     assert panel._running_command is None
     assert fake_backend.run_calls[0][0] == "run tool"
     assert fake_backend.run_calls[0][1] == tmp_path
