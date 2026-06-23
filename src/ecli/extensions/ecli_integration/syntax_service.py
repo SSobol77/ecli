@@ -215,7 +215,18 @@ class LineHighlighter:
         tokens = self.tokenizer.tokenize_line(line)
         result: tuple[LineSpan, ...] | None
         if tokens is None:
-            result = None
+            # Tokenization was degraded for this line (per-line budget overrun on
+            # a slow line, or a quarantined grammar). A deterministic multiline
+            # guard (e.g. a ``/* */`` comment or a triple-quoted string) must
+            # still win over code scopes, so when the line carries protected
+            # ranges we render it from those guards alone instead of discarding
+            # them. Only an unprotected slow line falls back to the legacy
+            # highlighter (``None``); this keeps multiline comment/string
+            # protection correct even when a single line is too slow to tokenize.
+            if protected:
+                result = tuple(tokens_to_spans(line, (), protected_ranges=protected))
+            else:
+                result = None
         else:
             result = tuple(tokens_to_spans(line, tokens, protected_ranges=protected))
         cache[cache_key] = result

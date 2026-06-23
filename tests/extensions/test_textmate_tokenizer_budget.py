@@ -45,7 +45,7 @@ pytestmark = pytest.mark.skipif(
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MAKE_GRAMMAR = REPO_ROOT / "src/ecli/extensions/make/syntaxes/make.tmLanguage.json"
+MAKE_GRAMMAR = REPO_ROOT / "src/ecli/extensions/lang/make/syntaxes/make.tmLanguage.json"
 
 # A hard ceiling, well above the in-engine per-line budget but far below the
 # unbounded freeze. If a single tokenize_line call ever exceeds this, the freeze
@@ -156,3 +156,31 @@ def test_repeated_timeout_on_same_line_counts_once() -> None:
 def test_wall_clock_budget_available_on_main_thread() -> None:
     # The render loop runs on the main thread, where SIGALRM can bound the engine.
     assert tok._can_arm_alarm() is True
+
+
+TYPESCRIPT_GRAMMAR = (
+    REPO_ROOT
+    / "src/ecli/extensions/lang/typescript-basics/syntaxes/TypeScript.tmLanguage.json"
+)
+
+
+def test_cold_load_returns_warmed_tokenizer() -> None:
+    # Cold grammar load amortizes first-use Oniguruma pattern compilation at load
+    # time (warm-up), so it is never charged to the first rendered line's per-line
+    # budget. Clearing the cache forces a genuine cold load of the moved
+    # ``lang/typescript-basics`` grammar path.
+    assert TYPESCRIPT_GRAMMAR.is_file()
+    tok.load_tokenizer.cache_clear()
+    tokenizer = tok.load_tokenizer(TYPESCRIPT_GRAMMAR)
+    assert tokenizer is not None
+    assert tokenizer.warmed is True
+
+
+def test_warm_up_does_not_record_timeouts_or_quarantine() -> None:
+    # Warm-up must never count toward per-line timeout/quarantine bookkeeping.
+    tok.reset_quarantine_state()
+    tok.load_tokenizer.cache_clear()
+    tokenizer = tok.load_tokenizer(TYPESCRIPT_GRAMMAR)
+    assert tokenizer is not None and tokenizer.warmed is True
+    assert tok._GRAMMAR_TIMEOUT_LINES == {}
+    assert not tok.is_grammar_quarantined(str(TYPESCRIPT_GRAMMAR))

@@ -86,6 +86,24 @@ def _budget_seconds(env_name: str, default_ms: int) -> float:
 # the engine) while still bounding pathological backtracking (seconds).
 _LINE_BUDGET_SECONDS = _budget_seconds("ECLI_TM_LINE_BUDGET_MS", 250)
 
+# Cold-start warm-up budget. The engine compiles its Oniguruma patterns *lazily*
+# on the first ``parse`` call; for large grammars (notably TypeScript) that
+# first-use compilation can far exceed the per-line budget. Paying it on the
+# first rendered line would wrongly mark that line as "slow" and degrade it to
+# the legacy highlighter. Instead we pay it once at load time, under this
+# separate, generous budget, so the per-line budget only ever measures
+# steady-state tokenization. It is still bounded so a pathological grammar can
+# never hang grammar loading.
+_WARMUP_BUDGET_SECONDS = _budget_seconds("ECLI_TM_WARMUP_BUDGET_MS", 5000)
+
+# Benign, non-pathological lines used to force first-use pattern compilation at
+# load time. A block-comment line compiles the (very common) comment machinery
+# plus, by attempting every root alternative at column 0, the bulk of the root
+# patterns; a plain identifier line covers grammars without C-style comments.
+# These are deliberately innocuous so they never trigger the catastrophic
+# backtracking that some grammars (e.g. ``make`` on ``ifeq``) exhibit.
+_WARMUP_LINES: tuple[str, ...] = ("/* ecli */", "ecli")
+
 # After a grammar exceeds the budget on this many *distinct* real lines in a
 # session, it is quarantined (disabled wholesale) so scrolling a file it cannot
 # handle never accumulates more than a bounded number of one-time hitches. A
@@ -200,6 +218,52 @@ class TextMateTokenizer:
         """Wrap a compiled engine grammar object for per-line tokenization."""
         self._grammar = grammar
         self._grammar_id = grammar_id
+        # Set once the cold-start pattern compilation has been amortized (see
+        # ``warm_up``). Construction itself never warms, so directly-constructed
+        # tokenizers (tests, fakes) stay cheap and side-effect free.
+        self.warmed = False
+
+    def warm_up(self) -> None:
+        """Amortize first-use pattern compilation off the per-line hot path.
+
+        Runs a couple of benign representative parses under the dedicated
+        warm-up budget so the engine compiles its lazily-built Oniguruma
+        patterns now, at load time, instead of on the first rendered line. This
+        keeps cold-start work out of the per-line budget so a normal first line
+        (e.g. inside a multiline comment) is never wrongly degraded to the
+        legacy highlighter.
+
+        Warm-up is best effort: any failure or warm-up-budget overrun is
+        swallowed and is **never** recorded as a per-line timeout or counted
+        toward grammar quarantine. The tokenizer is always usable afterward;
+        genuinely slow steady-state lines are still bounded by
+        :meth:`tokenize_line`.
+        """
+        for line in _WARMUP_LINES:
+            if not self._warmup_parse(line):
+                break
+        self.warmed = True
+
+    def _warmup_parse(self, line: str) -> bool:
+        """Parse one warm-up ``line`` under the warm-up budget; never raise.
+
+        Returns ``False`` if the parse hit the warm-up budget (cold start is
+        itself pathological), so the caller stops warming and lets the per-line
+        path bound real input; ``True`` otherwise.
+        """
+        try:
+            with _silenced():
+                _call_with_budget(
+                    lambda: self._grammar.parse(line),  # type: ignore[attr-defined]
+                    _WARMUP_BUDGET_SECONDS,
+                )
+        except _TokenizeBudgetExceededError:
+            return False
+        except Exception:
+            # The engine cannot handle this grammar/line; tokenize_line will
+            # return None per line. Warm-up stays silent and non-fatal.
+            return True
+        return True
 
     def tokenize_line(self, line: str) -> list[TextMateToken] | None:
         """Return ``(scope, start, end)`` records for ``line``, or ``None``.
@@ -272,9 +336,13 @@ def load_tokenizer(grammar_path: Path) -> TextMateTokenizer | None:
     Returns ``None`` when the engine is unavailable or the grammar cannot be
     loaded/compiled (so the caller falls back to the legacy highlighter). Results
     are cached per grammar path, so the scan/compile cost is paid once per grammar
-    process-wide and never on the render hot path. Runtime quarantine (after
-    repeated real-line timeouts) is enforced in :meth:`TextMateTokenizer.tokenize_line`
-    and re-checked by the caller via :func:`is_grammar_quarantined`.
+    process-wide and never on the render hot path. The returned tokenizer is
+    **warmed** here (see :meth:`TextMateTokenizer.warm_up`) so first-use Oniguruma
+    pattern compilation is amortized at load time, outside the per-line budget,
+    rather than being charged to the first rendered line. Runtime quarantine
+    (after repeated real-line timeouts) is enforced in
+    :meth:`TextMateTokenizer.tokenize_line` and re-checked by the caller via
+    :func:`is_grammar_quarantined`.
     """
     if _ENGINE is None:
         return None
@@ -288,4 +356,10 @@ def load_tokenizer(grammar_path: Path) -> TextMateTokenizer | None:
         # Includes RecursionError on grammars the engine cannot compile.
         logger.debug("TextMate grammar load failed for %s: %s", grammar_path, error)
         return None
-    return TextMateTokenizer(grammar, grammar_id=grammar_id)
+    tokenizer = TextMateTokenizer(grammar, grammar_id=grammar_id)
+    # Pay first-use pattern compilation here, once per grammar (this function is
+    # cached), so it is never charged to the first rendered line's per-line
+    # budget. This is the fix for cold-start lines (e.g. TypeScript multiline
+    # comments) being wrongly degraded to the legacy highlighter.
+    tokenizer.warm_up()
+    return tokenizer

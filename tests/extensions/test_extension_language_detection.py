@@ -94,7 +94,8 @@ def detector() -> LanguageDetector:
 
 
 def _make_extension(root: Path, name: str, manifest: Mapping[str, object]) -> Path:
-    directory = root / name
+    # Discovery only scans the curated ``lang/`` and ``themes/`` asset groups.
+    directory = root / "lang" / name
     directory.mkdir(parents=True)
     (directory / "package.json").write_text(json.dumps(manifest), encoding="utf-8")
     return directory

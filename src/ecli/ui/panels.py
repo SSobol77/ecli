@@ -1013,14 +1013,32 @@ class FileBrowserPanel(BasePanel):
         self.git_panel = git_panel
 
     def open(self) -> None:
-        """Prepares the panel for display and forces an update of Git statuses."""
+        """Prepare the panel for display and schedule a non-blocking Git refresh.
+
+        The File Browser must open instantly. The previous implementation ran
+        ``git status --porcelain`` synchronously here, which blocked the curses
+        UI thread for the duration of the Git subprocess (up to its timeout, or
+        indefinitely if Git stalled on an index lock or slow filesystem) and so
+        could appear to hang the whole editor. We now render immediately from
+        whatever cache already exists and refresh Git status on a background
+        worker; results are applied on a later frame by ``process_queues``.
+        """
         super().open()
         curses.curs_set(0)
-        if self.git_panel:
-            logger.debug(
-                "FileBrowserPanel is open, triggering Git status cache update."
-            )
-            self.git_panel.force_update_file_status_cache()
+        if self.git_panel is not None:
+            logger.debug("FileBrowserPanel open: scheduling async Git status refresh.")
+            self.git_panel.request_file_status_refresh()
+
+    def process_queues(self) -> bool:
+        """Drain completed async Git status refreshes (called by the main loop).
+
+        Returns ``True`` only when new Git status data was applied, so the
+        editor redraws exactly once per update instead of looping continuously
+        while the panel is open.
+        """
+        if self.git_panel is None:
+            return False
+        return self.git_panel.drain_file_status_results()
 
     def close(self) -> None:
         """Cleans up the panel upon closing and restores the terminal cursor.
@@ -1110,6 +1128,15 @@ class FileBrowserPanel(BasePanel):
                 self.editor.toggle_focus()
             return True
 
+        # Manual refresh: rescan the directory and schedule a bounded, async
+        # Git status refresh. Never blocks the UI thread on a subprocess.
+        # Returning True already drives exactly one redraw via the main loop.
+        if key in (ord("r"), ord("R")):
+            self._refresh_entries()
+            if self.git_panel is not None:
+                self.git_panel.request_file_status_refresh()
+            return True
+
         return False
 
     def handle_key(self, key: Any) -> bool:
@@ -1149,8 +1176,10 @@ class FileBrowserPanel(BasePanel):
         if entry is None or entry.is_dir() or not self.git_panel:
             return " ", 0
 
+        # Note: intentionally no per-entry logging here. ``draw`` calls this for
+        # every visible row on every frame, so logging would flood the debug log
+        # on each redraw.
         git_status = self.git_panel.get_file_git_status(entry.path)
-        logger.debug(f"File: {entry.name}, Git status: {git_status}")
 
         if not git_status:
             return " ", 0
@@ -1367,6 +1396,7 @@ class FileBrowserPanel(BasePanel):
             ("F6", "Ren"),
             ("Del", "Del"),
             ("Enter", "Open"),
+            ("r", "Refresh"),
             ("F10", "Close"),
         ]
         x = 1
@@ -2205,6 +2235,14 @@ class GitPanel(BasePanel):
         self.file_status_cache: dict[str, str] = {}
         self.watched_files: set[str] = set()
 
+        # Async file-status refresh plumbing (used by the File Browser panel).
+        # Opening the File Browser must never run ``git status`` on the curses
+        # UI thread, so the refresh happens on a daemon worker and results are
+        # delivered through this queue and applied by ``drain_file_status_results``.
+        self._file_status_results: queue.Queue[Optional[dict[str, str]]] = queue.Queue()
+        self._file_status_lock = threading.Lock()
+        self._file_status_refresh_in_flight = False
+
         self.log_page_size = self.height - 8  # Adaptive page size
         self.log_current_page = 0
 
@@ -2424,9 +2462,63 @@ class GitPanel(BasePanel):
         self.editor._set_status_message(msg + " | [F9/Esc] Close")
 
     def force_update_file_status_cache(self) -> None:
-        """Forces an update of the file status cache. Called externally (e.g. from FileBrowserPanel)."""
+        """Synchronously rebuild the file status cache.
+
+        This runs ``git status --porcelain`` on the calling thread and must
+        only be used off the curses UI path (e.g. the post-save hook). The File
+        Browser panel uses :meth:`request_file_status_refresh` instead so that
+        opening it never blocks the editor on a Git subprocess.
+        """
         logger.info("Forcing an update of the file status cache.")
         self._update_file_status_cache()
+
+    def request_file_status_refresh(self) -> None:
+        """Schedule a non-blocking refresh of the file status cache.
+
+        Runs ``git status --porcelain`` on a daemon thread so the File Browser
+        panel can open instantly without waiting for the Git subprocess. The
+        parsed result is delivered through ``_file_status_results`` and applied
+        on the UI thread by :meth:`drain_file_status_results`. Overlapping
+        requests are coalesced into a single in-flight worker.
+        """
+        with self._file_status_lock:
+            if self._file_status_refresh_in_flight:
+                return
+            self._file_status_refresh_in_flight = True
+
+        def worker() -> None:
+            cache: Optional[dict[str, str]] = None
+            try:
+                cache = self._compute_file_status_cache()
+            except Exception as exc:  # pragma: no cover - defensive
+                logger.error("GitPanel: async file status refresh failed: %s", exc)
+                cache = None
+            finally:
+                self._file_status_results.put(cache)
+
+        threading.Thread(
+            target=worker, name="GitFileStatusRefresh", daemon=True
+        ).start()
+
+    def drain_file_status_results(self) -> bool:
+        """Apply any completed async file-status refresh on the UI thread.
+
+        Non-blocking: only consumes results that are already queued. Returns
+        ``True`` when the cache actually changed, so the caller can request a
+        single redraw instead of looping continuously.
+        """
+        changed = False
+        try:
+            while True:
+                cache = self._file_status_results.get_nowait()
+                with self._file_status_lock:
+                    self._file_status_refresh_in_flight = False
+                if cache is not None and cache != self.file_status_cache:
+                    self.file_status_cache = cache
+                    changed = True
+        except queue.Empty:
+            pass
+        return changed
 
     def _parse_git_status_code(self, status_code: str) -> str:
         """Parse a Git status code into a single character status.
@@ -2521,45 +2613,44 @@ class GitPanel(BasePanel):
             self._stop_auto_update()
             self.editor._set_status_message("Auto-update disabled.")
 
+    def _compute_file_status_cache(self) -> Optional[dict[str, str]]:
+        """Run ``git status --porcelain`` and return a fresh path→status map.
+
+        Returns ``None`` when Git is unavailable or the command fails, so
+        callers can preserve the previous cache instead of clearing it. Apart
+        from the subprocess, this is pure: it never mutates
+        ``self.file_status_cache``, which makes it safe to call from a worker
+        thread.
+        """
+        result = self._run_git_command(["git", "status", "--porcelain"])
+        if result.returncode != 0:
+            return None
+
+        cache: dict[str, str] = {}
+        repo_dir = self._get_repo_dir()
+        for line in result.stdout.strip().splitlines():
+            if len(line) < 3:
+                continue
+            status = self._parse_git_status_code(line[:2])
+            file_path = line[3:].strip()
+            # Save both full and relative paths so lookups by either resolve.
+            cache[os.path.join(repo_dir, file_path)] = status
+            cache[file_path] = status
+        return cache
+
     def _update_file_status_cache(self) -> None:
-        """Updates the file status cache for integration with the file manager."""
+        """Synchronously refresh the file status cache for the file manager.
+
+        Used off the curses UI thread (e.g. the post-save hook). On failure or
+        when not in a repository the previous cache is preserved unchanged.
+        """
         try:
-            result = self._run_git_command(["git", "status", "--porcelain"])
-            if result.returncode != 0:
-                return
-
-            # Clear the old cache
-            self.file_status_cache.clear()
-
-            # Parse the output of git status --porcelain
-            for line in result.stdout.strip().splitlines():
-                if len(line) < 3:
-                    continue
-
-                status_code = line[:2]
-                file_path = line[3:].strip()
-
-                # Determine file status
-                if status_code[0] == "M" or status_code[1] == "M":
-                    status = "M"  # Modified
-                elif status_code[0] == "A" or status_code[1] == "A":
-                    status = "A"  # Added
-                elif status_code[0] == "D" or status_code[1] == "D":
-                    status = "D"  # Deleted
-                elif status_code[0] == "?" and status_code[1] == "?":
-                    status = "??"  # Untracked
-                elif status_code[0] == "R":
-                    status = "R"  # Renamed
-                else:
-                    status = status_code.strip()
-
-                # Save both full and relative paths
-                full_path = os.path.join(self._get_repo_dir(), file_path)
-                self.file_status_cache[full_path] = status
-                self.file_status_cache[file_path] = status
-
+            cache = self._compute_file_status_cache()
         except Exception as e:
             logger.error(f"GitPanel: Failed to update file status cache: {e}")
+            return
+        if cache is not None:
+            self.file_status_cache = cache
 
     def get_file_git_status(self, file_path: str) -> Optional[str]:
         """Returns the git status of a file for integration with the file manager.

@@ -73,7 +73,7 @@ def _categories(service: SyntaxService, filename: str, lines: list[str]) -> set[
 
 
 def test_real_grammar_loads_from_extensions_tree() -> None:
-    grammar = EXTENSIONS_ROOT / "python/syntaxes/MagicPython.tmLanguage.json"
+    grammar = EXTENSIONS_ROOT / "lang/python/syntaxes/MagicPython.tmLanguage.json"
     tokenizer = load_tokenizer(grammar.resolve())
     assert tokenizer is not None
     tokens = tokenizer.tokenize_line("def f(x): return 42")
@@ -151,7 +151,7 @@ def test_c_scopes(service: SyntaxService) -> None:
 
 def test_bat_scopes(service: SyntaxService) -> None:
     tokenizer = load_tokenizer(
-        (EXTENSIONS_ROOT / "bat/syntaxes/batchfile.tmLanguage.json").resolve()
+        (EXTENSIONS_ROOT / "lang/bat/syntaxes/batchfile.tmLanguage.json").resolve()
     )
     assert tokenizer is not None
     tokens = tokenizer.tokenize_line("REM a comment")

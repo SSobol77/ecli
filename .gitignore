@@ -187,8 +187,14 @@ sonar-project.properties
 
 # Local AI agent private state
 CURSOR.md
+AGENTS.md
+CLAUDE.md
+CODEX.md
 .cursor/
 .claude/settings.local.json
+audit-report.md
+logs/
+logs/*.*
 
 # Lock files (regenerate with uv)
 uv.lock

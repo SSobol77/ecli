@@ -261,6 +261,76 @@ def test_typescript_multiline_comments_win_over_code_scopes(
     )
 
 
+def test_typescript_cold_start_multiline_comments_not_fallback() -> None:
+    """Cold-start TS tokenization must not degrade protected comment lines to None.
+
+    Regression for the reported failure: with all tokenizer caches cleared the
+    TypeScript grammar is loaded cold, and the first rendered lines are inside a
+    ``/* */`` comment. Cold-start/first-use grammar work must be amortized at
+    load time (the tokenizer is warmed) and must not be charged to the first
+    line's per-line budget, so the protected comment lines render as comment and
+    never fall back to ``None``. Covers the moved
+    ``src/ecli/extensions/lang/typescript-basics/...`` grammar path.
+    """
+    from ecli.extensions.ecli_integration import textmate_tokenizer as tok
+
+    tok.load_tokenizer.cache_clear()
+    tok.reset_quarantine_state()
+    fresh = build_syntax_service(
+        ExtensionLayerConfig.from_section({"syntax_engine": "extension"})
+    )
+    highlighter = fresh.build_line_highlighter("cold-start.ts")
+    assert highlighter is not None
+    # Cold-start/first-use compilation is amortized at load time, not on line 1.
+    assert highlighter.tokenizer.warmed is True
+    lines = [
+        "/*",
+        'class Test { return 123; const x = "<div>"; }',
+        "interface User { id: number; }",
+        "*/",
+        "const real: number = 123;",
+    ]
+    highlighted = highlighter.highlight_lines(
+        lines, line_indices=list(range(len(lines))), full_text=lines
+    )
+    for index in (1, 2):
+        assert highlighted[index] is not None
+        assert {category for _text, category in highlighted[index]} == {"comment"}
+
+
+def test_typescript_protection_wins_when_tokenization_is_degraded(
+    service: SyntaxService, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A timed-out protected comment line must still render as comment.
+
+    Deterministic regression independent of machine speed: every line is forced
+    to the per-line legacy fallback (``tokenize_line`` returns ``None``). The
+    deterministic multiline-comment guard must still win over code scopes for the
+    protected lines, while an *unprotected* slow line still falls back to the
+    legacy highlighter (``None``) — fallback is not disabled, only protection is
+    preserved.
+    """
+    highlighter = service.build_line_highlighter("degraded.ts")
+    assert highlighter is not None
+    monkeypatch.setattr(highlighter.tokenizer, "tokenize_line", lambda _line: None)
+    lines = [
+        "/*",
+        'class Test { return 123; const x = "<div>"; }',
+        "interface User { id: number; }",
+        "*/",
+        "const real: number = 123;",
+    ]
+    highlighted = highlighter.highlight_lines(
+        lines, line_indices=list(range(len(lines))), full_text=lines
+    )
+    assert highlighted[1] is not None
+    assert {category for _text, category in highlighted[1]} == {"comment"}
+    assert highlighted[2] is not None
+    assert {category for _text, category in highlighted[2]} == {"comment"}
+    # The unprotected code line outside the comment still degrades to legacy.
+    assert highlighted[4] is None
+
+
 def test_html_multiline_comments_win_over_tag_scopes(service: SyntaxService) -> None:
     highlighter = service.build_line_highlighter("fixture.html")
     assert highlighter is not None

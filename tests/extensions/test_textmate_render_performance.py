@@ -268,7 +268,8 @@ def test_grammar_loaded_once_per_scope() -> None:
     from ecli.extensions.ecli_integration.textmate_tokenizer import load_tokenizer
 
     grammar = (
-        REPO_ROOT / "src/ecli/extensions/python/syntaxes/MagicPython.tmLanguage.json"
+        REPO_ROOT
+        / "src/ecli/extensions/lang/python/syntaxes/MagicPython.tmLanguage.json"
     ).resolve()
     first = load_tokenizer(grammar)
     second = load_tokenizer(grammar)

@@ -178,8 +178,13 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
     """
     if config is None:
         config = {}
-    # Main Application Logger (e.g., for editor.log)
-    log_dir = os.path.join(os.path.expanduser("~"), ".config", "ecli", "logs")
+    # Main Application Logger (e.g., for editor.log). The log directory follows
+    # the same precedence as config: ECLI_LOG_DIR override, then a development
+    # checkout (<repo>/logs), then the installed-user ~/.config/ecli/logs path.
+    # A source checkout never writes logs into ~/.config/ecli.
+    from ecli.utils.utils import resolve_log_dir
+
+    log_dir = str(resolve_log_dir())
     log_filename = os.path.join(log_dir, "editor.log")
     # Use .get safely for nested dictionaries
     logging_config = config.get("logging", {})

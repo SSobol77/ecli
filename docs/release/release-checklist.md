@@ -60,12 +60,16 @@ See the LICENSE file in the project root for full license text.
       present in the exact 21-asset set.
 - [ ] Confirm vmactions/freebsd-vm is still pinned to a known-good commit SHA
       in both `release.yml` and `freebsd-pkg.yml`.
-- [ ] Extensions Layer (planned, gated by issue #98/#99): once imported under
-      `src/ecli/extensions/`, confirm non-`.py` extension data files are present
-      in the built wheel and sdist via `tests/packaging/`, that imported assets
-      are shipped unchanged, and that all 21 canonical assets remain green.
-      Not applicable until the asset tree is imported; see
-      `docs/architecture/extensions-layer.md`.
+- [ ] Extensions Layer: confirm the curated runtime asset bundle under
+      `src/ecli/extensions/` is normalized — the root holds only
+      `ecli_integration/`, `lang/`, `themes/`, and `THIRD_PARTY_NOTICES.md`, with
+      imported assets under `lang/<name>` and `themes/<name>` containing only
+      manifests/NLS, grammars, themes, snippets, language-configuration metadata,
+      and legal attribution files; confirm non-`.py` extension data files are
+      present in the built wheel and sdist via `tests/extensions/`; confirm
+      enforcement tests reject source/build/test/media artifacts, flat root
+      folders, and VS Code UI/runtime-only folders; and confirm all 21 canonical
+      assets remain green. See `docs/architecture/extensions-layer.md`.
 
 ## Mandatory GitHub Release Assets
 

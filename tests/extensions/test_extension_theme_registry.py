@@ -107,7 +107,7 @@ def test_kimbie_dark_uses_imported_theme_json() -> None:
     assert theme is not None
     assert theme.name == "Kimbie Dark"
     assert theme.path_repo_relative.endswith(
-        "theme-kimbie-dark/themes/kimbie-dark-color-theme.json"
+        "themes/kimbie-dark/themes/kimbie-dark-color-theme.json"
     )
     palette = resolve_theme({"theme": 213})
     assert palette.name == "Kimbie Dark"

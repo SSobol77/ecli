@@ -115,4 +115,5 @@ jobs:
             -Dsonar.tests=tests
             -Dsonar.python.version=3.11
             -Dsonar.exclusions=src/ecli/extensions/**
+            -Dsonar.sca.enabled=false
             -Dsonar.python.coverage.reportPaths=coverage.xml

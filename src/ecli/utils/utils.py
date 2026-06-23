@@ -512,6 +512,115 @@ def get_project_root() -> Path:
         return Path(__file__).resolve().parents[3]
 
 
+# --- Development-checkout vs installed-user path resolution ----------------- #
+#
+# When ECLI runs from a source checkout (``uv run ecli`` at the repository
+# root), config and logs must stay inside the checkout and must never touch
+# ``~/.config/ecli``. When ECLI is installed and launched outside a checkout,
+# the installed-user XDG location is used. Explicit environment overrides win
+# over both. See ``docs/architecture/extensions-layer.md`` siblings and the
+# dev-mode contract in this module's tests.
+
+# Explicit environment overrides (highest precedence).
+ECLI_CONFIG_PATH_ENV = "ECLI_CONFIG_PATH"
+ECLI_LOG_DIR_ENV = "ECLI_LOG_DIR"
+ECLI_FORCE_USER_CONFIG_ENV = "ECLI_FORCE_USER_CONFIG"
+
+# A development checkout root is the nearest ancestor of the current working
+# directory carrying all of these markers.
+_DEV_ROOT_MARKER_PACKAGE = Path("src") / "ecli"
+_TRUTHY_ENV_VALUES = frozenset({"1", "true", "yes", "on"})
+
+
+def _force_user_config() -> bool:
+    """Return True when ``ECLI_FORCE_USER_CONFIG`` selects installed-user mode."""
+    return (
+        os.environ.get(ECLI_FORCE_USER_CONFIG_ENV, "").strip().lower()
+        in _TRUTHY_ENV_VALUES
+    )
+
+
+def find_dev_project_root(start: Path | None = None) -> Path | None:
+    """Return the nearest ECLI development-checkout root, or ``None``.
+
+    A development-checkout root is the nearest ancestor of ``start`` (defaulting
+    to the current working directory) that contains ``pyproject.toml``,
+    ``config.toml``, and a ``src/ecli`` package directory. Returns ``None`` when
+    no such ancestor exists, or when ``ECLI_FORCE_USER_CONFIG`` forces
+    installed-user behavior, so installed runs never treat an unrelated checkout
+    as ECLI's own development tree.
+    """
+    if _force_user_config():
+        return None
+    try:
+        base = (start or Path.cwd()).resolve()
+    except OSError:
+        return None
+    for directory in (base, *base.parents):
+        if (
+            (directory / "pyproject.toml").is_file()
+            and (directory / CONFIG_FILENAME).is_file()
+            and (directory / _DEV_ROOT_MARKER_PACKAGE).is_dir()
+        ):
+            return directory
+    return None
+
+
+def _env_path_override(env_name: str) -> Path | None:
+    """Return an expanded path from ``env_name`` when it is set and non-empty."""
+    raw = os.environ.get(env_name, "").strip()
+    return Path(raw).expanduser() if raw else None
+
+
+def resolve_config_path() -> tuple[Path, str]:
+    """Resolve the effective ``config.toml`` path and its resolution mode.
+
+    Precedence:
+
+    1. ``ECLI_CONFIG_PATH`` explicit override -> mode ``"override"``.
+    2. development-checkout root ``<root>/config.toml`` -> mode ``"development"``.
+    3. installed-user ``~/.config/ecli/config.toml`` -> mode ``"user"``.
+    """
+    override = _env_path_override(ECLI_CONFIG_PATH_ENV)
+    if override is not None:
+        return override, "override"
+    dev_root = find_dev_project_root()
+    if dev_root is not None:
+        return dev_root / CONFIG_FILENAME, "development"
+    return _trusted_user_config_path(), "user"
+
+
+def resolve_log_dir() -> Path:
+    """Resolve the effective directory for runtime logs (``editor.log``).
+
+    Precedence:
+
+    1. ``ECLI_LOG_DIR`` explicit override.
+    2. development-checkout root ``<root>/logs``.
+    3. installed-user ``~/.config/ecli/logs``.
+    """
+    override = _env_path_override(ECLI_LOG_DIR_ENV)
+    if override is not None:
+        return override
+    dev_root = find_dev_project_root()
+    if dev_root is not None:
+        return dev_root / "logs"
+    return _trusted_user_config_dir() / "logs"
+
+
+def resolve_env_file() -> Path:
+    """Resolve the ``.env`` path used for early environment loading.
+
+    A development checkout uses ``<root>/.env``; installed-user mode (including
+    ``ECLI_FORCE_USER_CONFIG``) uses ``~/.config/ecli/.env``. The development
+    checkout never reads ``~/.config/ecli/.env``.
+    """
+    dev_root = find_dev_project_root()
+    if dev_root is not None:
+        return dev_root / ".env"
+    return _trusted_user_config_dir() / ".env"
+
+
 def ensure_user_config_exists() -> None:
     """Checks for user config files in `~/.config/ecli` and creates them if missing."""
     try:
@@ -784,34 +893,42 @@ def load_config() -> dict[str, Any]:
     final_config = deep_merge({}, DEFAULT_CONFIG)
     logger.debug("Loaded embedded default configuration.")
 
-    ensure_user_config_exists()
+    config_path, mode = resolve_config_path()
 
-    user_config_path = _trusted_user_config_dir() / CONFIG_FILENAME
+    # Installed-user mode is the only mode that materializes and migrates
+    # ``~/.config/ecli``. Development-checkout and explicit-override modes read
+    # the target file in place and never create, copy into, or migrate the user
+    # config directory, so a source checkout stays self-contained.
+    if mode == "user":
+        ensure_user_config_exists()
+
     loaded_from = "(built-in defaults only)"
-    if user_config_path.is_file():
+    if config_path.is_file():
         try:
-            user_config = _load_toml_file(user_config_path)
+            user_config = _load_toml_file(config_path)
             final_config = deep_merge(final_config, user_config)
-            loaded_from = str(user_config_path)
-            logger.info("Loaded user config from %s", user_config_path)
+            loaded_from = str(config_path)
+            logger.info("Loaded %s config from %s", mode, config_path)
             if isinstance(user_config.get("theme"), dict):
                 logger.warning(
-                    "User config %s uses the legacy [theme] table. Set a "
+                    "Config %s uses the legacy [theme] table. Set a "
                     "valid root-level 'theme = N' (or [theme] id = N), "
                     "or run with ECLI_THEME=N.",
-                    user_config_path,
+                    config_path,
                 )
         except Exception as e:
             logger.error(
-                "Could not parse user config '%s': %s. Using defaults.",
-                user_config_path,
+                "Could not parse config '%s': %s. Using defaults.",
+                config_path,
                 e,
             )
-            loaded_from = f"{user_config_path} (parse error; using defaults)"
+            loaded_from = f"{config_path} (parse error; using defaults)"
 
-    # Record the effective config path so the runtime/UI can report which file
-    # was actually loaded (root-cause aid for "my config changes do nothing").
+    # Record the effective config path/mode so the runtime/UI can report which
+    # file was actually loaded (root-cause aid for "my config changes do
+    # nothing"). ``_config_mode`` is "override", "development", or "user".
     final_config["_loaded_config_path"] = loaded_from
+    final_config["_config_mode"] = mode
     if _CONFIG_MIGRATION_WARNINGS:
         final_config["_migration_warnings"] = tuple(_CONFIG_MIGRATION_WARNINGS)
     return final_config

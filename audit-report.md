@@ -646,3 +646,55 @@ Audit conclusion:
   scope remain untouched.
 - The issue #102 rendering gap is constrained to the ECLI-owned adapter layer,
   with focused regression and performance evidence.
+
+## Extensions runtime asset prune addendum
+
+Scope:
+
+- `src/ecli/extensions/` is now treated as a curated runtime asset bundle, not a
+  vendored copy of complete VS Code extension source repositories.
+- The prune removes non-runtime development, build, test, media, generated, and
+  activation/runtime source artifacts from the imported tree.
+- The tree is **normalized**: the root contains only `ecli_integration/`,
+  `lang/`, `themes/`, and `THIRD_PARTY_NOTICES.md`. Imported language/runtime
+  declarative folders moved under `lang/<name>`; theme folders moved under
+  `themes/<name>` with the `theme-` prefix dropped (for example
+  `theme-defaults` → `themes/defaults`).
+- Retained runtime asset categories are package manifests/NLS tables, TextMate
+  grammars, themes, snippets, language-configuration metadata, and legal
+  attribution files.
+
+Architecture and safety boundaries:
+
+- ECLI still does not execute a VS Code extension host, Node/TypeScript
+  activation, `activationEvents`, `package.json` scripts, or Copilot runtime
+  code.
+- `ecli_integration` discovery scans the curated `lang/` and `themes/` groups
+  (`registry.MANIFEST_GROUP_DIRS`); contribution-path resolution,
+  grammar/theme/language-detection adapters, TextMate tokenization, and theme
+  numbering are otherwise unchanged.
+- VS Code UI/runtime-only folders without ECLI-consumed declarative
+  language/grammar/snippet/theme assets are removed from the runtime bundle,
+  including `references-view`, `notebook-renderers`, the `*-language-features`
+  language servers, `git`/`github`, and the manifest-only / tooling-only
+  `copilot`, `npm`, `configuration-editing`, and `extension-editing` folders.
+- A generated `src-ecli-extensions.txt` inventory file was removed from the
+  runtime tree.
+- The existing F4 Diagnostics, F7 AI, F11 PySH Console Panel, TextMate
+  tokenization/rendering algorithms, startup/render loop, theme numbering, and
+  VMLab/QEMU/QMP scopes are not part of this cleanup.
+
+Validation contract:
+
+- `tests/extensions/test_extensions_tree_contract.py` enforces the normalized
+  structure: a small root allowlist (`ecli_integration/`, `lang/`, `themes/`,
+  `THIRD_PARTY_NOTICES.md`, optional `README.md`), per-group `package.json`
+  presence, the curated runtime file allowlist, and rejection of
+  source/build/test/media artifacts and flat root folders.
+- Manifest, grammar, theme, language-detection, and package-data tests verify
+  that package-referenced runtime assets still resolve and still ship in the
+  wheel and sdist.
+- `docs/architecture/extensions-layer.md`,
+  `docs/release/packaging-flows.md`, and
+  `docs/release/release-checklist.md` document the active curated asset
+  package-data contract.

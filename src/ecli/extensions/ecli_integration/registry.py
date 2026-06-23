@@ -136,22 +136,36 @@ class ExtensionRegistry:
         return None
 
 
-def discover_manifest_directories(root: Path) -> tuple[Path, ...]:
-    """Return direct-child directories of ``root`` that contain a ``package.json``.
+# Imported declarative extension manifests live in curated asset groups under
+# the extension tree root: ``lang`` holds language/grammar/snippet/language-
+# configuration contributions and ``themes`` holds colour-theme contributions.
+# ECLI's own ``ecli_integration`` package and the tree root itself are never
+# scanned for imported manifests.
+MANIFEST_GROUP_DIRS: tuple[str, ...] = ("lang", "themes")
 
-    Discovery is intentionally shallow: only immediate children of the extension
-    tree root are considered, so nested ``package.json`` files (for example
-    ``html-language-features/server/package.json``) are never picked up.
+
+def discover_manifest_directories(root: Path) -> tuple[Path, ...]:
+    """Return curated manifest directories under ``root/lang`` and ``root/themes``.
+
+    Discovery is intentionally shallow within each asset group: only immediate
+    children of ``lang`` and ``themes`` that contain a ``package.json`` are
+    considered, so nested ``package.json`` files (for example a language server's
+    ``server/package.json``, node packages, fixtures, or tests) are never picked
+    up. The tree root and ``ecli_integration`` are never treated as manifests.
     """
     if not root.is_dir():
         return ()
-    children = (entry for entry in root.iterdir() if entry.is_dir())
-    return tuple(
-        sorted(
-            (child for child in children if (child / "package.json").is_file()),
-            key=lambda path: path.name,
+    directories: list[Path] = []
+    for group in MANIFEST_GROUP_DIRS:
+        group_dir = root / group
+        if not group_dir.is_dir():
+            continue
+        directories.extend(
+            child
+            for child in group_dir.iterdir()
+            if child.is_dir() and (child / "package.json").is_file()
         )
-    )
+    return tuple(sorted(directories, key=lambda path: (path.name, path.parent.name)))
 
 
 def build_registry(root: Path | None = None) -> ExtensionRegistry:
