@@ -38,6 +38,12 @@ def isolated_home(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("XDG_CONFIG_HOME", raising=False)
     monkeypatch.delenv(THEME_ENV_VAR, raising=False)
+    # These tests exercise installed-user XDG behavior. The test process runs
+    # from the repository (a development checkout), so force user mode and clear
+    # any explicit path overrides to keep resolution deterministic.
+    monkeypatch.setenv("ECLI_FORCE_USER_CONFIG", "1")
+    monkeypatch.delenv("ECLI_CONFIG_PATH", raising=False)
+    monkeypatch.delenv("ECLI_LOG_DIR", raising=False)
     cfg_dir = tmp_path / ".config" / "ecli"
     cfg_dir.mkdir(parents=True)
     return cfg_dir

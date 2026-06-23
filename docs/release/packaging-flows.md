@@ -56,25 +56,32 @@ ecli_<version>_docker_rpm_helper_evidence.tar.gz
 ecli_<version>_workflow_contract_evidence.tar.gz
 ```
 
-## Future Extensions Layer Package-Data (planned, #98/#99)
+## Extensions Layer Package-Data
 
 The ECLI Extensions Layer (`docs/architecture/extensions-layer.md`) is an
-architecture contract only in issue #97 and changes no packaging flow here. When
-the imported, data-only asset tree lands under `src/ecli/extensions/` (issue #98)
-and is covered by tests (issue #99), the following packaging rules apply:
+active curated runtime asset bundle under `src/ecli/extensions/`. It is not a
+vendored copy of complete VS Code extension source repositories. The tree is
+normalized so the root contains only `ecli_integration/`, `lang/`, `themes/`,
+and `THIRD_PARTY_NOTICES.md`; imported language assets live under `lang/<name>`
+and theme assets under `themes/<name>`. The packaging rules are:
 
 - Extension assets must be included in the **PyPI wheel and sdist**. The wheel
-  target already includes the `src/ecli` package, but non-`.py` data files
-  (`package.json`, `*.tmLanguage`/`*.tmLanguage.json`, `*.code-snippets`,
-  `language-configuration.json`, `schemas/*.json`, `themes/*.json`,
-  `package.nls.json`, `cgmanifest.json`) require explicit
-  `[tool.hatch.build.targets.wheel.force-include]` and
-  `[tool.hatch.build.targets.sdist] include` entries, mirroring how
-  `src/ecli/assets/ecli.png` is shipped.
-- **Package-data coverage must be tested** under `tests/packaging/`, asserting the
-  imported extension data files are present in the built wheel and sdist.
-- Imported assets are read-only; packaging must ship them unchanged. Packaging
-  scripts must not mutate, reformat, or regenerate imported extension files.
+  target already includes the `src/ecli` package, so the `lang/`, `themes/`, and
+  `THIRD_PARTY_NOTICES.md` data ship automatically with no extra `force-include`
+  needed. The retained non-`.py` extension data files (`package.json`,
+  `package.nls*.json`, `*.tmLanguage`/`*.tmLanguage.json`, `*.code-snippets`,
+  language-configuration JSON, `themes/*.json`, and legal attribution files)
+  are package-data covered by tests.
+- **Package-data coverage must be tested** under `tests/extensions/` and remain
+  compatible with `tests/packaging/`, asserting the imported extension data
+  files are present in the built wheel and sdist.
+- Imported runtime assets are read-only; packaging must ship retained assets
+  unchanged. Packaging scripts must not mutate, reformat, regenerate, or restore
+  pruned extension files.
+- Enforcement tests must reject source/build/test/media artifacts, lockfiles,
+  `.vscodeignore`, Node build configs, `node_modules/`, VS Code UI/runtime-only
+  folders, and activation/runtime TypeScript or JavaScript under
+  `src/ecli/extensions/` outside `ecli_integration/`.
 - The exact 21-asset GitHub Release contract is unchanged: extension assets ride
   inside the wheel/sdist and downstream platform artifacts, not as new
   top-level release assets.

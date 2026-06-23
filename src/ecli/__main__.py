@@ -17,7 +17,8 @@ ECLI Main Entry Point
 =====================
 
 This script is the primary entry point for launching the ECLI editor. It performs:
-1) Environment Loading: reads ~/.config/ecli/.env early, so secrets are available.
+1) Environment Loading: reads the dev-checkout <repo>/.env or the installed
+   ~/.config/ecli/.env early, so secrets are available.
 2) Path Setup: ensures the ecli package is importable.
 3) Configuration & Logging: loads config and initializes logging ASAP.
 4) Core Import: imports the Ecli class after logging is ready.
@@ -47,7 +48,15 @@ if project_root not in sys.path:
 
 
 def _default_log_path() -> Path:
-    return Path.home() / ".config" / "ecli" / "logs" / "editor.log"
+    # Follow the same dev-checkout vs installed-user resolution as runtime
+    # logging. Falls back to the installed-user path if the resolver cannot be
+    # imported yet (very early startup failures).
+    try:
+        from ecli.utils.utils import resolve_log_dir  # noqa: PLC0415
+
+        return resolve_log_dir() / "editor.log"
+    except Exception:
+        return Path.home() / ".config" / "ecli" / "logs" / "editor.log"
 
 
 def _write_unconfigured_startup_traceback(message: str, exc: BaseException) -> None:
@@ -115,13 +124,19 @@ except Exception as e:
     print(f"ECLI service CLI error: {e}", file=sys.stderr)
     sys.exit(1)
 
-# --- Step 1: Load Environment Variables from the User's Config Directory ---
-# Load ~/.config/ecli/.env before runtime imports use environment.
+# --- Step 1: Load Environment Variables ---
+# In a development checkout, load <repo>/.env; when installed, load
+# ~/.config/ecli/.env. The development checkout never reads ~/.config/ecli/.env.
+# Loaded before runtime imports so secrets/overrides are available early.
 try:
     from dotenv import load_dotenv
 
-    user_config_dir = Path.home() / ".config" / "ecli"
-    dotenv_path = user_config_dir / ".env"
+    try:
+        from ecli.utils.utils import resolve_env_file
+
+        dotenv_path = resolve_env_file()
+    except Exception:
+        dotenv_path = Path.home() / ".config" / "ecli" / ".env"
     if dotenv_path.exists():
         load_dotenv(dotenv_path=dotenv_path)
 except ImportError as e:

@@ -62,7 +62,8 @@ def _make_extension(
     manifest: Mapping[str, object],
     files: Mapping[str, str] | None = None,
 ) -> Path:
-    directory = root / name
+    # Discovery only scans the curated ``lang/`` and ``themes/`` asset groups.
+    directory = root / "lang" / name
     directory.mkdir(parents=True)
     (directory / "package.json").write_text(json.dumps(manifest), encoding="utf-8")
     for relative, content in (files or {}).items():

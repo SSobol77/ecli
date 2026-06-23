@@ -36,8 +36,10 @@ def guard(repo_root: Path) -> ModuleType:
 
 
 def test_predicate_skips_imported_upstream(guard: ModuleType) -> None:
-    assert guard._is_imported_upstream(Path("extensions/python/extension.py")) is True
-    assert guard._is_imported_upstream(Path("extensions/json/server/x.py")) is True
+    assert (
+        guard._is_imported_upstream(Path("extensions/lang/python/extension.py")) is True
+    )
+    assert guard._is_imported_upstream(Path("extensions/lang/json/server/x.py")) is True
 
 
 def test_predicate_scans_adapter_and_normal_source(guard: ModuleType) -> None:

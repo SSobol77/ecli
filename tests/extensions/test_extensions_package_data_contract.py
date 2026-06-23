@@ -40,14 +40,16 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 # Representative imported assets, expressed as repository-relative source paths.
 REPRESENTATIVE_SOURCE_PATHS: tuple[str, ...] = (
-    "src/ecli/extensions/cgmanifest.json",
-    "src/ecli/extensions/bat/package.json",
-    "src/ecli/extensions/bat/language-configuration.json",
-    "src/ecli/extensions/bat/syntaxes/batchfile.tmLanguage.json",
-    "src/ecli/extensions/python/package.json",
-    "src/ecli/extensions/json/package.json",
-    "src/ecli/extensions/javascript/package.json",
-    "src/ecli/extensions/markdown-basics/package.json",
+    "src/ecli/extensions/lang/bat/package.json",
+    "src/ecli/extensions/lang/bat/language-configuration.json",
+    "src/ecli/extensions/lang/bat/syntaxes/batchfile.tmLanguage.json",
+    "src/ecli/extensions/lang/bat/snippets/batchfile.code-snippets",
+    "src/ecli/extensions/lang/git-base/languages/ignore.language-configuration.json",
+    "src/ecli/extensions/lang/python/package.json",
+    "src/ecli/extensions/lang/json/package.json",
+    "src/ecli/extensions/lang/javascript/package.json",
+    "src/ecli/extensions/lang/markdown-basics/package.json",
+    "src/ecli/extensions/themes/defaults/themes/dark_plus.json",
 )
 
 # Inside the wheel the ``src/`` prefix is dropped and ``ecli`` is the package

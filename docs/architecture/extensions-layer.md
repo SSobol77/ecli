@@ -18,16 +18,15 @@ See the LICENSE file in the project root for full license text.
 
 - Class: Normative architecture contract.
 - Milestone: v0.3.0 — Extensions Foundation.
-- Scope of this document (issue #97): architecture contract only. No code, no
-  imported asset tree, no runtime, no packaging implementation changes.
+- Scope: architecture contract plus the current curated runtime asset-tree
+  contract for `src/ecli/extensions/`.
 
-This document defines the **ECLI Extensions Layer** boundary before any asset is
-imported. It is the authority for what `src/ecli/extensions/` is, what may live
-there, and how ECLI is allowed to consume it. It exists so that issue #98 (asset
-import) and later issues land against a contract that is already agreed.
+This document defines the **ECLI Extensions Layer** boundary. It is the authority
+for what `src/ecli/extensions/` is, what may live there, and how ECLI is allowed
+to consume it.
 
-> Current state: `src/ecli/extensions/` does not exist yet. This contract is
-> written ahead of the import so the import is deterministic and reviewable.
+> Current state: `src/ecli/extensions/` exists as a curated runtime asset bundle.
+> It is not a vendored copy of full VS Code extension repositories.
 
 ## Definition
 
@@ -36,14 +35,19 @@ VS Code / TextMate-compatible, data-only assets** that ECLI uses to drive editor
 quality features: syntax highlighting, readable themes, a diagnostics/linter
 path, snippets, and language-configuration metadata.
 
-- Imported VS Code / TextMate-compatible assets live under
-  `src/ecli/extensions/`.
+- Imported VS Code / TextMate-compatible runtime assets live under
+  `src/ecli/extensions/`, normalized into two curated asset groups: language /
+  runtime declarative assets under `src/ecli/extensions/lang/` and colour-theme
+  assets under `src/ecli/extensions/themes/`.
 - `src/ecli/extensions/` is the **only** approved location for imported
   extension assets. Do not invent `vendor/`, `third_party/`,
   `src/ecli/syntax/assets/`, or any other parallel asset tree.
 - Imported / upstream assets are **read-only from the ECLI integration
-  perspective**. They must remain byte-for-byte unchanged versus their upstream
-  source.
+  perspective**. Retained runtime assets must remain byte-for-byte unchanged
+  versus their upstream source.
+- ECLI must not ship full VS Code extension source trees. Development artifacts,
+  Node build inputs, tests, media/demo assets, generated output, and extension
+  activation/runtime source are outside the runtime asset contract.
 - ECLI-specific behavior must be implemented through **deterministic adapter
   code** that reads those assets. ECLI must not patch, rewrite, or fork upstream
   files to change behavior.
@@ -118,8 +122,9 @@ are listed here so the boundary is fixed before implementation begins.
   store.
 - **language-configuration registry** — load `language-configuration.json`
   (comments, brackets, auto-closing pairs, word patterns) for editor behavior.
-- **schema registry** — index `schemas/*.json` where applicable for
-  configuration/data validation.
+- **schema registry** — out of the current runtime allowlist. It may be added
+  only through a future contract amendment with package-data and enforcement
+  tests.
 
 ## Explicitly supported data-only inputs
 
@@ -127,16 +132,87 @@ The Extensions Layer reads these file kinds and **only** these as data:
 
 - `package.json` — contribution manifest (data only; no activation/scripts).
 - `package.nls.json` — localization string table.
-- `language-configuration.json` — language editor behavior metadata.
+- `package.nls.*.json` — localized string tables.
+- `language-configuration*.json` and package-referenced
+  `*language-configuration*.json` files — language editor behavior metadata.
 - `syntaxes/*.tmLanguage.json` — TextMate grammars (JSON form).
 - `syntaxes/*.tmLanguage` — TextMate grammars (plist/XML form).
 - `snippets/*.code-snippets` — snippet definitions.
-- `schemas/*.json` — JSON schemas where applicable.
 - `themes/*.json` — color themes, if present.
-- `cgmanifest.json` — component governance / provenance manifest.
+- `LICENSE*`, `NOTICE*`, `THIRD_PARTY_NOTICES*`, and attribution-required
+  `README.md` files — legal attribution for retained assets.
 
 Any other file kind is out of scope for the Extensions Layer until this contract
 is amended.
+
+## Curated runtime asset bundle
+
+`src/ecli/extensions/` is intentionally pruned and **normalized**. Its root is
+small and contains only:
+
+- `ecli_integration/` — ECLI-owned Python adapter code (the only Python package
+  under this tree);
+- `lang/` — imported language / runtime declarative extension assets, one folder
+  per language or language bundle (for example `lang/python`, `lang/rust`,
+  `lang/cpp`, `lang/typescript-basics`, `lang/json`, `lang/yaml`,
+  `lang/markdown-basics`, `lang/git-base`);
+- `themes/` — imported colour-theme extension assets, one folder per theme
+  bundle with the `theme-` prefix dropped (for example `themes/defaults`,
+  `themes/monokai`, `themes/solarized-dark`, `themes/abyss`);
+- `THIRD_PARTY_NOTICES.md` — legal attribution for retained upstream assets;
+- optionally `README.md` documenting the bundle.
+
+The root **must not** contain dozens of flat imported language/theme extension
+folders, a generated inventory file, complete VS Code extension repositories,
+Node packages, test workspaces, demo media, generated bundles, or
+activation/runtime implementation code.
+
+Each imported folder under `lang/<name>` and `themes/<name>` may retain only:
+
+- `package.json`;
+- `package.nls.json` and `package.nls.*.json`;
+- TextMate grammars under `syntaxes/`;
+- colour themes under `themes/`;
+- snippets under `snippets/`;
+- language-configuration metadata at the path referenced by `package.json`
+  (folder root, or a `languages/` subdir);
+- legal attribution files: `LICENSE*`, `NOTICE*`, `THIRD_PARTY_NOTICES*`, and
+  attribution-required `README.md`.
+
+Disallowed imported files and directories include `.vscodeignore`, lockfiles,
+`tsconfig*.json`, `esbuild*.mts`, webpack/rollup configs, TypeScript or
+JavaScript activation/runtime source, `test/`, `tests/`, `media/`,
+`screenshots/`, demo assets, `out/`, `dist/`, `node_modules/`, `.vscode/`, and
+`.github/`.
+
+VS Code UI/runtime-only extensions that do not provide ECLI-consumed declarative
+language, grammar, snippet, or theme assets are not part of the runtime bundle.
+Examples removed from the curated tree include `references-view`,
+`notebook-renderers`, the `*-language-features` language servers, `git`,
+`github`, and the manifest-only / tooling-only folders `copilot`, `npm`,
+`configuration-editing`, and `extension-editing`.
+
+### Adapter discovery
+
+`ecli_integration` discovers imported manifests by scanning the direct children
+of `lang/` and `themes/` that contain a `package.json`
+(`registry.MANIFEST_GROUP_DIRS`). Discovery is shallow within each group, so
+nested `package.json` files are never picked up, and the tree root and the
+`ecli_integration` package itself are never treated as imported manifests.
+Contribution paths resolve relative to each manifest's own folder, so the
+`lang/` and `themes/` prefixes are reflected automatically in the
+`src/ecli/extensions/...` repo-relative records.
+
+ECLI's file-icon layer currently uses the symbolic icon table in the ECLI config
+path (`get_file_icon`) and does not consume imported VS Code icon themes.
+Therefore imported icon-theme folders are not retained unless a future adapter
+and tests make them runtime data.
+
+The enforcement contract lives in `tests/extensions/test_extensions_tree_contract.py`.
+It rejects source/build/test/media artifacts and verifies that retained files
+match the runtime allowlist. Manifest, grammar, theme, language-detection, and
+package-data tests verify that package-referenced runtime assets still resolve
+and still ship in the wheel and sdist.
 
 ## Theme Numbering Contract
 
@@ -222,20 +298,19 @@ side channel into it.
 
 ## Release / package-data impact
 
-Issue #97 does **not** change packaging. This section records the contract that
-later issues (#98/#99) must satisfy. The active release contract is the
+The active release contract is the
 `Canonical 21-Item Platform & Packaging Artifact Matrix` (summarized by the
 `Platform & Packaging Release Contract Matrix`) in
 `docs/release/artifact-contract.md`; this section is additive guidance, not a
 new matrix entry.
 
-- When the asset tree is imported (#98) and tested (#99), extension assets under
-  `src/ecli/extensions/` **must be included in the wheel and sdist**. The wheel
-  uses `[tool.hatch.build.targets.wheel] packages = ["src/ecli"]`, so Python
-  packages are included automatically, but **non-`.py` data files**
-  (`*.json`, `*.tmLanguage`, `*.code-snippets`, etc.) require explicit
-  `force-include` (wheel) and `include` (sdist) coverage in `pyproject.toml`,
-  mirroring how `src/ecli/assets/ecli.png` is handled today.
+- Curated extension assets under `src/ecli/extensions/` **must be included in
+  the wheel and sdist**. The wheel uses
+  `[tool.hatch.build.targets.wheel] packages = ["src/ecli"]`, so Python packages
+  are included automatically. The retained non-`.py` data files (`package.json`,
+  `package.nls*.json`, `*.tmLanguage`, `*.tmLanguage.json`,
+  `*.code-snippets`, language-configuration JSON, theme JSON, and legal
+  attribution files) are covered by package-data tests.
 - **Package-data coverage must be tested.** A `tests/packaging/` test must assert
   that imported extension data files are present in the built wheel and sdist
   (added in #99), the same way other packaging contracts are enforced.
@@ -251,12 +326,12 @@ new matrix entry.
   *inside* the wheel/sdist artifacts, not as new top-level release assets.
 - **Status (#99):** tree and package-data contract tests live in
   `tests/extensions/` (`test_extensions_tree_contract.py`,
-  `test_extensions_package_data_contract.py`). They prove representative
-  imported extension assets are present in the repository tree and inside the
-  built wheel and sdist. Hatchling's default file selection for
-  `packages = ["src/ecli"]` already ships the imported data files, so **no
-  additional `force-include`/`include` entries were required** in
-  `pyproject.toml`.
+  `test_extensions_package_data_contract.py`). They prove the curated runtime
+  asset allowlist, package-referenced contribution paths, and representative
+  imported extension assets inside the built wheel and sdist. Hatchling's
+  default file selection for `packages = ["src/ecli"]` already ships the
+  retained data files, so **no additional `force-include`/`include` entries were
+  required** in `pyproject.toml`.
 
 ## Adapter status
 

@@ -70,8 +70,12 @@ def registry() -> ExtensionRegistry:
 
 
 def _make_extension(root: Path, name: str, manifest: object) -> Path:
-    """Create a throwaway extension folder with a ``package.json`` payload."""
-    directory = root / name
+    """Create a throwaway extension folder with a ``package.json`` payload.
+
+    Manifests are placed under the ``lang/`` asset group because discovery only
+    scans the curated ``lang/`` and ``themes/`` groups (never the tree root).
+    """
+    directory = root / "lang" / name
     directory.mkdir(parents=True)
     payload = manifest if isinstance(manifest, str) else json.dumps(manifest)
     (directory / "package.json").write_text(payload, encoding="utf-8")
@@ -160,7 +164,7 @@ def test_theme_contributions_are_metadata_only(registry: ExtensionRegistry) -> N
     monokai = registry.find_theme_by_id("Monokai")
     assert monokai is not None
     assert monokai.path_repo_relative == (
-        "src/ecli/extensions/theme-monokai/themes/monokai-color-theme.json"
+        "src/ecli/extensions/themes/monokai/themes/monokai-color-theme.json"
     )
 
 
@@ -182,16 +186,31 @@ def test_configuration_contributions_are_metadata_only(
 
 def test_discovery_is_shallow(registry: ExtensionRegistry) -> None:
     extensions_root = paths_module.extensions_root()
-    direct_children = {
+    # Manifests live in the curated ``lang/`` and ``themes/`` asset groups, one
+    # shallow level under each group dir. The tree root itself holds no manifest.
+    group_children = {
         child.name
-        for child in extensions_root.iterdir()
+        for group in ("lang", "themes")
+        for child in (extensions_root / group).iterdir()
         if child.is_dir() and (child / "package.json").is_file()
     }
     discovered = {m.directory_name for m in registry.list_manifests()}
-    assert discovered == direct_children
-    # A known nested server manifest must never appear as its own entry.
+    assert discovered == group_children
+    # The tree root and the ECLI-owned adapter package are never manifests.
+    assert "ecli_integration" not in discovered
+    assert "lang" not in discovered
+    assert "themes" not in discovered
+    # A nested server manifest must never appear as its own entry.
     assert "server" not in discovered
-    assert "html-language-features" in discovered
+    # Curated language/theme assets are present...
+    assert "git-base" in discovered
+    assert "python" in discovered
+    assert "defaults" in discovered
+    # ...while non-runtime VS Code UI/runtime extension folders are pruned.
+    assert "html-language-features" not in discovered
+    assert "notebook-renderers" not in discovered
+    assert "references-view" not in discovered
+    assert "copilot" not in discovered
 
 
 def test_discovery_ignores_nested_package_json(tmp_path: Path) -> None:
@@ -329,6 +348,34 @@ def test_resolved_paths_stay_under_extensions_root(
             relative = repo_path[len(paths_module.REPO_RELATIVE_PREFIX) + 1 :]
             resolved = (extensions_root / relative).resolve()
             assert resolved.is_relative_to(extensions_root.resolve())
+
+
+def test_real_contribution_targets_resolve(registry: ExtensionRegistry) -> None:
+    extensions_root = paths_module.extensions_root()
+    prefix = f"{paths_module.REPO_RELATIVE_PREFIX}/"
+    unresolved: list[str] = []
+
+    for manifest in registry.list_manifests():
+        records = (
+            [(g.path, g.path_repo_relative) for g in manifest.grammars]
+            + [(s.path, s.path_repo_relative) for s in manifest.snippets]
+            + [(theme.path, theme.path_repo_relative) for theme in manifest.themes]
+            + [
+                (language.configuration_path, language.configuration_repo_path)
+                for language in manifest.languages
+            ]
+        )
+        for raw_path, repo_path in records:
+            if raw_path is None:
+                continue
+            if repo_path is None:
+                unresolved.append(f"{manifest.manifest_repo_path}: {raw_path}")
+                continue
+            relative = repo_path[len(prefix) :] if repo_path.startswith(prefix) else ""
+            if not relative or not (extensions_root / relative).is_file():
+                unresolved.append(repo_path)
+
+    assert unresolved == []
 
 
 # --------------------------------------------------------------------------- #

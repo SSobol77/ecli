@@ -147,7 +147,7 @@ def test_grammar_path_points_into_extensions_tree(
 ) -> None:
     resolution = legacy_service.resolve("example.py")
     assert resolution.grammar_path == (
-        "src/ecli/extensions/python/syntaxes/MagicPython.tmLanguage.json"
+        "src/ecli/extensions/lang/python/syntaxes/MagicPython.tmLanguage.json"
     )
 
 
@@ -260,7 +260,8 @@ def test_service_has_no_runtime_execution_primitives() -> None:
 
 
 def _make_extension(root: Path, name: str, manifest: Mapping[str, object]) -> None:
-    directory = root / name
+    # Discovery only scans the curated ``lang/`` and ``themes/`` asset groups.
+    directory = root / "lang" / name
     directory.mkdir(parents=True)
     (directory / "package.json").write_text(json.dumps(manifest), encoding="utf-8")
 
@@ -283,7 +284,7 @@ def test_service_resolves_against_fixture_root(tmp_path: Path) -> None:
             },
         },
     )
-    (tmp_path / "fixture-lang" / "g.json").write_text("{}", encoding="utf-8")
+    (tmp_path / "lang" / "fixture-lang" / "g.json").write_text("{}", encoding="utf-8")
 
     service = build_syntax_service(ExtensionLayerConfig(), root=tmp_path)
     resolution = service.resolve("demo.fxt")
