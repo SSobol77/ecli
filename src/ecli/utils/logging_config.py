@@ -24,7 +24,8 @@ Features:
     - Optional separate error log file (error.log) for ERROR and CRITICAL events.
     - Optional key event tracing (keytrace.log) enabled via the MOOPS2_KEYTRACE environment variable.
     - Automatic creation of log directories, with fallback to the system temp directory on failure.
-    - Safe reconfiguration: clears existing handlers to avoid duplicate logs when called multiple times.
+    - Safe reconfiguration: removes and closes existing handlers to avoid duplicate logs
+      and stale file descriptors when called multiple times.
     - Never raises exceptions; setup-time failures use explicit stderr fallback before curses takes ownership.
 
 Usage:
@@ -49,6 +50,7 @@ import logging.handlers
 import os
 import sys
 import tempfile
+import threading
 from types import TracebackType
 from typing import Any, Optional
 
@@ -58,6 +60,64 @@ from typing import Any, Optional
 # until ``setup_logging()`` attaches appropriate handlers.
 logger = logging.getLogger("ecli")  # main application logger
 KEY_LOGGER = logging.getLogger("ecli.keyevents")  # raw key-press trace
+
+
+class SafeRotatingFileHandler(logging.handlers.RotatingFileHandler):
+    """Rotating file handler that never lets rollover failures reach stderr."""
+
+    _rollover_lock = threading.RLock()
+
+    def doRollover(self) -> None:
+        """Perform rollover with in-process serialization and recovery."""
+        with self._rollover_lock:
+            try:
+                super().doRollover()
+            except FileNotFoundError:
+                self._recover_base_stream()
+            except OSError:
+                self._recover_base_stream()
+
+    def handleError(self, record: logging.LogRecord) -> None:
+        """Suppress logging-internal stderr writes during curses runtime."""
+        del record
+        return
+
+    def _recover_base_stream(self) -> None:
+        """Best-effort reopen of the base log after a failed rollover."""
+        self._close_stream_quietly()
+        if self.delay:
+            return
+        try:
+            log_dir = os.path.dirname(self.baseFilename)
+            if log_dir:
+                os.makedirs(log_dir, exist_ok=True)
+            self.stream = self._open()
+        except OSError:
+            self.stream = None
+
+    def _close_stream_quietly(self) -> None:
+        stream = self.stream
+        self.stream = None
+        if stream is None:
+            return
+        try:
+            stream.close()
+        except OSError:
+            return
+
+
+def _remove_and_close_handlers(target_logger: logging.Logger) -> None:
+    """Detach, flush, and close all handlers currently on ``target_logger``."""
+    for handler in target_logger.handlers[:]:
+        target_logger.removeHandler(handler)
+        try:
+            handler.flush()
+        except (OSError, ValueError):
+            pass
+        try:
+            handler.close()
+        except (OSError, ValueError):
+            pass
 
 
 def log_exception_to_file_handlers(
@@ -135,9 +195,9 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
        when the environment variable ``MOOPS2_KEYTRACE`` is set to
        ``1/true/yes``; attached to the ``ecli.keyevents`` logger.
 
-    Existing handlers on the root logger are cleared to avoid duplicate
-    records when the function is invoked multiple times (e.g. in unit
-    tests).
+    Existing handlers on the root and key-event loggers are removed and closed
+    to avoid duplicate records and stale file descriptors when the function is
+    invoked multiple times (e.g. in unit tests).
 
     Args:
         config (dict | None): Optional application configuration blob.
@@ -156,7 +216,7 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
     Side Effects:
         - Creates directories for log files if they don’t exist; falls
           back to the system temp directory on failure.
-        - Replaces all handlers on the root logger.
+        - Replaces all handlers on the root logger after closing old handlers.
         - Configures the namespace logger ``ecli.keyevents`` to not
           propagate and attaches/clears its handlers independently.
 
@@ -176,6 +236,8 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
         ... }
         >>> setup_logging(config)
     """
+    logging.raiseExceptions = False
+
     if config is None:
         config = {}
     # Main Application Logger (e.g., for editor.log). The log directory follows
@@ -204,9 +266,14 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
     file_formatter = logging.Formatter(
         "%(asctime)s - %(levelname)-8s - %(name)-15s - %(message)s (%(filename)s:%(lineno)d)"
     )
+    root_logger = logging.getLogger()
+    key_event_logger = logging.getLogger("ecli.keyevents")
+    _remove_and_close_handlers(root_logger)
+    _remove_and_close_handlers(key_event_logger)
+
     file_handler = None
     try:
-        file_handler = logging.handlers.RotatingFileHandler(
+        file_handler = SafeRotatingFileHandler(
             log_filename, maxBytes=2 * 1024 * 1024, backupCount=5, encoding="utf-8"
         )
         file_handler.setFormatter(file_formatter)
@@ -242,7 +309,7 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
             if error_log_dir and not os.path.exists(error_log_dir):
                 os.makedirs(error_log_dir, exist_ok=True)
 
-            error_file_handler = logging.handlers.RotatingFileHandler(
+            error_file_handler = SafeRotatingFileHandler(
                 error_log_filename,
                 maxBytes=1 * 1024 * 1024,
                 backupCount=3,
@@ -257,9 +324,6 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
             )
 
     # Configure the root logger
-    root_logger = logging.getLogger()
-    root_logger.handlers = []  # Clear existing root handlers to avoid duplicates
-
     if file_handler:
         root_logger.addHandler(file_handler)
     if console_handler:
@@ -280,11 +344,9 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
     logging.getLogger("asyncio").setLevel(logging.INFO)
 
     # Key Event Logger
-    key_event_logger = logging.getLogger("ecli.keyevents")
     key_event_logger.propagate = False
     key_event_logger.setLevel(logging.DEBUG)
-    # Clear any handlers that might have been added if setup_logging is called multiple times
-    key_event_logger.handlers = []
+    key_event_logger.disabled = False
 
     if os.environ.get("MOOPS2_KEYTRACE", "").lower() in {"1", "true", "yes"}:
         try:
@@ -293,7 +355,7 @@ def setup_logging(config: Optional[dict[str, Any]] = None) -> None:
             if key_trace_log_dir and not os.path.exists(key_trace_log_dir):
                 os.makedirs(key_trace_log_dir, exist_ok=True)
 
-            key_trace_handler = logging.handlers.RotatingFileHandler(
+            key_trace_handler = SafeRotatingFileHandler(
                 key_trace_filename,
                 maxBytes=1 * 1024 * 1024,
                 backupCount=3,
