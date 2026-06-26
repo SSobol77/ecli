@@ -706,6 +706,7 @@ class DrawScreen:
         current_num_color = self.colors.get(
             "ui_current_line_number", line_num_color | curses.A_BOLD
         )
+        diagnostic_line = self._active_diagnostic_highlight_line()
         cursor_y = self.editor.cursor_y
         # Iterating over visible lines on the screen
         for screen_row in range(self.editor.visible_lines):
@@ -715,7 +716,10 @@ class DrawScreen:
             # Checking if this line exists in self.text
             if line_idx < len(self.editor.text):
                 is_current = line_idx == cursor_y
-                color = current_num_color if is_current else line_num_color
+                if diagnostic_line is not None and line_idx == diagnostic_line:
+                    color = self._diagnostic_line_number_attr(line_num_color)
+                else:
+                    color = current_num_color if is_current else line_num_color
                 # Formatting the line number (1-based)
                 line_num_str = (
                     f"{line_idx + 1:>{max_line_num_digits}} "  # Right-aligning + space
@@ -737,6 +741,41 @@ class DrawScreen:
                     logging.error(
                         f"Curses error drawing empty line number background at ({draw_y}, {gutter_x}): {e}"
                     )
+
+    def _active_diagnostic_highlight_line(self) -> int | None:
+        """Return the selected diagnostic line index for the current file."""
+        highlight = getattr(self.editor, "diagnostic_line_highlight", None)
+        if not isinstance(highlight, dict):
+            return None
+        highlighted_path = str(highlight.get("file_path") or "")
+        if not highlighted_path:
+            return None
+        current_filename = getattr(self.editor, "filename", None)
+        if not current_filename:
+            return None
+        if os.path.abspath(str(current_filename)) != highlighted_path:
+            return None
+        try:
+            line_number = int(highlight.get("line", 0))
+        except (TypeError, ValueError):
+            return None
+        if line_number < 1:
+            return None
+        return line_number - 1
+
+    def _diagnostic_line_number_attr(self, fallback: int) -> int:
+        """Return the severity-specific gutter attribute for selected diagnostic."""
+        highlight = getattr(self.editor, "diagnostic_line_highlight", None)
+        severity = ""
+        if isinstance(highlight, dict):
+            severity = str(highlight.get("severity") or "")
+        if severity == "error":
+            return self.colors.get("ui_error", fallback | curses.A_BOLD)
+        if severity == "warning":
+            return self.colors.get("ui_warning", fallback | curses.A_BOLD)
+        if severity in {"info", "hint"}:
+            return self.colors.get("ui_info", fallback | curses.A_BOLD)
+        return fallback | curses.A_BOLD
 
     def _draw_lint_panel(self) -> None:
         """Draws a popup panel with the linter's results."""
@@ -1237,6 +1276,10 @@ class DrawScreen:
                 "ui_error",
                 self.colors.get("status_error", curses.A_REVERSE | curses.A_BOLD),
             )
+            c_success = self.colors.get(
+                "ui_status_success",
+                self.colors.get("ui_success", c_norm | curses.A_BOLD),
+            )
             c_git = self.colors.get("ui_success", c_norm)
             c_dirty = self.colors.get("ui_warning", c_norm | curses.A_BOLD)
 
@@ -1306,6 +1349,9 @@ class DrawScreen:
             if "error" in msg.lower():
                 err_x = left_w + pad_left
                 self.stdscr.chgat(y, err_x, msg_w, c_err)
+            elif msg.startswith("Diagnostics: PASS"):
+                pass_x = left_w + pad_left
+                self.stdscr.chgat(y, pass_x, msg_w, c_success)
 
         except curses.error:
             pass  # drawing outside screen

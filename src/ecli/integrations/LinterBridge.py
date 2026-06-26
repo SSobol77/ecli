@@ -36,7 +36,12 @@ import sys
 import threading
 import traceback
 import types
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
+
+from ecli.diagnostics.models import DiagnosticsSnapshot
+from ecli.diagnostics.ruff_provider import RuffDiagnosticProvider
+from ecli.diagnostics.service import DiagnosticsService, initial_snapshot
 
 
 if TYPE_CHECKING:
@@ -63,6 +68,16 @@ class LinterBridge:
         self._shutting_down: bool = False
         self.lsp_seq_id: int = 0
         self.lsp_doc_versions: dict[str, int] = {}
+        linter_config = self.editor.config.get("linter", {})
+        ruff_enabled = bool(linter_config.get("enabled", True))
+        self.diagnostics_service = DiagnosticsService()
+        self.diagnostics_service.register_provider(
+            RuffDiagnosticProvider(enabled=ruff_enabled)
+        )
+        self.diagnostics_snapshot: DiagnosticsSnapshot = initial_snapshot(
+            self.diagnostics_service.provider_states()
+        )
+        self._latest_diagnostics_request_generation = 0
 
         # --- State for DevOps linters ---
         self.HAS_DEVOPS_LINTERS: bool = (
@@ -76,6 +91,92 @@ class LinterBridge:
             except ImportError as e:
                 logging.error("Found 'lint_devops' but failed to import it: %s", e)
                 self.HAS_DEVOPS_LINTERS = False
+
+    def request_diagnostics_refresh(self, scope: str = "buffer") -> bool:
+        """Schedule a bounded background diagnostics refresh."""
+        file_path = self._current_file_path()
+        language = self._current_language(file_path)
+        text = os.linesep.join(self.editor.text)
+        project_root = str(self._project_root(file_path))
+        generation, started, pending_generation = (
+            self.diagnostics_service.request_refresh(
+                scope=scope,
+                file_path=file_path,
+                text=text,
+                project_root=project_root,
+                language=language,
+            )
+        )
+        self._latest_diagnostics_request_generation = generation
+        provider_states = self.diagnostics_service.provider_states()
+        if started:
+            msg = (
+                "Diagnostics refresh started."
+                if scope == "buffer"
+                else "Workspace diagnostics refresh started."
+            )
+        else:
+            msg = "Diagnostics refresh coalesced; newest request will run next."
+        self.diagnostics_snapshot = self.diagnostics_snapshot.with_refresh_state(
+            generation=generation,
+            pending_generation=pending_generation,
+            provider_states=provider_states,
+            message=msg,
+        )
+        self.editor._set_status_message(msg)
+        self.editor._force_full_redraw = True
+        logging.info(
+            "Diagnostics refresh requested: generation=%s scope=%s started=%s pending=%s",
+            generation,
+            scope,
+            started,
+            pending_generation,
+        )
+        return True
+
+    def process_diagnostics_queue(self) -> bool:
+        """Apply completed diagnostics worker results on the UI thread."""
+        changed = False
+        for result in self.diagnostics_service.drain_results():
+            if result.generation < self._latest_diagnostics_request_generation:
+                logging.info(
+                    "Dropping stale diagnostics result generation=%s latest=%s",
+                    result.generation,
+                    self._latest_diagnostics_request_generation,
+                )
+                changed = True
+                continue
+            running, pending = self.diagnostics_service.worker_state()
+            self.diagnostics_snapshot = self.diagnostics_snapshot.with_result(
+                result,
+                running_generation=running,
+                pending_generation=pending,
+            )
+            self.editor._set_status_message(result.message)
+            self.editor._force_full_redraw = True
+            changed = True
+        return changed
+
+    def _current_file_path(self) -> str | None:
+        for attribute in ("filename", "current_file_path", "file_path"):
+            value = getattr(self.editor, attribute, None)
+            if value:
+                return str(value)
+        return None
+
+    def _current_language(self, file_path: str | None) -> str | None:
+        language = getattr(self.editor, "current_language", None)
+        if language:
+            return str(language)
+        if file_path and Path(file_path).suffix.lower() in {".py", ".pyi"}:
+            return "python"
+        return None
+
+    def _project_root(self, file_path: str | None) -> Path:
+        if file_path:
+            path = Path(file_path).expanduser()
+            return path.parent if path.suffix else path
+        return Path.cwd()
 
     def run_linter(self, code: Optional[str] = None) -> bool:
         """Acts as the primary dispatcher for all linting operations.
@@ -308,7 +409,7 @@ class LinterBridge:
 
     def process_lsp_queue(self) -> bool:
         """Processes all pending messages from the internal LSP server queue."""
-        changed = False
+        changed = self.process_diagnostics_queue()
         while not self.lsp_message_q.empty():
             try:
                 message = self.lsp_message_q.get_nowait()
