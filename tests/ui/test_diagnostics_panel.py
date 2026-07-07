@@ -407,10 +407,10 @@ def test_clean_skipped_and_error_states_are_rendered() -> None:
     assert "Diagnostics failed: Ruff executable not found" in rendered(error_panel)
 
 
-def test_pass_status_message_uses_success_style_hook() -> None:
+def test_pass_status_message_uses_success_style_hook(tmp_path: Path) -> None:
     editor = FakeEditor()
     editor.status_message = "Diagnostics: PASS — no issues found."
-    editor.filename = "/tmp/f4_bad.py"
+    editor.filename = str(tmp_path / "f4_bad.py")
     window = FakeWindow()
     drawer = cast(Any, DrawScreen.__new__(DrawScreen))
     drawer.editor = editor
@@ -423,9 +423,11 @@ def test_pass_status_message_uses_success_style_hook() -> None:
     assert any(call[3] == 106 for call in window.chgat_calls)
 
 
-def test_enter_navigation_uses_editor_diagnostic_path() -> None:
+def test_enter_navigation_uses_editor_diagnostic_path(tmp_path: Path) -> None:
+    diagnostic_path = tmp_path / "example.py"
+    diagnostic_path.write_text("print('example')\n", encoding="utf-8")
     diagnostic = Diagnostic(
-        file_path="/tmp/example.py",
+        file_path=str(diagnostic_path),
         line=7,
         column=3,
         severity="warning",
@@ -449,7 +451,7 @@ def test_enter_navigation_uses_editor_diagnostic_path() -> None:
 
     assert editor.navigated == [diagnostic]
     assert editor.diagnostic_line_highlight == {
-        "file_path": os.path.abspath("/tmp/example.py"),
+        "file_path": os.path.abspath(str(diagnostic_path)),
         "line": 7,
         "severity": "warning",
         "generation": 1,
@@ -978,7 +980,7 @@ def test_goto_diagnostic_missing_file_reports_controlled_status(
     )
 
     with caplog.at_level(logging.WARNING):
-        assert editor.goto_diagnostic(diagnostic) is True
+        assert editor.goto_diagnostic(diagnostic) is False
 
     assert editor.status_messages[-1] == "Diagnostics: file not available: missing.py"
     assert "file not available" in caplog.text
@@ -1002,7 +1004,7 @@ def test_goto_diagnostic_out_of_range_location_reports_controlled_status(
     )
 
     with caplog.at_level(logging.WARNING):
-        assert editor.goto_diagnostic(diagnostic) is True
+        assert editor.goto_diagnostic(diagnostic) is False
 
     assert (
         editor.status_messages[-1]

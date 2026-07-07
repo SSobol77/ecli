@@ -12,6 +12,7 @@ from ecli.diagnostics.models import (
     DiagnosticRequest,
     DiagnosticResult,
     DiagnosticsSnapshot,
+    DiagnosticStatus,
     ProviderState,
     sort_diagnostics,
 )
@@ -179,28 +180,28 @@ class DiagnosticsService:
 
         diagnostics: list[Diagnostic] = []
         messages: list[str] = []
-        status = "ready"
+        status: DiagnosticStatus = "ready"
         saw_skipped = False
         for provider in enabled:
-            result = provider.run(request)
-            diagnostics.extend(result.diagnostics)
-            if result.status == "error":
-                status = "error"
-            elif result.status == "skipped" and status != "error":
-                saw_skipped = True
-            if result.message:
-                messages.append(result.message)
+            status, saw_skipped = self._merge_provider_result(
+                provider.run(request),
+                diagnostics,
+                messages,
+                status,
+                saw_skipped,
+            )
 
         sorted_diagnostics = sort_diagnostics(diagnostics)
-        if status == "error":
-            message = messages[-1] if messages else "Diagnostics failed."
-        elif sorted_diagnostics:
-            message = f"Diagnostics: {len(sorted_diagnostics)} issue(s)."
-        elif saw_skipped:
-            status = "skipped"
-            message = messages[-1] if messages else "Diagnostics skipped."
-        else:
-            message = "Diagnostics: PASS — no issues found."
+        status = self._final_result_status(
+            status,
+            has_diagnostics=bool(sorted_diagnostics),
+            saw_skipped=saw_skipped,
+        )
+        message = self._final_result_message(
+            status,
+            diagnostic_count=len(sorted_diagnostics),
+            messages=messages,
+        )
         return DiagnosticResult(
             generation=request.generation,
             diagnostics=sorted_diagnostics,
@@ -208,6 +209,56 @@ class DiagnosticsService:
             message=message,
             provider_states=self.provider_states(),
         )
+
+    def _merge_provider_result(
+        self,
+        result: DiagnosticResult,
+        diagnostics: list[Diagnostic],
+        messages: list[str],
+        status: DiagnosticStatus,
+        saw_skipped: bool,
+    ) -> tuple[DiagnosticStatus, bool]:
+        """Merge one provider result into aggregate diagnostics state."""
+        diagnostics.extend(result.diagnostics)
+        if result.status == "error":
+            status = "error"
+        elif result.status == "skipped" and status != "error":
+            saw_skipped = True
+        if result.message:
+            messages.append(result.message)
+        return status, saw_skipped
+
+    def _final_result_status(
+        self,
+        status: DiagnosticStatus,
+        *,
+        has_diagnostics: bool,
+        saw_skipped: bool,
+    ) -> DiagnosticStatus:
+        """Return aggregate status after all providers have run."""
+        if status == "error":
+            return "error"
+        if has_diagnostics:
+            return "ready"
+        if saw_skipped:
+            return "skipped"
+        return status
+
+    def _final_result_message(
+        self,
+        status: DiagnosticStatus,
+        *,
+        diagnostic_count: int,
+        messages: list[str],
+    ) -> str:
+        """Return aggregate message for the final diagnostics status."""
+        if status == "error":
+            return messages[-1] if messages else "Diagnostics failed."
+        if diagnostic_count:
+            return f"Diagnostics: {diagnostic_count} issue(s)."
+        if status == "skipped":
+            return messages[-1] if messages else "Diagnostics skipped."
+        return "Diagnostics: PASS — no issues found."
 
     def _enabled_providers(self) -> tuple[DiagnosticProvider, ...]:
         with self._lock:

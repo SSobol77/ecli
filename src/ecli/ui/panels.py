@@ -2196,7 +2196,16 @@ class DiagnosticsPanel(_ReadOnlyRightPanel):
             return
         self.win.erase()
         self._draw_frame(self._footer())
+        diagnostics, status_lines, viewport_height = self._prepare_visible_diagnostics()
+        self._draw_status_lines(status_lines)
+        self._draw_diagnostic_rows(diagnostics, status_lines, viewport_height)
+        self._refresh_window()
+        self._draw_details_if_open()
 
+    def _prepare_visible_diagnostics(
+        self,
+    ) -> tuple[tuple[Diagnostic, ...], list[str], int]:
+        """Sync diagnostics UI state and return drawable viewport data."""
         snapshot = self._snapshot()
         diagnostics = self._diagnostics()
         self._invalidate_stale_details(snapshot, diagnostics)
@@ -2205,6 +2214,15 @@ class DiagnosticsPanel(_ReadOnlyRightPanel):
         status_lines, viewport_height = self._status_lines_with_viewport(
             snapshot, diagnostics
         )
+        self._clamp_scroll_to_viewport(diagnostics, viewport_height)
+        return diagnostics, status_lines, viewport_height
+
+    def _clamp_scroll_to_viewport(
+        self,
+        diagnostics: tuple[Diagnostic, ...],
+        viewport_height: int,
+    ) -> None:
+        """Clamp diagnostics scrolling around the selected row."""
         if diagnostics:
             self.scroll = min(
                 max(0, self.scroll),
@@ -2217,18 +2235,18 @@ class DiagnosticsPanel(_ReadOnlyRightPanel):
         else:
             self.scroll = 0
 
+    def _draw_status_lines(self, status_lines: list[str]) -> None:
+        """Draw diagnostics status and action context lines."""
         for row_offset, line in enumerate(status_lines):
-            try:
-                self.win.addnstr(
-                    row_offset + 1,
-                    1,
-                    line,
-                    max(1, self.width - 2),
-                    self._line_attr(line),
-                )
-            except curses.error:
-                pass
+            self._draw_panel_line(row_offset + 1, line, self._line_attr(line))
 
+    def _draw_diagnostic_rows(
+        self,
+        diagnostics: tuple[Diagnostic, ...],
+        status_lines: list[str],
+        viewport_height: int,
+    ) -> None:
+        """Draw visible diagnostics rows and selected-row emphasis."""
         start_row = 1 + len(status_lines)
         rows = [self._format_diagnostic(diagnostic) for diagnostic in diagnostics]
         for row_offset, line in enumerate(rows[self.scroll : self.scroll + viewport_height]):
@@ -2237,11 +2255,17 @@ class DiagnosticsPanel(_ReadOnlyRightPanel):
             attr = self._line_attr(line)
             if diagnostics and absolute_idx == self.selected_idx:
                 attr |= self.attr_selected
-            try:
-                self.win.addnstr(row, 1, line, max(1, self.width - 2), attr)
-            except curses.error:
-                pass
-        self._refresh_window()
+            self._draw_panel_line(row, line, attr)
+
+    def _draw_panel_line(self, row: int, line: str, attr: int) -> None:
+        """Draw one panel line, discarding terminal-boundary curses errors."""
+        try:
+            self.win.addnstr(row, 1, line, max(1, self.width - 2), attr)
+        except curses.error:
+            pass
+
+    def _draw_details_if_open(self) -> None:
+        """Draw the diagnostics details popup when it is active."""
         self._draw_details_popup()
 
     def _handle_close_or_focus_key(self, key: Any) -> bool:

@@ -5441,41 +5441,73 @@ class Ecli:
 
     def goto_diagnostic(self, diagnostic: Any) -> bool:
         """Navigate to a normalized diagnostic location."""
+        location = self._normalize_diagnostic_location(diagnostic)
+        if location is None:
+            return False
+
+        file_path, target_line, target_column = location
+        label = self._diagnostic_display_label(file_path)
+        target_path = os.path.abspath(file_path)
+        if not self._open_diagnostic_target_if_needed(target_path, label):
+            return False
+
+        if not self._apply_diagnostic_cursor_location(
+            target_path,
+            label,
+            target_line,
+            target_column,
+        ):
+            return False
+
+        self._set_status_message(f"Jumped to {label}:{target_line}:{target_column}")
+        return True
+
+    def _normalize_diagnostic_location(self, diagnostic: Any) -> tuple[str, int, int] | None:
+        """Return normalized diagnostic path, line, and column."""
         file_path = str(getattr(diagnostic, "file_path", "") or "")
         try:
             target_line = max(1, int(getattr(diagnostic, "line", 1)))
             target_column = max(1, int(getattr(diagnostic, "column", 1)))
         except (TypeError, ValueError):
             self._set_status_message("Diagnostics: invalid diagnostic location.")
-            return True
+            return None
 
         if not file_path:
             self._set_status_message("Diagnostics: selected item has no file path.")
-            return True
+            return None
+        return file_path, target_line, target_column
 
-        label = self._diagnostic_display_label(file_path)
+    def _open_diagnostic_target_if_needed(self, target_path: str, label: str) -> bool:
+        """Ensure the diagnostic target file is loaded."""
         current_path = os.path.abspath(self.filename) if self.filename else None
-        target_path = os.path.abspath(file_path)
-        if current_path != target_path:
-            if not os.path.exists(target_path):
-                self._set_status_message(
-                    f"Diagnostics: file not available: {label}"
-                )
-                logging.warning(
-                    "Diagnostic navigation failed: file not available: %s",
-                    target_path,
-                )
-                return True
-            self.open_file(target_path)
-            current_path = os.path.abspath(self.filename) if self.filename else None
-            if current_path != target_path:
-                self._set_status_message(f"Diagnostics: could not open {label}")
-                logging.warning(
-                    "Diagnostic navigation failed: open_file did not load target: %s",
-                    target_path,
-                )
-                return True
+        if current_path == target_path:
+            return True
+        if not os.path.exists(target_path):
+            self._set_status_message(f"Diagnostics: file not available: {label}")
+            logging.warning(
+                "Diagnostic navigation failed: file not available: %s",
+                target_path,
+            )
+            return False
+        self.open_file(target_path)
+        current_path = os.path.abspath(self.filename) if self.filename else None
+        if current_path == target_path:
+            return True
+        self._set_status_message(f"Diagnostics: could not open {label}")
+        logging.warning(
+            "Diagnostic navigation failed: open_file did not load target: %s",
+            target_path,
+        )
+        return False
 
+    def _apply_diagnostic_cursor_location(
+        self,
+        target_path: str,
+        label: str,
+        target_line: int,
+        target_column: int,
+    ) -> bool:
+        """Move the editor cursor to a validated diagnostic location."""
         line_count = len(self.text)
         if target_line > line_count:
             self._set_status_message(
@@ -5487,7 +5519,7 @@ class Ecli:
                 target_line,
                 line_count,
             )
-            return True
+            return False
 
         line_text = self.text[target_line - 1] if self.text else ""
         max_column = len(line_text) + 1
@@ -5502,7 +5534,7 @@ class Ecli:
                 target_column,
                 max_column,
             )
-            return True
+            return False
 
         self.cursor_y = target_line - 1
         self.cursor_x = target_column - 1
@@ -5512,7 +5544,6 @@ class Ecli:
         if not (panel_manager and panel_manager.is_panel_active()):
             self.focus = "editor"
         self._force_full_redraw = True
-        self._set_status_message(f"Jumped to {label}:{target_line}:{target_column}")
         return True
 
     def _diagnostic_display_label(self, file_path: str) -> str:
@@ -7652,7 +7683,7 @@ class Ecli:
                 curses.init_pair(pair_id, fg, bg)
                 self.colors[name] = curses.color_pair(pair_id)
                 pair_id += 1
-            except (curses.error, Exception) as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 logging.debug("Chrome pair '%s' fell back to reverse: %s", name, exc)
                 self.colors[name] = curses.A_REVERSE
         return pair_id
@@ -7703,7 +7734,7 @@ class Ecli:
                 curses.init_pair(pair_id, hex_to_xterm(success_fg_hex), hex_to_xterm(bg_hex))
                 self.colors[name] = curses.color_pair(pair_id) | curses.A_BOLD
                 pair_id += 1
-            except (curses.error, Exception) as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 logging.debug("Success pair '%s' fell back to ui_success: %s", name, exc)
                 self.colors[name] = self.colors.get("ui_success", curses.A_BOLD)
         return pair_id

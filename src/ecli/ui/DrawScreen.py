@@ -675,72 +675,122 @@ class DrawScreen:
 
     def _draw_line_numbers(self) -> None:
         """Draws line numbers"""
-        # Checking the flag
         if not self.editor.show_line_numbers:
             self._text_start_x = 0  # Text starts from the left edge
             return
 
         _height, width = self.stdscr.getmaxyx()
-        # Calculating the width needed for line numbers
-        # The maximum line number is the total number of lines in the file
-        max_line_num = len(self.editor.text)
-        max_line_num_digits = len(
-            str(max(1, max_line_num))
-        )  # Minimum 1 digit for empty files
-        line_num_width = max_line_num_digits + 1  # +1 for space after number
-
-        # Checking if line numbers fit within the window width
+        max_line_num_digits, line_num_width = self._line_number_width()
         if line_num_width >= width:
             logging.warning(
                 f"Window too narrow to draw line numbers ({width} vs {line_num_width})"
             )
-            # If they don't fit, skip drawing line numbers
             self._text_start_x = 0  # Text starts from 0 column
             return
-        # Saving the starting position for text drawing
+
         self._text_start_x = line_num_width
         offset = self.content_area_y_offset
         gutter_x = self.content_area_x_offset  # leave room for the left border
         line_num_color = self.colors.get("line_number", curses.color_pair(7))
-        # Current line gets an emphasised gutter (accent + highlighted background).
         current_num_color = self.colors.get(
             "ui_current_line_number", line_num_color | curses.A_BOLD
         )
         diagnostic_line = self._active_diagnostic_highlight_line()
         cursor_y = self.editor.cursor_y
-        # Iterating over visible lines on the screen
         for screen_row in range(self.editor.visible_lines):
-            # Calculating the line index in self.text
             line_idx = self.editor.scroll_top + screen_row
             draw_y = screen_row + offset
-            # Checking if this line exists in self.text
             if line_idx < len(self.editor.text):
-                is_current = line_idx == cursor_y
-                if diagnostic_line is not None and line_idx == diagnostic_line:
-                    color = self._diagnostic_line_number_attr(line_num_color)
-                else:
-                    color = current_num_color if is_current else line_num_color
-                # Formatting the line number (1-based)
-                line_num_str = (
-                    f"{line_idx + 1:>{max_line_num_digits}} "  # Right-aligning + space
+                self._draw_single_line_number(
+                    draw_y,
+                    gutter_x,
+                    line_idx,
+                    max_line_num_digits,
+                    self._line_number_color_for(
+                        line_idx,
+                        cursor_y,
+                        diagnostic_line,
+                        line_num_color,
+                        current_num_color,
+                    ),
                 )
-                try:
-                    # Drawing the line number
-                    self.stdscr.addstr(draw_y, gutter_x, line_num_str, color)
-                except curses.error as e:
-                    logging.error(
-                        f"Curses error drawing line number at ({draw_y}, {gutter_x}): {e}"
-                    )
-                    # If an error occurs, skip drawing this line and continue
             else:
-                # Drawing empty lines with the desired background in the line number area
-                empty_num_str = " " * line_num_width
-                try:
-                    self.stdscr.addstr(draw_y, gutter_x, empty_num_str, line_num_color)
-                except curses.error as e:
-                    logging.error(
-                        f"Curses error drawing empty line number background at ({draw_y}, {gutter_x}): {e}"
-                    )
+                self._draw_empty_line_number(
+                    draw_y,
+                    gutter_x,
+                    line_num_width,
+                    line_num_color,
+                )
+
+    def _line_number_width(self) -> tuple[int, int]:
+        """Return line-number digits and total gutter width."""
+        max_line_num = len(self.editor.text)
+        max_line_num_digits = len(str(max(1, max_line_num)))
+        return max_line_num_digits, max_line_num_digits + 1
+
+    def _line_number_color_for(
+        self,
+        line_idx: int,
+        cursor_y: int,
+        diagnostic_line: int | None,
+        line_num_color: int,
+        current_num_color: int,
+    ) -> int:
+        """Return the gutter attribute for one visible line."""
+        diagnostic_color = self._diagnostic_gutter_style_for_line(
+            line_idx,
+            diagnostic_line,
+            line_num_color,
+        )
+        if diagnostic_color is not None:
+            return diagnostic_color
+        if line_idx == cursor_y:
+            return current_num_color
+        return line_num_color
+
+    def _diagnostic_gutter_style_for_line(
+        self,
+        line_idx: int,
+        diagnostic_line: int | None,
+        fallback: int,
+    ) -> int | None:
+        """Return selected-diagnostic gutter style for a line, if active."""
+        if diagnostic_line is None or line_idx != diagnostic_line:
+            return None
+        return self._diagnostic_line_number_attr(fallback)
+
+    def _draw_single_line_number(
+        self,
+        draw_y: int,
+        gutter_x: int,
+        line_idx: int,
+        max_line_num_digits: int,
+        color: int,
+    ) -> None:
+        """Draw one populated line-number gutter cell."""
+        line_num_str = f"{line_idx + 1:>{max_line_num_digits}} "
+        try:
+            self.stdscr.addstr(draw_y, gutter_x, line_num_str, color)
+        except curses.error as e:
+            logging.error(
+                f"Curses error drawing line number at ({draw_y}, {gutter_x}): {e}"
+            )
+
+    def _draw_empty_line_number(
+        self,
+        draw_y: int,
+        gutter_x: int,
+        line_num_width: int,
+        line_num_color: int,
+    ) -> None:
+        """Draw one empty line-number gutter cell."""
+        empty_num_str = " " * line_num_width
+        try:
+            self.stdscr.addstr(draw_y, gutter_x, empty_num_str, line_num_color)
+        except curses.error as e:
+            logging.error(
+                f"Curses error drawing empty line number background at ({draw_y}, {gutter_x}): {e}"
+            )
 
     def _active_diagnostic_highlight_line(self) -> int | None:
         """Return the selected diagnostic line index for the current file."""
