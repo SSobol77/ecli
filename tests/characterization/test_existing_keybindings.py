@@ -187,6 +187,9 @@ class FakeEditor:
     def run_lint_async(self) -> bool:
         return self._record("run_lint_async")
 
+    def toggle_diagnostics_panel(self) -> bool:
+        return self._record("toggle_diagnostics_panel")
+
     def show_lint_panel(self) -> bool:
         return self._record("show_lint_panel")
 
@@ -231,7 +234,7 @@ def test_action_map_keeps_existing_help_ai_file_manager_and_git_entrypoints() ->
 def test_current_f4_behavior_remains_diagnostics_not_git_panel() -> None:
     binder = make_keybinder()
 
-    assert method_name_for_key(binder, curses.KEY_F4) == "run_lint_async"
+    assert method_name_for_key(binder, curses.KEY_F4) == "toggle_diagnostics_panel"
     assert method_name_for_key(binder, curses.KEY_F4) != "show_git_panel"
 
 

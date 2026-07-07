@@ -867,7 +867,7 @@ class KeyBinder:
 
         if not self.editor.is_lightweight:
             if self.editor.linter_bridge:
-                action_to_method_map["lint"] = self.editor.run_lint_async
+                action_to_method_map["lint"] = self.editor.toggle_diagnostics_panel
                 action_to_method_map["show_lint_panel"] = self.editor.show_lint_panel
 
             if self.editor.async_engine:

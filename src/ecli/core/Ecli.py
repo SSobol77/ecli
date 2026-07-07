@@ -77,6 +77,7 @@ from wcwidth import wcswidth, wcwidth
 
 from ecli.core.AsyncEngine import AsyncEngine
 from ecli.core.CodeCommenter import CodeCommenter
+from ecli.diagnostics.display import diagnostic_display_path
 
 # Imports from ecli package
 from ecli.core.History import History
@@ -94,7 +95,7 @@ from ecli.ui.mouse import (
     hit_test,
 )
 from ecli.ui.PanelManager import PanelManager
-from ecli.ui.panels import FileBrowserPanel, GitPanel
+from ecli.ui.panels import DiagnosticsPanel, FileBrowserPanel, GitPanel
 from ecli.ui.pysh_console_panel import PySHConsolePanel
 from ecli.ui.textops import normalize_paste_text, selection_to_text
 from ecli.utils.logging_config import logger, log_record_to_file_handlers
@@ -129,6 +130,8 @@ class _LightweightGitBridge:
 class _LightweightLinterBridge:
     """No-op linter bridge used by lightweight editor instances."""
 
+    diagnostics_snapshot: Any = None
+
     def shutdown(self) -> None:
         return None
 
@@ -139,6 +142,10 @@ class _LightweightLinterBridge:
         return []
 
     def process_lsp_queue(self) -> bool:
+        return False
+
+    def request_diagnostics_refresh(self, scope: str = "buffer") -> bool:
+        _ = scope
         return False
 
 
@@ -200,6 +207,22 @@ _SYNTAX_COLOR_STRUCTURE: dict[str, tuple[int, int]] = {
     "git_deleted": (curses.COLOR_RED, curses.A_DIM),  # Deleted
     "search_highlight": (curses.COLOR_BLACK, curses.A_NORMAL),
 }
+
+
+def _hex_color_looks_green(value: str) -> bool:
+    """Return True when a hex colour is visibly green-dominant."""
+    if not isinstance(value, str):
+        return False
+    text = value.strip().lstrip("#")
+    if len(text) != 6:
+        return False
+    try:
+        red = int(text[0:2], 16)
+        green = int(text[2:4], 16)
+        blue = int(text[4:6], 16)
+    except ValueError:
+        return False
+    return green > red and green >= blue and green >= 80
 
 
 ## ==================== Ecli Class ====================
@@ -410,6 +433,14 @@ class Ecli:
                 self.lint_panel_message = new_panel_message_str
                 panel_state_or_content_changed = True
 
+        if self._diagnostics_panel_is_visible():
+            if self.lint_panel_active:
+                self.lint_panel_active = False
+                panel_state_or_content_changed = True
+            if panel_state_or_content_changed:
+                self._force_full_redraw = True
+            return
+
         if activate_lint_panel_if_issues and self.lint_panel_message:
             no_issues_substrings = ["no issues found", "no linting issues"]
             panel_message_lower = self.lint_panel_message.strip().lower()
@@ -423,6 +454,10 @@ class Ecli:
 
         if panel_state_or_content_changed and self.lint_panel_active:
             self._force_full_redraw = True
+
+    def _diagnostics_panel_is_visible(self) -> bool:
+        panel = getattr(self, "diagnostics_panel_instance", None)
+        return bool(panel is not None and getattr(panel, "visible", False))
 
     # -- Initialization and Setup ---
     def __init__(
@@ -468,6 +503,7 @@ class Ecli:
         self.current_file_path: str | None = None
         self.file_path: str | None = None
         self.filename: str | None = None
+        self.diagnostic_line_highlight: dict[str, Any] | None = None
 
         # --- initialize state & subsystems with clear failure boundaries ---
         try:
@@ -552,6 +588,7 @@ class Ecli:
         self.search_matches: list[tuple[int, int, int]] = []
         self.current_match_idx: int = -1
         self.highlighted_matches: list[tuple[int, int, int]] = []
+        self.diagnostic_line_highlight: dict[str, Any] | None = None
         self.current_language: Optional[str] = None
         self._lexer: Optional[TextLexer] = None
         self.custom_syntax_patterns: list[tuple[re.Pattern, str]] = []
@@ -569,6 +606,56 @@ class Ecli:
         self._async_results_q: queue.Queue[dict[str, Any]] = queue.Queue()
         self.internal_clipboard: str = ""
         self.service_registry: Optional[ServiceRegistry] = None
+
+    def set_diagnostic_line_highlight(
+        self,
+        diagnostic: Any,
+        *,
+        generation: int | None = None,
+    ) -> None:
+        """Expose the selected diagnostics-panel line to the renderer."""
+        file_path = str(getattr(diagnostic, "file_path", "") or "")
+        if not file_path:
+            self.clear_diagnostic_line_highlight()
+            return
+        try:
+            line = max(1, int(getattr(diagnostic, "line", 1)))
+        except (TypeError, ValueError):
+            self.clear_diagnostic_line_highlight()
+            return
+        severity = str(getattr(diagnostic, "severity", "info") or "info")
+        if severity not in {"error", "warning", "info", "hint"}:
+            severity = "info"
+        next_highlight = {
+            "file_path": os.path.abspath(file_path),
+            "line": line,
+            "severity": severity,
+            "generation": generation,
+        }
+        if getattr(self, "diagnostic_line_highlight", None) != next_highlight:
+            self.diagnostic_line_highlight = next_highlight
+            self._force_full_redraw = True
+
+    def clear_diagnostic_line_highlight(self) -> None:
+        """Clear the selected diagnostics-panel source-line marker."""
+        highlight = getattr(self, "diagnostic_line_highlight", None)
+        self.diagnostic_line_highlight = None
+        if highlight is not None:
+            self._force_full_redraw = True
+
+    def _clear_diagnostic_line_highlight_if_file_mismatch(self) -> None:
+        """Drop stale diagnostic highlighting after file switches."""
+        highlight = getattr(self, "diagnostic_line_highlight", None)
+        if highlight is None:
+            self.diagnostic_line_highlight = None
+            return
+        if not isinstance(highlight, dict):
+            return
+        highlighted_path = str(highlight.get("file_path") or "")
+        current_path = os.path.abspath(self.filename) if self.filename else ""
+        if highlighted_path and current_path == highlighted_path:
+            return
+        self.clear_diagnostic_line_highlight()
 
     # --- Component Initialization ---
     def _initialize_components(self) -> None:
@@ -588,6 +675,7 @@ class Ecli:
         self.panel_manager: Optional[PanelManager] = None
         self.git_panel_instance: Optional[GitPanel] = None
         self.file_browser_instance: Optional[FileBrowserPanel] = None
+        self.diagnostics_panel_instance: Optional[DiagnosticsPanel] = None
         self.pysh_console_panel_instance: Optional[PySHConsolePanel] = None
 
         if not self.is_lightweight:
@@ -600,6 +688,7 @@ class Ecli:
             self.panel_manager = PanelManager(self)
             self.git_panel_instance = GitPanel(self.stdscr, self)
             self.file_browser_instance = FileBrowserPanel(self.stdscr, self)
+            self.diagnostics_panel_instance = DiagnosticsPanel(self.stdscr, self)
             self.pysh_console_panel_instance = PySHConsolePanel(self.stdscr, self)
 
             if self.file_browser_instance and self.git_panel_instance:
@@ -970,6 +1059,14 @@ class Ecli:
         # No need to return anything here, as the panel manager handles the redraw.
         # This action always changes the UI state (shows a panel or a message),
         # so a redraw is always required.
+        return True
+
+    def toggle_diagnostics_panel(self) -> bool:
+        """Open or close the non-blocking Diagnostics panel."""
+        if self.diagnostics_panel_instance and self.panel_manager:
+            self.panel_manager.show_panel_instance(self.diagnostics_panel_instance)
+        else:
+            self._set_status_message("Diagnostics panel not available.")
         return True
 
     def toggle_terminal_panel(self) -> bool:
@@ -5243,6 +5340,7 @@ class Ecli:
             if not os.path.exists(actual_filename_to_open):
                 self.text = [""]
                 self.filename = None
+                self.clear_diagnostic_line_highlight()
                 self.modified = False
                 self.encoding = "utf-8"
                 self.history.clear()
@@ -5307,6 +5405,7 @@ class Ecli:
 
             self.text = lines
             self.filename = actual_filename_to_open
+            self._clear_diagnostic_line_highlight_if_file_mismatch()
             self.modified = False
             self._file_loaded_from_disk = True
             self.encoding = final_encoding_used
@@ -5339,6 +5438,132 @@ class Ecli:
             # Could also try to restore lexer, cursor, scroll but it gets complex.
             # A full redraw with the error message is the main goal.
             return True
+
+    def goto_diagnostic(self, diagnostic: Any) -> bool:
+        """Navigate to a normalized diagnostic location."""
+        location = self._normalize_diagnostic_location(diagnostic)
+        if location is None:
+            return False
+
+        file_path, target_line, target_column = location
+        label = self._diagnostic_display_label(file_path)
+        target_path = os.path.abspath(file_path)
+        if not self._open_diagnostic_target_if_needed(target_path, label):
+            return False
+
+        if not self._apply_diagnostic_cursor_location(
+            target_path,
+            label,
+            target_line,
+            target_column,
+        ):
+            return False
+
+        self._set_status_message(f"Jumped to {label}:{target_line}:{target_column}")
+        return True
+
+    def _normalize_diagnostic_location(self, diagnostic: Any) -> tuple[str, int, int] | None:
+        """Return normalized diagnostic path, line, and column."""
+        file_path = str(getattr(diagnostic, "file_path", "") or "")
+        try:
+            target_line = max(1, int(getattr(diagnostic, "line", 1)))
+            target_column = max(1, int(getattr(diagnostic, "column", 1)))
+        except (TypeError, ValueError):
+            self._set_status_message("Diagnostics: invalid diagnostic location.")
+            return None
+
+        if not file_path:
+            self._set_status_message("Diagnostics: selected item has no file path.")
+            return None
+        return file_path, target_line, target_column
+
+    def _open_diagnostic_target_if_needed(self, target_path: str, label: str) -> bool:
+        """Ensure the diagnostic target file is loaded."""
+        current_path = os.path.abspath(self.filename) if self.filename else None
+        if current_path == target_path:
+            return True
+        if not os.path.exists(target_path):
+            self._set_status_message(f"Diagnostics: file not available: {label}")
+            logging.warning(
+                "Diagnostic navigation failed: file not available: %s",
+                target_path,
+            )
+            return False
+        self.open_file(target_path)
+        current_path = os.path.abspath(self.filename) if self.filename else None
+        if current_path == target_path:
+            return True
+        self._set_status_message(f"Diagnostics: could not open {label}")
+        logging.warning(
+            "Diagnostic navigation failed: open_file did not load target: %s",
+            target_path,
+        )
+        return False
+
+    def _apply_diagnostic_cursor_location(
+        self,
+        target_path: str,
+        label: str,
+        target_line: int,
+        target_column: int,
+    ) -> bool:
+        """Move the editor cursor to a validated diagnostic location."""
+        line_count = len(self.text)
+        if target_line > line_count:
+            self._set_status_message(
+                f"Diagnostics: line out of range for {label}:{target_line}:{target_column}"
+            )
+            logging.warning(
+                "Diagnostic navigation failed: line out of range: file=%s line=%s line_count=%s",
+                target_path,
+                target_line,
+                line_count,
+            )
+            return False
+
+        line_text = self.text[target_line - 1] if self.text else ""
+        max_column = len(line_text) + 1
+        if target_column > max_column:
+            self._set_status_message(
+                f"Diagnostics: column out of range for {label}:{target_line}:{target_column}"
+            )
+            logging.warning(
+                "Diagnostic navigation failed: column out of range: file=%s line=%s column=%s max_column=%s",
+                target_path,
+                target_line,
+                target_column,
+                max_column,
+            )
+            return False
+
+        self.cursor_y = target_line - 1
+        self.cursor_x = target_column - 1
+        self._ensure_cursor_in_bounds()
+        self._clamp_scroll()
+        panel_manager = getattr(self, "panel_manager", None)
+        if not (panel_manager and panel_manager.is_panel_active()):
+            self.focus = "editor"
+        self._force_full_redraw = True
+        return True
+
+    def _diagnostic_display_label(self, file_path: str) -> str:
+        """Return the path label used in diagnostics navigation status."""
+        project_root = None
+        current_filename = getattr(self, "filename", None)
+        if current_filename:
+            current_path = Path(str(current_filename)).expanduser()
+            project_root = str(current_path.parent if current_path.suffix else current_path)
+        else:
+            registry = getattr(self, "service_registry", None)
+            project_service = getattr(registry, "project_service", None)
+            root = getattr(project_service, "root", None)
+            if root:
+                project_root = str(root)
+        return diagnostic_display_path(
+            file_path,
+            project_root=project_root,
+            cwd=os.getcwd(),
+        )
 
     # --- save file ------------------
     def save_file(self) -> bool:
@@ -6096,6 +6321,7 @@ class Ecli:
 
         self.text = [""]
         self.filename = None
+        self.clear_diagnostic_line_highlight()
         self.encoding = "UTF-8"
         self.modified = False
         self._lexer = None
@@ -7457,9 +7683,60 @@ class Ecli:
                 curses.init_pair(pair_id, fg, bg)
                 self.colors[name] = curses.color_pair(pair_id)
                 pair_id += 1
-            except (curses.error, Exception) as exc:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 logging.debug("Chrome pair '%s' fell back to reverse: %s", name, exc)
                 self.colors[name] = curses.A_REVERSE
+        return pair_id
+
+    def _success_foreground_hex(
+        self, palette: ThemePalette, theme_hex: dict[str, str]
+    ) -> str:
+        """Return a green success foreground for PASS/success UI states."""
+        candidates = (
+            palette.success,
+            theme_hex.get("git_info", ""),
+            palette.tag,
+            palette.comment,
+            "#2EA043",
+        )
+        for value in candidates:
+            if _hex_color_looks_green(value):
+                return value
+        return palette.success or palette.foreground
+
+    def _init_success_color_pairs(
+        self,
+        palette: ThemePalette,
+        theme_hex: dict[str, str],
+        start_pair_id: int,
+        can_use_256_colors: bool,
+    ) -> int:
+        """Allocate success attributes for editor, panel, and status surfaces."""
+        if not can_use_256_colors:
+            fallback = curses.A_BOLD
+            self.colors["ui_success"] = fallback
+            self.colors["ui_panel_success"] = fallback
+            self.colors["ui_status_success"] = curses.A_REVERSE | curses.A_BOLD
+            return start_pair_id
+
+        pair_id = start_pair_id
+        success_fg_hex = self._success_foreground_hex(palette, theme_hex)
+        surface_bgs = {
+            "ui_success": palette.background,
+            "ui_panel_success": palette.header_bg,
+            "ui_status_success": palette.status_bg,
+        }
+        for name, bg_hex in surface_bgs.items():
+            if pair_id >= curses.COLOR_PAIRS:
+                self.colors[name] = self.colors.get("ui_success", curses.A_BOLD)
+                continue
+            try:
+                curses.init_pair(pair_id, hex_to_xterm(success_fg_hex), hex_to_xterm(bg_hex))
+                self.colors[name] = curses.color_pair(pair_id) | curses.A_BOLD
+                pair_id += 1
+            except Exception as exc:  # noqa: BLE001
+                logging.debug("Success pair '%s' fell back to ui_success: %s", name, exc)
+                self.colors[name] = self.colors.get("ui_success", curses.A_BOLD)
         return pair_id
 
     def _init_current_line_variants(
@@ -7555,6 +7832,8 @@ class Ecli:
                 "ui_selection": curses.A_REVERSE,
                 "ui_info": curses.A_NORMAL,
                 "ui_success": curses.A_NORMAL,
+                "ui_panel_success": curses.A_NORMAL,
+                "ui_status_success": curses.A_REVERSE | curses.A_BOLD,
                 "ui_warning": curses.A_BOLD,
                 "ui_error": curses.A_BOLD,
                 "ui_dim": curses.A_DIM,
@@ -7639,7 +7918,12 @@ class Ecli:
         )
 
         # Allocate UI-chrome pairs (header/status/footer/border/current-line).
-        self._init_chrome_color_pairs(palette, pair_id_counter, can_use_256_colors)
+        pair_id_counter = self._init_chrome_color_pairs(
+            palette, pair_id_counter, can_use_256_colors
+        )
+        self._init_success_color_pairs(
+            palette, theme_hex, pair_id_counter, can_use_256_colors
+        )
 
         # Paint the editor surface with the theme background so cleared regions
         # (erase / clrtoeol) match the palette instead of the terminal default.
@@ -8583,6 +8867,12 @@ class Ecli:
         # Then, attempt to read a key press from the user.
         key_input = self.keybinder.get_key_input()
 
+        # A worker can publish results while get_key_input() is waiting for the
+        # next key. Drain once more before dispatch so the key acts on current
+        # UI-side state, e.g. Enter on a diagnostics result that just arrived.
+        if self._process_all_queues():
+            redraw_needed = True
+
         # Proceed only if a valid key was received (not an error or timeout).
         if key_input != curses.ERR and key_input != -1:
             # Bracketed paste: insert the whole payload as one transaction and
@@ -8617,10 +8907,9 @@ class Ecli:
         """Dispatches a key press to the correct handler (panel or editor).
 
         Routing order:
-        1. Global Help shortcut.
-        2. Global AI Code Assistant shortcut.
-        3. Focused active panel.
-        4. Main editor keybinder.
+        1. Global Help, Quit, Diagnostics, and tool-panel shortcuts.
+        2. Focused active panel.
+        3. Main editor keybinder.
 
         Args:
             key_input: The key event received from curses.
@@ -8630,6 +8919,12 @@ class Ecli:
                   press caused a state change (True) or not (False).
         """
         if self.keybinder.is_key_for_action(key_input, "help"):
+            return self.handle_input(key_input)
+
+        if self.keybinder.is_key_for_action(key_input, "quit"):
+            return self.handle_input(key_input)
+
+        if self.keybinder.is_key_for_action(key_input, "lint"):
             return self.handle_input(key_input)
 
         if self.keybinder.is_key_for_action(key_input, "toggle_widget_panel"):

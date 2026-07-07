@@ -56,6 +56,12 @@ from typing import TYPE_CHECKING, Any, Optional
 import pyperclip
 from wcwidth import wcswidth
 
+from ecli.diagnostics.display import (
+    diagnostic_display_path,
+    truncate_end,
+    truncate_middle,
+)
+from ecli.diagnostics.models import Diagnostic, DiagnosticsSnapshot
 from ecli.integrations.GitBridge import GitBridge, GitCommandResult
 from ecli.ui.design import TuiDesign
 from ecli.ui.geometry import centered_modal_rect, compute_layout
@@ -87,6 +93,7 @@ SIDE_PANEL_KINDS: frozenset[str] = frozenset(
         "system_doctor",
         "ai_provider",
         "command_plan",
+        "diagnostics",
         "services",
         "terminal",  # PySH Console Panel (F11)
     }
@@ -1740,6 +1747,10 @@ class _ReadOnlyRightPanel(BasePanel):
         )
         self.attr_warning = self.editor.colors.get("ui_panel_warning", curses.A_BOLD)
         self.attr_error = self.editor.colors.get("ui_panel_error", curses.A_BOLD)
+        self.attr_success = self.editor.colors.get(
+            "ui_panel_success",
+            self.editor.colors.get("ui_success", curses.A_BOLD),
+        )
 
     def resize(self) -> None:
         """Handle terminal resize by recreating the backing panel window."""
@@ -2104,6 +2115,563 @@ class ServicesPanel(_ReadOnlyRightPanel):
             lines.append("")
             lines.append(f"Config diagnostics: {len(diagnostics)}")
         return lines
+
+
+class DiagnosticsPanel(_ReadOnlyRightPanel):
+    """Right-side diagnostics list panel backed by the diagnostics service."""
+
+    title = " Diagnostics "
+    panel_kind = "diagnostics"
+    close_key = getattr(curses, "KEY_F4", 268)
+    _SEVERITY_LABELS = {
+        "error": "E",
+        "warning": "W",
+        "info": "I",
+        "hint": "H",
+    }
+
+    def __init__(
+        self, stdscr: CursesWindow, main_editor_instance: Ecli, **kwargs: Any
+    ) -> None:
+        super().__init__(stdscr, main_editor_instance, **kwargs)
+        self.selected_idx = 0
+        self._last_navigation_message: str | None = None
+        self._details_generation: int | None = None
+        self._details_key: tuple[object, ...] | None = None
+        self._details_diagnostic: Diagnostic | None = None
+
+    def open(self) -> None:
+        """Open without starting a linter run."""
+        super().open()
+        self._clear_legacy_lint_popup()
+        self._sync_selected_diagnostic_highlight(self._snapshot(), self._diagnostics())
+        self.editor._set_status_message(
+            "Diagnostics: r run file, R run workspace, Enter jump, d details"
+        )
+
+    def close(self) -> None:
+        """Close the panel and any selected-diagnostic details popup."""
+        self._clear_details_popup()
+        self._clear_diagnostic_line_highlight()
+        self._clear_legacy_lint_popup()
+        super().close()
+
+    def handle_key(self, key: Any) -> bool:
+        """Handle diagnostics panel navigation and explicit refresh actions."""
+        if self._details_is_open() and key == 27:
+            self._clear_details_popup()
+            self.editor._set_status_message("Diagnostic details closed.")
+            return True
+        if self._handle_close_or_focus_key(key):
+            return True
+        if self._matches_key(key, "r"):
+            return self._request_refresh("buffer")
+        if self._matches_key(key, "R"):
+            return self._request_refresh("workspace")
+        if self._matches_key(key, "d") or key in (ord(" "), " "):
+            self._open_details_popup()
+            return True
+        if key in (curses.KEY_UP, ord("k"), "k"):
+            self._move_selection(-1)
+            return True
+        if key in (curses.KEY_DOWN, ord("j"), "j"):
+            self._move_selection(1)
+            return True
+        if key == curses.KEY_PPAGE:
+            self._move_selection(-max(1, self.height - 4))
+            return True
+        if key == curses.KEY_NPAGE:
+            self._move_selection(max(1, self.height - 4))
+            return True
+        if key in (curses.KEY_ENTER, 10, 13, "\n"):
+            self._jump_to_selected()
+            return True
+        return False
+
+    def draw(self) -> None:
+        """Render diagnostics state and current selection."""
+        if not self.visible or self.win is None:
+            return
+        if self.height < 5 or self.width < 25:
+            return
+        self.win.erase()
+        self._draw_frame(self._footer())
+        diagnostics, status_lines, viewport_height = self._prepare_visible_diagnostics()
+        self._draw_status_lines(status_lines)
+        self._draw_diagnostic_rows(diagnostics, status_lines, viewport_height)
+        self._refresh_window()
+        self._draw_details_if_open()
+
+    def _prepare_visible_diagnostics(
+        self,
+    ) -> tuple[tuple[Diagnostic, ...], list[str], int]:
+        """Sync diagnostics UI state and return drawable viewport data."""
+        snapshot = self._snapshot()
+        diagnostics = self._diagnostics()
+        self._invalidate_stale_details(snapshot, diagnostics)
+        self.selected_idx = min(self.selected_idx, max(0, len(diagnostics) - 1))
+        self._sync_selected_diagnostic_highlight(snapshot, diagnostics)
+        status_lines, viewport_height = self._status_lines_with_viewport(
+            snapshot, diagnostics
+        )
+        self._clamp_scroll_to_viewport(diagnostics, viewport_height)
+        return diagnostics, status_lines, viewport_height
+
+    def _clamp_scroll_to_viewport(
+        self,
+        diagnostics: tuple[Diagnostic, ...],
+        viewport_height: int,
+    ) -> None:
+        """Clamp diagnostics scrolling around the selected row."""
+        if diagnostics:
+            self.scroll = min(
+                max(0, self.scroll),
+                max(0, len(diagnostics) - viewport_height),
+            )
+            if self.selected_idx < self.scroll:
+                self.scroll = self.selected_idx
+            elif self.selected_idx >= self.scroll + viewport_height:
+                self.scroll = self.selected_idx - viewport_height + 1
+        else:
+            self.scroll = 0
+
+    def _draw_status_lines(self, status_lines: list[str]) -> None:
+        """Draw diagnostics status and action context lines."""
+        for row_offset, line in enumerate(status_lines):
+            self._draw_panel_line(row_offset + 1, line, self._line_attr(line))
+
+    def _draw_diagnostic_rows(
+        self,
+        diagnostics: tuple[Diagnostic, ...],
+        status_lines: list[str],
+        viewport_height: int,
+    ) -> None:
+        """Draw visible diagnostics rows and selected-row emphasis."""
+        start_row = 1 + len(status_lines)
+        rows = [self._format_diagnostic(diagnostic) for diagnostic in diagnostics]
+        for row_offset, line in enumerate(rows[self.scroll : self.scroll + viewport_height]):
+            row = start_row + row_offset
+            absolute_idx = self.scroll + row_offset
+            attr = self._line_attr(line)
+            if diagnostics and absolute_idx == self.selected_idx:
+                attr |= self.attr_selected
+            self._draw_panel_line(row, line, attr)
+
+    def _draw_panel_line(self, row: int, line: str, attr: int) -> None:
+        """Draw one panel line, discarding terminal-boundary curses errors."""
+        try:
+            self.win.addnstr(row, 1, line, max(1, self.width - 2), attr)
+        except curses.error:
+            pass
+
+    def _draw_details_if_open(self) -> None:
+        """Draw the diagnostics details popup when it is active."""
+        self._draw_details_popup()
+
+    def _handle_close_or_focus_key(self, key: Any) -> bool:
+        if key in (self.close_key, 27, ord("q"), "q"):
+            self._clear_details_popup()
+            self._clear_diagnostic_line_highlight()
+            self._clear_legacy_lint_popup()
+            if hasattr(self.editor, "panel_manager") and self.editor.panel_manager:
+                self.editor.panel_manager.close_active_panel()
+            else:
+                self.close()
+            return True
+        if key == getattr(curses, "KEY_F12", 276):
+            if hasattr(self.editor, "toggle_focus"):
+                self.editor.toggle_focus()
+            return True
+        return False
+
+    def _request_refresh(self, scope: str) -> bool:
+        bridge = getattr(self.editor, "linter_bridge", None)
+        requester = getattr(bridge, "request_diagnostics_refresh", None)
+        if not callable(requester):
+            self.editor._set_status_message("Diagnostics service is not available.")
+            return True
+        self._clear_details_popup()
+        self._clear_diagnostic_line_highlight()
+        self._clear_legacy_lint_popup()
+        self._last_navigation_message = None
+        return bool(requester(scope=scope))
+
+    def _move_selection(self, delta: int) -> None:
+        diagnostics = self._diagnostics()
+        if not diagnostics:
+            self.selected_idx = 0
+            return
+        new_idx = max(0, min(len(diagnostics) - 1, self.selected_idx + delta))
+        if new_idx != self.selected_idx:
+            self._last_navigation_message = None
+            self._clear_details_popup()
+        self.selected_idx = new_idx
+        self._sync_selected_diagnostic_highlight(self._snapshot(), diagnostics)
+
+    def _jump_to_selected(self) -> None:
+        diagnostic = self._selected_diagnostic()
+        if diagnostic is None:
+            self.editor._set_status_message("Diagnostics: no diagnostic selected.")
+            return
+        navigator = getattr(self.editor, "goto_diagnostic", None)
+        if callable(navigator):
+            before = getattr(self.editor, "status_message", "")
+            navigator(diagnostic)
+            after = getattr(self.editor, "status_message", "")
+            if isinstance(after, str) and after and after != before:
+                self._last_navigation_message = after
+            return
+        self.editor._set_status_message("Diagnostics navigation is not available.")
+
+    def _selected_diagnostic(self) -> Diagnostic | None:
+        diagnostics = self._diagnostics()
+        if not diagnostics:
+            return None
+        self.selected_idx = max(0, min(len(diagnostics) - 1, self.selected_idx))
+        return diagnostics[self.selected_idx]
+
+    def _status_lines_with_viewport(
+        self,
+        snapshot: DiagnosticsSnapshot | None,
+        diagnostics: tuple[Diagnostic, ...],
+    ) -> tuple[list[str], int]:
+        showing: tuple[int, int] | None = None
+        status_lines = self._status_lines(snapshot, diagnostics, showing)
+        while True:
+            viewport_height = max(0, self.height - 2 - len(status_lines))
+            visible_count = min(len(diagnostics), viewport_height)
+            next_showing = (
+                (visible_count, len(diagnostics))
+                if diagnostics and visible_count < len(diagnostics)
+                else None
+            )
+            next_status_lines = self._status_lines(
+                snapshot, diagnostics, next_showing
+            )
+            if next_showing == showing and len(next_status_lines) == len(status_lines):
+                return next_status_lines, viewport_height
+            showing = next_showing
+            status_lines = next_status_lines
+
+    def _status_lines(
+        self,
+        snapshot: DiagnosticsSnapshot | None,
+        diagnostics: tuple[Diagnostic, ...],
+        showing: tuple[int, int] | None,
+    ) -> list[str]:
+        if snapshot is None or snapshot.status == "idle":
+            return [
+                "Diagnostics not run yet.",
+                "Press r to run diagnostics for this file.",
+            ]
+        if snapshot.status == "running":
+            return ["Running diagnostics..."]
+        if snapshot.status == "skipped":
+            return [f"Diagnostics skipped: {self._status_reason(snapshot)}"]
+        if snapshot.status == "error":
+            return [f"Diagnostics failed: {self._status_reason(snapshot)}"]
+        if diagnostics:
+            lines = [f"Diagnostics: {len(diagnostics)} issue(s)."]
+            if showing is not None:
+                visible_count, total_count = showing
+                lines.append(f"Showing {visible_count}/{total_count} diagnostics")
+            return lines
+        return ["Diagnostics: PASS", "No issues found."]
+
+    def _status_reason(self, snapshot: DiagnosticsSnapshot) -> str:
+        message = " ".join(str(snapshot.message or "").split())
+        for prefix in (
+            "Diagnostics skipped:",
+            "Diagnostics failed:",
+            "Diagnostics error:",
+        ):
+            if message.startswith(prefix):
+                message = message[len(prefix) :].strip()
+                break
+        return message or "unknown reason"
+
+    def _line_attr(self, line: str) -> int:
+        if line.startswith("E "):
+            return self.attr_error
+        if line.startswith("W "):
+            return self.attr_warning
+        if line.startswith(("I ", "H ")):
+            return self.attr_dim
+        if line.startswith("Diagnostics failed:"):
+            return self.attr_error
+        if line.startswith("Diagnostics skipped:"):
+            return self.attr_warning
+        if line.startswith("Diagnostics: PASS"):
+            return self.attr_success
+        if line.startswith(("Press ", "Showing ")):
+            return self.attr_dim
+        return super()._line_attr(line)
+
+    def _format_diagnostic(self, diagnostic: Diagnostic) -> str:
+        severity = self._SEVERITY_LABELS.get(diagnostic.severity, "?")
+        source = truncate_end(str(diagnostic.source or "?"), 12)
+        prefix = f"{severity} {source} "
+        path = self._display_path(diagnostic.file_path)
+        location_suffix = f":{diagnostic.line}:{diagnostic.column}"
+        message = self._row_message(diagnostic)
+        content_width = max(1, self.width - 2)
+
+        full_row = f"{prefix}{path}{location_suffix} {message}"
+        if len(full_row) <= content_width:
+            return full_row
+        return self._fit_diagnostic_row(
+            prefix=prefix,
+            path=path,
+            location_suffix=location_suffix,
+            message=message,
+            content_width=content_width,
+        )
+
+    def _fit_diagnostic_row(
+        self,
+        *,
+        prefix: str,
+        path: str,
+        location_suffix: str,
+        message: str,
+        content_width: int,
+    ) -> str:
+        if content_width <= len(prefix):
+            return truncate_end(prefix, content_width)
+
+        usable = content_width - len(prefix)
+        full_location = f"{path}{location_suffix}"
+        if usable <= len(location_suffix) + 2:
+            return truncate_end(f"{prefix}{full_location}", content_width)
+
+        min_message_width = min(len(message), max(7, content_width // 4))
+        location_width = min(
+            len(full_location),
+            max(len(location_suffix) + 1, usable - min_message_width - 1),
+        )
+        message_width = max(1, usable - location_width - 1)
+        if message_width < min_message_width and location_width > len(location_suffix) + 1:
+            deficit = min_message_width - message_width
+            shrink_by = min(deficit, location_width - len(location_suffix) - 1)
+            location_width -= shrink_by
+            message_width += shrink_by
+
+        location = self._fit_location(path, location_suffix, location_width)
+        message_width = max(1, usable - len(location) - 1)
+        row = f"{prefix}{location} {truncate_end(message, message_width)}"
+        return truncate_end(row, content_width)
+
+    def _fit_location(self, path: str, suffix: str, max_width: int) -> str:
+        location = f"{path}{suffix}"
+        if len(location) <= max_width:
+            return location
+        basename = Path(path).name or path
+        basename_location = f"{basename}{suffix}"
+        if len(basename_location) <= max_width:
+            return basename_location
+        path_width = max(1, max_width - len(suffix))
+        return f"{truncate_middle(basename, path_width)}{suffix}"
+
+    def _row_message(self, diagnostic: Diagnostic) -> str:
+        message = " ".join(str(diagnostic.message or "Diagnostic").split())
+        return message or "Diagnostic"
+
+    def _display_path(self, file_path: str | None) -> str:
+        return diagnostic_display_path(
+            file_path,
+            project_root=self._diagnostics_project_root(),
+            cwd=os.getcwd(),
+        )
+
+    def _diagnostics_project_root(self) -> str | None:
+        filename = getattr(self.editor, "filename", None)
+        if filename:
+            path = Path(str(filename)).expanduser()
+            return str(path.parent if path.suffix else path)
+        registry = getattr(self.editor, "service_registry", None)
+        project_service = getattr(registry, "project_service", None)
+        root = getattr(project_service, "root", None)
+        return str(root) if root else None
+
+    def _diagnostics(self) -> tuple[Diagnostic, ...]:
+        snapshot = self._snapshot()
+        if snapshot is None:
+            return ()
+        return snapshot.diagnostics
+
+    def _snapshot(self) -> DiagnosticsSnapshot | None:
+        bridge = getattr(self.editor, "linter_bridge", None)
+        snapshot = getattr(bridge, "diagnostics_snapshot", None)
+        if isinstance(snapshot, DiagnosticsSnapshot):
+            return snapshot
+        return None
+
+    def _footer(self) -> str:
+        full = " r:Run file R:Run workspace Enter:Jump d:Details Esc/F4/q:Close "
+        compact = " r:Run R:Workspace Enter:Jump d:Details Esc/F4/q:Close "
+        return full if len(full) <= self.width - 4 else compact
+
+    def _open_details_popup(self) -> None:
+        diagnostic = self._selected_diagnostic()
+        snapshot = self._snapshot()
+        if diagnostic is None or snapshot is None:
+            self.editor._set_status_message("Diagnostics: no diagnostic selected.")
+            return
+        self._details_generation = snapshot.generation
+        self._details_key = self._diagnostic_key(diagnostic)
+        self._details_diagnostic = diagnostic
+        self._clear_legacy_lint_popup()
+        self.editor._set_status_message("Diagnostic details opened.")
+        if hasattr(self.editor, "_force_full_redraw"):
+            self.editor._force_full_redraw = True
+
+    def _draw_details_popup(self) -> None:
+        if not self._details_is_open():
+            return
+        diagnostic = self._details_diagnostic
+        if diagnostic is None:
+            return
+        modal_width = min(max(52, self.term_width // 2), max(20, self.term_width - 4))
+        content_width = max(1, modal_width - 4)
+        popup_lines = self._details_lines(diagnostic, content_width)
+        modal_height = min(
+            max(9, len(popup_lines) + 4),
+            max(5, self.term_height - 2),
+        )
+        rect = centered_modal_rect(
+            self.term_width,
+            self.term_height,
+            modal_width,
+            modal_height,
+        )
+        try:
+            win = curses.newwin(rect.height, rect.width, rect.y, rect.x)
+            win.keypad(True)
+            self._make_opaque(win)
+            win.border()
+            title = "Diagnostic details"
+            win.addnstr(0, 2, f" {title} ", max(1, rect.width - 4), self.attr_title)
+            for row_offset, line in enumerate(popup_lines[: rect.height - 3]):
+                win.addnstr(
+                    row_offset + 1,
+                    2,
+                    line,
+                    content_width,
+                    self.attr_text,
+                )
+            win.addnstr(
+                rect.height - 2,
+                2,
+                "Esc: close",
+                content_width,
+                self.attr_dim,
+            )
+            self._present(win)
+        except curses.error:
+            pass
+
+    def _details_lines(
+        self, diagnostic: Diagnostic, content_width: int
+    ) -> list[str]:
+        path = self._display_path(diagnostic.file_path)
+        lines = [
+            f"File: {path}",
+            f"Location: {diagnostic.line}:{diagnostic.column}",
+            f"Source: {diagnostic.source or '?'}",
+        ]
+        if diagnostic.code:
+            lines.append(f"Code: {diagnostic.code}")
+        message = self._row_message(diagnostic)
+        lines.extend(self._wrapped_detail("Message: ", message, content_width))
+        if diagnostic.fix_hint:
+            lines.extend(
+                self._wrapped_detail("Fix hint: ", diagnostic.fix_hint, content_width)
+            )
+        if diagnostic.suggested_code:
+            code_shape = " ".join(str(diagnostic.suggested_code).split())
+            lines.extend(self._wrapped_detail("Suggested: ", code_shape, content_width))
+        lines.append("Preview only. No changes were applied.")
+        return lines
+
+    def _wrapped_detail(self, prefix: str, value: str, width: int) -> list[str]:
+        width = max(20, min(width, 96))
+        text = " ".join(str(value).split())
+        wrapped = textwrap.wrap(text, width=max(1, width - len(prefix))) or [""]
+        lines = [f"{prefix}{wrapped[0]}"]
+        indent = " " * len(prefix)
+        lines.extend(f"{indent}{line}" for line in wrapped[1:])
+        return lines
+
+    def _details_is_open(self) -> bool:
+        return self._details_generation is not None
+
+    def _clear_details_popup(self) -> None:
+        self._details_generation = None
+        self._details_key = None
+        self._details_diagnostic = None
+        if hasattr(self.editor, "_force_full_redraw"):
+            self.editor._force_full_redraw = True
+
+    def _invalidate_stale_details(
+        self,
+        snapshot: DiagnosticsSnapshot | None,
+        diagnostics: tuple[Diagnostic, ...],
+    ) -> None:
+        if not self._details_is_open():
+            return
+        if snapshot is None or snapshot.generation != self._details_generation:
+            self._clear_details_popup()
+            return
+        if not diagnostics:
+            self._clear_details_popup()
+            return
+        selected = self._selected_diagnostic()
+        if selected is None or self._diagnostic_key(selected) != self._details_key:
+            self._clear_details_popup()
+
+    def _sync_selected_diagnostic_highlight(
+        self,
+        snapshot: DiagnosticsSnapshot | None,
+        diagnostics: tuple[Diagnostic, ...],
+    ) -> None:
+        if snapshot is None or snapshot.status != "ready" or not diagnostics:
+            self._clear_diagnostic_line_highlight()
+            return
+        diagnostic = self._selected_diagnostic()
+        if diagnostic is None:
+            self._clear_diagnostic_line_highlight()
+            return
+        setter = getattr(self.editor, "set_diagnostic_line_highlight", None)
+        if callable(setter):
+            setter(diagnostic, generation=snapshot.generation)
+
+    def _clear_diagnostic_line_highlight(self) -> None:
+        clearer = getattr(self.editor, "clear_diagnostic_line_highlight", None)
+        if callable(clearer):
+            clearer()
+
+    def _diagnostic_key(self, diagnostic: Diagnostic) -> tuple[object, ...]:
+        return (
+            diagnostic.file_path,
+            diagnostic.line,
+            diagnostic.column,
+            diagnostic.severity,
+            diagnostic.source,
+            diagnostic.code,
+            diagnostic.message,
+            diagnostic.fix_hint,
+            diagnostic.suggested_code,
+        )
+
+    def _clear_legacy_lint_popup(self) -> None:
+        if hasattr(self.editor, "lint_panel_active"):
+            self.editor.lint_panel_active = False
+        drawer = getattr(self.editor, "drawer", None)
+        if drawer is not None and hasattr(drawer, "_next_lint_panel_hide_ts"):
+            drawer._next_lint_panel_hide_ts = 0
+
+    def _matches_key(self, key: Any, char: str) -> bool:
+        return key == char or key == ord(char)
 
 
 # ==================== GitPanel Class ====================
