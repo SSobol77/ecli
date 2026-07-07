@@ -114,7 +114,6 @@ Canonical Python entrypoints include `scripts/sign_checksums.py`,
 
 `scripts/build-and-package-windows.ps1` is a separate Windows-native packaging
 surface (PowerShell), not part of the shell-to-Python migration.
-`.claude/hooks/block-mutations.sh` is a Claude hook, not a packaging script.
 `tools/freebsd-chroot-build.sh` is a separate FreeBSD chroot helper outside the
 script migration. The unused FreeBSD package-renaming shell helper was removed
 during no-shell cleanup. Release readiness is blocked if active shell is

@@ -70,8 +70,6 @@ LIVE_EMPTY_FILE_ROOTS = (
     "docs/contributor",
     "docs/product",
     "tests",
-    ".claude",
-    ".codex",
     ".github/workflows",
 )
 
@@ -83,8 +81,6 @@ LIVE_REFERENCE_ROOTS = (
     "docs/release",
     "docs/contributor",
     "docs/product",
-    ".claude",
-    ".codex",
     "tests",
 )
 
@@ -202,9 +198,6 @@ def test_live_contract_surfaces_name_python_entrypoints(
         read_repo_text(path)
         for path in (
             "Makefile",
-            "AGENTS.md",
-            "CODEX.md",
-            "CLAUDE.md",
             "docs/release/artifact-contract.md",
             "docs/release/packaging-flows.md",
             "docs/release/build-matrix.md",
@@ -212,12 +205,6 @@ def test_live_contract_surfaces_name_python_entrypoints(
             "docs/release/release-checklist.md",
             "docs/release/artifact-verification.md",
             *RELEASE_DOC_FILES,
-            ".claude/build-runbook.md",
-            ".claude/release-runbook.md",
-            ".claude/validation-runbook.md",
-            ".codex/runbooks/build.md",
-            ".codex/runbooks/release.md",
-            ".codex/runbooks/validation.md",
         )
     )
 
@@ -229,13 +216,11 @@ def test_non_migrated_shell_surfaces_are_explicitly_classified(
     repo_root: Path,
     read_repo_text: RepoReader,
 ) -> None:
-    hook = repo_root / ".claude" / "hooks" / "block-mutations.sh"
     chroot_tool = repo_root / "tools" / "freebsd-chroot-build.sh"
     removed_rename_tool = repo_root / "tools" / "rename-freebsd-pkg"
     removed_rename_tool = removed_rename_tool.with_suffix(".sh")
     windows_packager = repo_root / "scripts" / "build-and-package-windows.ps1"
 
-    assert hook.is_file()
     assert chroot_tool.is_file()
     assert not removed_rename_tool.exists()
     assert windows_packager.is_file()
@@ -247,12 +232,8 @@ def test_non_migrated_shell_surfaces_are_explicitly_classified(
             "docs/release/packaging-flows.md",
             "docs/contributor/build-from-source.md",
             "docs/contributor/development-setup.md",
-            "AGENTS.md",
-            "CODEX.md",
-            "CLAUDE.md",
         )
     )
-    assert ".claude/hooks/block-mutations.sh" in docs
     assert "tools/freebsd-chroot-build.sh" in docs
     assert "removed FreeBSD package-renaming shell helper" in docs
     assert "scripts/build-and-package-windows.ps1" in docs

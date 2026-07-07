@@ -54,6 +54,9 @@ def test_pypi_sdist_includes_main_shim_and_sources(read_repo_text: RepoReader) -
 
 
 def test_pypi_sdist_upload_stays_maintainer_owned(read_repo_text: RepoReader) -> None:
-    prompt = read_repo_text(".codex/prompts/package-pypi.md")
-    assert "twine upload" in prompt
-    assert "artifact upload by Codex" in prompt
+    guard = read_repo_text("scripts/publish_pypi.py")
+    assert "maintainer-owned" in guard
+    assert "does **not** upload anything" in guard
+
+    release_process = read_repo_text("docs/release/release-process.md")
+    assert "twine upload" in release_process

@@ -28,10 +28,6 @@ WORKFLOW_CONTRACT = {
             "docs/release/artifact-contract.md",
             "docs/release/build-matrix.md",
         ],
-        "agent_contracts": [
-            ".codex/roles/quality-engineer.md",
-            ".codex/roles/build-engineer.md",
-        ],
         "packaging_tests": ["tests/packaging/test_packaging_workflows_contract.py"],
     },
     "freebsd-pkg.yml": {
@@ -46,10 +42,6 @@ WORKFLOW_CONTRACT = {
             "docs/release/artifact-contract.md",
             "docs/release/release-process.md",
         ],
-        "agent_contracts": [
-            ".codex/prompts/package-freebsd.md",
-            ".claude/commands/package-freebsd.md",
-        ],
         "packaging_tests": [
             "tests/packaging/test_packaging_freebsd_pkg_contract.py",
             "tests/packaging/test_packaging_freebsd_ports_chroot_contract.py",
@@ -61,10 +53,6 @@ WORKFLOW_CONTRACT = {
         "surface_docs": [
             "docs/release/artifact-contract.md",
             "docs/release/build-matrix.md",
-        ],
-        "agent_contracts": [
-            ".codex/prompts/package-macos.md",
-            ".claude/commands/package-macos.md",
         ],
         "packaging_tests": [
             "tests/packaging/test_packaging_macos_app_contract.py",
@@ -81,10 +69,6 @@ WORKFLOW_CONTRACT = {
         "surface_docs": [
             "docs/release/artifact-contract.md",
             "docs/release/release-process.md",
-        ],
-        "agent_contracts": [
-            ".codex/prompts/package-macos.md",
-            ".claude/commands/package-macos.md",
         ],
         "packaging_tests": [
             "tests/packaging/test_packaging_macos_app_contract.py",
@@ -103,7 +87,6 @@ WORKFLOW_CONTRACT = {
             "docs/release/artifact-contract.md",
             "docs/release/build-matrix.md",
         ],
-        "agent_contracts": [],
         "packaging_tests": ["tests/packaging/test_packaging_workflows_contract.py"],
     },
     "pypi-validate.yml": {
@@ -112,10 +95,6 @@ WORKFLOW_CONTRACT = {
         "surface_docs": [
             "docs/release/artifact-contract.md",
             "docs/release/release-process.md",
-        ],
-        "agent_contracts": [
-            ".codex/prompts/package-pypi.md",
-            ".claude/commands/package-pypi.md",
         ],
         "packaging_tests": [
             "tests/packaging/test_packaging_pypi_wheel_contract.py",
@@ -135,10 +114,6 @@ WORKFLOW_CONTRACT = {
             "docs/release/artifact-contract.md",
             "docs/release/release-process.md",
         ],
-        "agent_contracts": [
-            ".codex/roles/release-engineer.md",
-            ".claude/agents/release-engineer.md",
-        ],
         "packaging_tests": ["tests/packaging/test_packaging_release_contract.py"],
     },
     "windows-installer.yml": {
@@ -152,10 +127,6 @@ WORKFLOW_CONTRACT = {
         "surface_docs": [
             "docs/release/artifact-contract.md",
             "docs/release/build-matrix.md",
-        ],
-        "agent_contracts": [
-            ".codex/prompts/package-windows.md",
-            ".claude/commands/package-windows.md",
         ],
         "packaging_tests": [
             "tests/packaging/test_packaging_windows_portable_exe_contract.py",
@@ -172,10 +143,6 @@ WORKFLOW_CONTRACT = {
         "surface_docs": [
             "docs/release/artifact-contract.md",
             "docs/release/release-process.md",
-        ],
-        "agent_contracts": [
-            ".codex/prompts/package-windows.md",
-            ".claude/commands/package-windows.md",
         ],
         "packaging_tests": [
             "tests/packaging/test_packaging_windows_portable_exe_contract.py",
@@ -273,7 +240,7 @@ def test_release_workflow_uses_docker_package_targets_not_legacy_shell(
     assert "build-and-package-rpm.sh" not in release
 
 
-def test_active_packaging_workflows_have_docs_agents_and_tests(
+def test_active_packaging_workflows_have_docs_and_tests(
     read_repo_text: RepoReader,
 ) -> None:
     for workflow_name, contract in WORKFLOW_CONTRACT.items():
@@ -282,10 +249,6 @@ def test_active_packaging_workflows_have_docs_agents_and_tests(
 
         for doc_path in contract["surface_docs"]:
             assert workflow_name in read_repo_text(doc_path)
-
-        for agent_path in contract["agent_contracts"]:
-            assert Path(agent_path).name
-            assert read_repo_text(agent_path).strip()
 
         for test_path in contract["packaging_tests"]:
             # The mapped packaging test must exist; the workflow name is recorded

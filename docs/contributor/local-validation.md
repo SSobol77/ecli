@@ -70,10 +70,9 @@ the existing canonical command surfaces.
 Active shell wrappers under `scripts/` have been removed. Use canonical Python
 entrypoints under `scripts/` for validation and packaging checks.
 `scripts/build-and-package-windows.ps1` remains the separate Windows PowerShell
-packaging surface. `.claude/hooks/block-mutations.sh` is a Claude hook,
-`tools/freebsd-chroot-build.sh` is a FreeBSD chroot helper outside this
-migration, and the unused FreeBSD package-renaming shell helper was removed as
-tracked tooling.
+packaging surface. `tools/freebsd-chroot-build.sh` is a FreeBSD chroot helper
+outside this migration, and the unused FreeBSD package-renaming shell helper
+was removed as tracked tooling.
 
 ## Evidence Expectations for Doc-Related Changes
 

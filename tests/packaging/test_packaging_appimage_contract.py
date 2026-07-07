@@ -61,8 +61,6 @@ def test_appimage_generated_staging_paths_are_not_release_contract_surfaces(
         "docs/release/artifact-contract.md",
         "docs/release/build-matrix.md",
         "docs/release/packaging-flows.md",
-        ".claude/commands/package-linux.md",
-        ".codex/prompts/package-linux.md",
         "tests/packaging/conftest.py",
     ]
 

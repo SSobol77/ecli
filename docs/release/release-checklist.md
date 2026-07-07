@@ -39,8 +39,7 @@ See the LICENSE file in the project root for full license text.
 - [ ] Required packaging scripts exist and are executable.
 - [ ] Active shell wrappers under `scripts/` are absent; Python entrypoints under
       `scripts/` are canonical. Windows PowerShell packaging
-      (`scripts/build-and-package-windows.ps1`), the Claude hook
-      (`.claude/hooks/block-mutations.sh`), and the FreeBSD chroot helper
+      (`scripts/build-and-package-windows.ps1`) and the FreeBSD chroot helper
       (`tools/freebsd-chroot-build.sh`) are classified separately.
 - [ ] Confirm the removed FreeBSD package-renaming shell helper remains absent unless a future
       dedicated tools migration restores equivalent Python tooling.

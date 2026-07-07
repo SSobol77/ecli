@@ -162,40 +162,19 @@ ruff_cache/
 sonar-project.properties
 
 # ==========================
-# AI agent contracts
+# AI agent workspace files
 # ==========================
-# Agent contract files are repository release-contract surfaces.
-# They are intentionally tracked so CI and clean checkouts can validate them.
-!AGENTS.md
-!CLAUDE.md
-!CODEX.md
+# Agent-specific local instruction files and folders are workspace-local
+# operational files, not product source, release artifacts, or packaging
+# inputs. They must not be tracked in this repository.
+/AGENTS.md
+/CLAUDE.md
+/CODEX.md
+/CURSOR.md
+/.claude/
+/.codex/
+/.cursor/
 
-!.claude/
-!.claude/*.md
-!.claude/agents/
-!.claude/agents/*.md
-!.claude/commands/
-!.claude/commands/*.md
-!.claude/hooks/
-!.claude/hooks/*.sh
-!.claude/settings.json
-
-!.codex/
-!.codex/*.md
-!.codex/prompts/
-!.codex/prompts/*.md
-!.codex/roles/
-!.codex/roles/*.md
-!.codex/runbooks/
-!.codex/runbooks/*.md
-
-# Local AI agent private state
-CURSOR.md
-AGENTS.md
-CLAUDE.md
-CODEX.md
-.cursor/
-.claude/settings.local.json
 audit-report.md
 
 # Lock files (regenerate with uv)

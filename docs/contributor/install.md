@@ -326,7 +326,6 @@ pytest
 Active shell wrappers under `scripts/` have been removed. Build and verification
 examples use canonical Python entrypoints under `scripts/`. Windows PowerShell
 packaging remains separate at `scripts/build-and-package-windows.ps1`.
-`.claude/hooks/block-mutations.sh` is a Claude hook, not an installation or
-packaging command. `tools/freebsd-chroot-build.sh` remains a FreeBSD chroot
+`tools/freebsd-chroot-build.sh` remains a FreeBSD chroot
 helper outside the script migration. the removed FreeBSD package-renaming shell helper was removed
 as unused tracked tooling.

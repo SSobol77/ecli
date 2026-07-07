@@ -138,7 +138,6 @@ ecli_<version>_workflow_contract_evidence.tar.gz
   under `scripts/` are canonical.
 - `scripts/build-and-package-windows.ps1` remains the separate Windows
   PowerShell packaging surface.
-- `.claude/hooks/block-mutations.sh` is a Claude hook, not packaging.
 - `tools/freebsd-chroot-build.sh` remains a FreeBSD chroot helper outside this
   migration.
 - the removed FreeBSD package-renaming shell helper was unused tracked tooling and has been removed.
