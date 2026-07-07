@@ -63,8 +63,6 @@ class Artifact:
     artifact_token: str
     workflow: str | None
     test_file: str
-    claude_command: str
-    codex_prompt: str
 
 
 @dataclass(frozen=True)
@@ -92,8 +90,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_editor-<version>-py3-none-any.whl",
         workflow="pypi-validate.yml",
         test_file="tests/packaging/test_packaging_pypi_wheel_contract.py",
-        claude_command=".claude/commands/package-pypi.md",
-        codex_prompt=".codex/prompts/package-pypi.md",
     ),
     Artifact(
         index=2,
@@ -108,8 +104,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_editor-<version>.tar.gz",
         workflow="pypi-validate.yml",
         test_file="tests/packaging/test_packaging_pypi_sdist_contract.py",
-        claude_command=".claude/commands/package-pypi.md",
-        codex_prompt=".codex/prompts/package-pypi.md",
     ),
     Artifact(
         index=3,
@@ -125,8 +119,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_linux_x86_64.bin",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_linux_pyinstaller_contract.py",
-        claude_command=".claude/commands/package-linux.md",
-        codex_prompt=".codex/prompts/package-linux.md",
     ),
     Artifact(
         index=4,
@@ -141,8 +133,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_linux_x86_64.tar.gz",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_linux_tarball_contract.py",
-        claude_command=".claude/commands/package-linux.md",
-        codex_prompt=".codex/prompts/package-linux.md",
     ),
     Artifact(
         index=5,
@@ -156,8 +146,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_linux_x86_64.deb",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_deb_contract.py",
-        claude_command=".claude/commands/package-linux.md",
-        codex_prompt=".codex/prompts/package-linux.md",
     ),
     Artifact(
         index=6,
@@ -171,8 +159,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_linux_x86_64.rpm",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_rpm_contract.py",
-        claude_command=".claude/commands/package-linux.md",
-        codex_prompt=".codex/prompts/package-linux.md",
     ),
     Artifact(
         index=7,
@@ -183,8 +169,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_opensuse_x86_64.rpm",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_opensuse_rpm_contract.py",
-        claude_command=".claude/commands/package-linux.md",
-        codex_prompt=".codex/prompts/package-linux.md",
     ),
     Artifact(
         index=8,
@@ -199,8 +183,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_arch_x86_64.pkg.tar.zst",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_arch_pkgbuild_contract.py",
-        claude_command=".claude/commands/package-linux.md",
-        codex_prompt=".codex/prompts/package-linux.md",
     ),
     Artifact(
         index=9,
@@ -214,8 +196,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_slackware_x86_64.txz",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_slackware_txz_contract.py",
-        claude_command=".claude/commands/package-linux.md",
-        codex_prompt=".codex/prompts/package-linux.md",
     ),
     Artifact(
         index=10,
@@ -229,8 +209,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_linux_x86_64.AppImage",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_appimage_contract.py",
-        claude_command=".claude/commands/package-linux.md",
-        codex_prompt=".codex/prompts/package-linux.md",
     ),
     Artifact(
         index=11,
@@ -245,8 +223,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_freebsd_x86_64.pkg",
         workflow="freebsd-pkg.yml",
         test_file="tests/packaging/test_packaging_freebsd_pkg_contract.py",
-        claude_command=".claude/commands/package-freebsd.md",
-        codex_prompt=".codex/prompts/package-freebsd.md",
     ),
     Artifact(
         index=12,
@@ -260,8 +236,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_freebsd_ports_chroot_evidence.tar.gz",
         workflow="freebsd-pkg.yml",
         test_file="tests/packaging/test_packaging_freebsd_ports_chroot_contract.py",
-        claude_command=".claude/commands/package-freebsd.md",
-        codex_prompt=".codex/prompts/package-freebsd.md",
     ),
     Artifact(
         index=13,
@@ -276,8 +250,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_macos_universal2_app_evidence.tar.gz",
         workflow="macos-dmg.yml",
         test_file="tests/packaging/test_packaging_macos_app_contract.py",
-        claude_command=".claude/commands/package-macos.md",
-        codex_prompt=".codex/prompts/package-macos.md",
     ),
     Artifact(
         index=14,
@@ -293,8 +265,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_macos_universal2.dmg",
         workflow="macos-dmg.yml",
         test_file="tests/packaging/test_packaging_macos_dmg_contract.py",
-        claude_command=".claude/commands/package-macos.md",
-        codex_prompt=".codex/prompts/package-macos.md",
     ),
     Artifact(
         index=15,
@@ -309,8 +279,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_win_x86_64.exe",
         workflow="windows-installer.yml",
         test_file="tests/packaging/test_packaging_windows_portable_exe_contract.py",
-        claude_command=".claude/commands/package-windows.md",
-        codex_prompt=".codex/prompts/package-windows.md",
     ),
     Artifact(
         index=16,
@@ -327,8 +295,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_win_x86_64_setup.exe",
         workflow="windows-installer.yml",
         test_file="tests/packaging/test_packaging_windows_nsis_installer_contract.py",
-        claude_command=".claude/commands/package-windows.md",
-        codex_prompt=".codex/prompts/package-windows.md",
     ),
     Artifact(
         index=17,
@@ -339,8 +305,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_nix_flake_evidence.tar.gz",
         workflow=None,
         test_file="tests/packaging/test_packaging_nix_flake_contract.py",
-        claude_command=".claude/commands/package-nix.md",
-        codex_prompt=".codex/prompts/package-nix.md",
     ),
     Artifact(
         index=18,
@@ -351,8 +315,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_nixos_package_evidence.tar.gz",
         workflow=None,
         test_file="tests/packaging/test_packaging_nixos_package_contract.py",
-        claude_command=".claude/commands/package-nix.md",
-        codex_prompt=".codex/prompts/package-nix.md",
     ),
     Artifact(
         index=19,
@@ -363,8 +325,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_docker_deb_helper_evidence.tar.gz",
         workflow=None,
         test_file="tests/packaging/test_packaging_docker_deb_helper_contract.py",
-        claude_command=".claude/commands/package-linux.md",
-        codex_prompt=".codex/prompts/package-linux.md",
     ),
     Artifact(
         index=20,
@@ -375,8 +335,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_docker_rpm_helper_evidence.tar.gz",
         workflow=None,
         test_file="tests/packaging/test_packaging_docker_rpm_helper_contract.py",
-        claude_command=".claude/commands/package-linux.md",
-        codex_prompt=".codex/prompts/package-linux.md",
     ),
     Artifact(
         index=21,
@@ -390,8 +348,6 @@ CANONICAL_ARTIFACTS: tuple[Artifact, ...] = (
         artifact_token="ecli_<version>_workflow_contract_evidence.tar.gz",
         workflow="release.yml",
         test_file="tests/packaging/test_packaging_workflows_contract.py",
-        claude_command=".claude/commands/release.md",
-        codex_prompt=".codex/prompts/release.md",
     ),
 )
 
@@ -476,9 +432,11 @@ def assert_artifact_documented(
 
     Verifies that an artifact's required source files exist and are non-empty,
     that it is wired into the canonical 21-item docs matrix (name, expected
-    output token, required test file, Claude command, and Codex prompt), that it
-    is echoed in the broader release docs, that its agent contracts cover it, and
-    that its workflow mapping (when relevant) is documented.
+    output token, required test file), that it is echoed in the broader release
+    docs, and that its workflow mapping (when relevant) is documented.
+
+    Agent workspace files (``.claude/``, ``.codex/``, and friends) are not
+    release-contract surfaces and are intentionally not part of this check.
     """
     assert_paths_non_empty(artifact.sources)
 
@@ -492,8 +450,6 @@ def assert_artifact_documented(
             artifact.name,
             artifact.artifact_token,
             artifact.test_file,
-            artifact.claude_command,
-            artifact.codex_prompt,
         ),
     )
 
@@ -505,11 +461,4 @@ def assert_artifact_documented(
     release_blob = "\n".join(read_repo_text(path) for path in RELEASE_DOC_FILES)
     assert artifact.name in release_blob, (
         f"artifact {artifact.name!r} not echoed in release docs"
-    )
-
-    assert artifact.name in read_repo_text(artifact.claude_command), (
-        f"artifact {artifact.name!r} missing Claude command coverage"
-    )
-    assert artifact.name in read_repo_text(artifact.codex_prompt), (
-        f"artifact {artifact.name!r} missing Codex prompt coverage"
     )

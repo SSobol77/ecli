@@ -133,7 +133,6 @@ Python entrypoints directly in new docs, automation, and tests, including
 `scripts/verify_artifact.py`, `scripts/sign_checksums.py`, and all platform
 build scripts above. `scripts/build-and-package-windows.ps1` is a separate
 Windows-native packaging surface and is not part of this migration.
-`.claude/hooks/block-mutations.sh` is a Claude hook, not a packaging script.
 `tools/freebsd-chroot-build.sh` remains a FreeBSD chroot helper outside the
 script migration. The unused tracked helper the removed FreeBSD package-renaming shell helper was
 removed during no-shell cleanup.

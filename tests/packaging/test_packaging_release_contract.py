@@ -58,7 +58,6 @@ PACKAGING_DESCRIPTORS = (
 
 EVIDENCE_CLASS_TOKENS = (
     "product and release documentation",
-    "Codex and Claude agent contracts",
     "build, validation, and release runbooks",
     "repository-local validation tests or contract checks",
     "Release readiness is blocked",
@@ -112,8 +111,6 @@ def test_every_canonical_item_is_documented_in_matrix(
                 artifact.name,
                 artifact.artifact_token,
                 artifact.test_file,
-                artifact.claude_command,
-                artifact.codex_prompt,
             ),
         )
 
@@ -147,51 +144,10 @@ def test_no_docs_matrix_item_lacks_test_coverage(read_repo_text: RepoReader) -> 
         assert artifact.test_file in contract
 
 
-# --------------------------------------------------------------------------- #
-# Agent coverage parity: Claude commands and Codex prompts cover every item and
-# the two coverage sets are equal.
-# --------------------------------------------------------------------------- #
-
-
-def test_every_canonical_item_has_claude_command_coverage(
-    read_repo_text: RepoReader,
-) -> None:
-    for artifact in CANONICAL_ARTIFACTS:
-        assert artifact.name in read_repo_text(artifact.claude_command), (
-            f"{artifact.name!r} missing from {artifact.claude_command}"
-        )
-
-
-def test_every_canonical_item_has_codex_prompt_coverage(
-    read_repo_text: RepoReader,
-) -> None:
-    for artifact in CANONICAL_ARTIFACTS:
-        assert artifact.name in read_repo_text(artifact.codex_prompt), (
-            f"{artifact.name!r} missing from {artifact.codex_prompt}"
-        )
-
-
-def test_claude_and_codex_coverage_are_equal(read_repo_text: RepoReader) -> None:
-    claude_covered = {
-        artifact.name
-        for artifact in CANONICAL_ARTIFACTS
-        if artifact.name in read_repo_text(artifact.claude_command)
-    }
-    codex_covered = {
-        artifact.name
-        for artifact in CANONICAL_ARTIFACTS
-        if artifact.name in read_repo_text(artifact.codex_prompt)
-    }
-    all_names = {artifact.name for artifact in CANONICAL_ARTIFACTS}
-
-    assert claude_covered == codex_covered == all_names
-
-
-def test_no_docs_matrix_item_lacks_agent_coverage(read_repo_text: RepoReader) -> None:
-    contract = read_repo_text(CANONICAL_CONTRACT_DOC)
-    for artifact in CANONICAL_ARTIFACTS:
-        assert artifact.claude_command in contract
-        assert artifact.codex_prompt in contract
+# Agent workspace files (AGENTS.md, CLAUDE.md, CODEX.md, CURSOR.md, .claude/,
+# .codex/, .cursor/) are not release-contract surfaces and carry no coverage
+# requirement here. See test_agent_workspace_not_a_release_contract.py for the
+# hygiene invariant that replaces the old agent coverage parity checks.
 
 
 # --------------------------------------------------------------------------- #

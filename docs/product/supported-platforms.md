@@ -41,9 +41,8 @@ matrix entry. Release publication is blocked unless `scripts/verify_release_asse
 verifies the exact top-level asset set under `releases/<version>/`. Checksum
 sidecars are verification evidence, not GitHub Release assets.
 
-Every entry below must remain covered by tests under `tests/packaging/`, by
-`.claude/commands/`, by `.codex/prompts/`, and (where relevant) by a GitHub
-workflow:
+Every entry below must remain covered by tests under `tests/packaging/` and
+(where relevant) by a GitHub workflow:
 
 1. PyPI wheel
 2. PyPI source distribution
@@ -119,7 +118,6 @@ ecli_<version>_workflow_contract_evidence.tar.gz
 Active shell wrappers under `scripts/` have been removed; canonical package and
 verification implementations are Python entrypoints under `scripts/`. Windows
 PowerShell packaging remains separate at `scripts/build-and-package-windows.ps1`.
-`.claude/hooks/block-mutations.sh` is a Claude hook, not product packaging.
 `tools/freebsd-chroot-build.sh` remains a FreeBSD chroot helper outside the
 script migration, and the removed FreeBSD package-renaming shell helper was removed as unused
 tracked tooling.

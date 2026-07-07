@@ -187,9 +187,6 @@ def test_taskfile_does_not_become_sole_release_contract(
     docs = "\n".join(
         read_repo_text(path)
         for path in (
-            "AGENTS.md",
-            "CODEX.md",
-            "CLAUDE.md",
             "README.md",
             "docs/contributor/development-setup.md",
             "docs/contributor/local-validation.md",

@@ -230,8 +230,7 @@ configured for this repository.
 Active shell wrappers under `scripts/` have been removed. Release preparation and
 workflow inspection must use canonical Python entrypoints under `scripts/`.
 `scripts/build-and-package-windows.ps1` remains a separate Windows PowerShell
-packaging surface. `.claude/hooks/block-mutations.sh` is a Claude hook, not a
-packaging script. `tools/freebsd-chroot-build.sh` remains a FreeBSD chroot helper
+packaging surface. `tools/freebsd-chroot-build.sh` remains a FreeBSD chroot helper
 outside this migration. The unused FreeBSD package-renaming shell helper was
 removed as tracked tooling.
 
