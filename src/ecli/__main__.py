@@ -201,86 +201,17 @@ def _resolve_cli_path(argv: list[str]) -> Optional[Path]:
 
 
 def _preload_cli_document(editor: Ecli, candidate: Path) -> None:
+    """Tell the editor to open/create a buffer named after 'candidate'.
+
+    Delegates directly to ``editor.preload_cli_document(Path)`` -- the single
+    real implementation of CLI-argument open/create semantics: existing-file
+    open, a clean unmodified buffer for a nonexistent path with no disk write
+    before an explicit save, and controlled sticky-status handling for
+    permission/read errors. ``Ecli`` guarantees this method, so there is no
+    other supported buffer-creation API to probe for and nothing here should
+    guess at method names, signatures, or pre-touch the path.
     """
-    Tell the editor to open/create a buffer named after 'candidate'.
-    This function is robust across possible editor APIs:
-
-    Priority:
-      1) editor.preload_cli_document(Path)           # preferred if available
-      2) editor.open_or_create(str|Path)             # open if exists, else create empty buffer with path
-      3) editor.open_file(str|Path) if exists else   # open if on disk
-         editor.create_empty_buffer_with_name(str)   # create empty buffer with that name
-      4) LAST RESORT: touch the file on disk and open it (ensures correct default path on Save).
-    """
-    # Normalize to absolute string path for broadest API compatibility
-    abs_path = str(candidate.resolve())
-
-    # 1) Preferred explicit API
-    if hasattr(editor, "preload_cli_document"):
-        try:
-            editor.preload_cli_document(candidate)  # type: ignore[attr-defined]
-            return
-        except Exception:
-            logger.debug(
-                "preload_cli_document(Path) failed, trying fallbacks.", exc_info=True
-            )
-
-    # 2) Generic open-or-create
-    if hasattr(editor, "open_or_create"):
-        try:
-            editor.open_or_create(abs_path)  # type: ignore[attr-defined]
-            return
-        except Exception:
-            logger.debug(
-                "open_or_create(path) failed, trying fallbacks.", exc_info=True
-            )
-
-    # 3) Open if exists, else create in-memory buffer with this name
-    if os.path.exists(abs_path):
-        try:
-            editor.open_file(abs_path)
-            return
-        except Exception:
-            logger.debug(
-                "open_file(existing path) failed, trying buffer creation.",
-                exc_info=True,
-            )
-    else:
-        # Try a few common method names to set a new-named buffer without touching disk
-        for meth_name in (
-            "create_empty_buffer_with_name",
-            "new_buffer_named",
-            "new_file_with_name",
-            "new_file",
-        ):
-            if hasattr(editor, meth_name):
-                try:
-                    meth = getattr(editor, meth_name)
-                    # Try with a kw if method supports it, otherwise positional
-                    try:
-                        meth(initial_path=abs_path)  # type: ignore[call-arg]
-                    except TypeError:
-                        meth(abs_path)  # type: ignore[misc]
-                    return
-                except Exception:
-                    logger.debug(
-                        "%s(...) failed, continue fallbacks.", meth_name, exc_info=True
-                    )
-                    continue
-
-    # 4) Last resort: create an empty file on disk so open_file() succeeds.
-    # This guarantees the buffer is named as requested when all nicer APIs are absent.
-    try:
-        Path(abs_path).parent.mkdir(parents=True, exist_ok=True)
-        Path(abs_path).touch(exist_ok=True)
-        editor.open_file(abs_path)
-        return
-    except Exception:
-        logger.warning(
-            "Fallback touch+open failed for %s; starting unnamed buffer.",
-            abs_path,
-            exc_info=True,
-        )
+    editor.preload_cli_document(candidate)
 
 
 # --- Step 5: Curses Application Runner ---
