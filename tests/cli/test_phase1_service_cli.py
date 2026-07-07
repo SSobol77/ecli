@@ -240,3 +240,76 @@ def test_test_workspaces_remain_under_logs(workspace: Path) -> None:
     logs_root = (Path.cwd() / "logs").resolve(strict=False)
 
     assert workspace.resolve(strict=False).is_relative_to(logs_root)
+
+
+# ---------------------------------------------------------------------------
+# P1 – plan-preview log path must never point at site-packages / lib paths
+# ---------------------------------------------------------------------------
+
+
+def test_effective_logs_root_does_not_contain_site_packages() -> None:
+    """The default --logs-root must not resolve to a site-packages path."""
+    from ecli.cli import _effective_logs_root
+
+    root = _effective_logs_root()
+    root_str = str(root)
+
+    assert "site-packages" not in root_str, (
+        f"_effective_logs_root() resolved to a site-packages path: {root_str}"
+    )
+    assert "/usr/local/lib/python" not in root_str, (
+        f"_effective_logs_root() resolved to a system lib path: {root_str}"
+    )
+
+
+def test_effective_logs_root_is_under_repo_or_user_config() -> None:
+    """The default logs root must be within the repo or ~/.config/ecli."""
+    from ecli.cli import _effective_logs_root
+
+    home = Path.home()
+    repo_logs = (Path.cwd() / "logs").resolve(strict=False)
+    user_logs = home / ".config" / "ecli" / "logs"
+
+    root = _effective_logs_root().resolve(strict=False)
+
+    in_repo = root.is_relative_to(repo_logs) or str(root).startswith(str(repo_logs))
+    in_user = root.is_relative_to(user_logs) or str(root).startswith(str(user_logs))
+
+    assert in_repo or in_user, (
+        f"_effective_logs_root() is neither under repo logs nor ~/.config/ecli/logs: {root}"
+    )
+
+
+def test_plan_preview_default_logs_root_does_not_reference_package_lib_path(
+    workspace: Path,
+) -> None:
+    """Running --plan-preview with the DEFAULT --logs-root must not error on path."""
+    from ecli.cli import _effective_logs_root
+
+    default_root = _effective_logs_root()
+
+    # If the default root is inside the repo logs directory the existing
+    # workspace fixture already covers it.  We just verify it is reachable.
+    project = workspace / "project"
+    project.mkdir()
+
+    # Run with the EXPLICIT default root (avoids needing to omit --logs-root
+    # which would try to create a real user-config directory in CI).
+    status, output, error = run_cli(
+        [
+            "--plan-preview",
+            "--project-root",
+            str(project),
+            "--logs-root",
+            str(default_root),
+            "--category",
+            "config",
+        ]
+    )
+
+    # The command must succeed or return 2 (no findings) — never crash.
+    assert status in (0, 2), f"Unexpected exit code {status}: {error}"
+    assert "Traceback" not in output
+    assert "Traceback" not in error
+    assert "/usr/local/lib/python" not in output
+    assert "site-packages" not in output

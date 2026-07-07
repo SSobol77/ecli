@@ -155,11 +155,39 @@ class KeyBinder:
         # Bracketed-paste payload captured by get_key_input (read by the editor).
         self.last_paste: str = ""
 
+        # Startup guard: the first call to get_key_input flushes any bytes that
+        # were already buffered in the terminal before ECLI opened (shell output,
+        # type-ahead, or residual control sequences) so they are never inserted.
+        self._startup_guard_active: bool = True
+
     # Sentinel returned by get_key_input when a bracketed paste was captured.
     PASTE_EVENT = "\x00ecli-bracketed-paste\x00"
     # Bracketed-paste markers (xterm): ESC [ 200 ~  ...  ESC [ 201 ~
     _PASTE_START = "[200~"
     _PASTE_END = b"\x1b[201~"
+
+    def _flush_startup_input_buffer(self, target: Any) -> None:
+        """Drain and discard any bytes already buffered in the terminal before ECLI opened.
+
+        Called exactly once (on the first get_key_input invocation) so that
+        residual shell output, type-ahead, or control sequences present in the
+        terminal input queue at startup are never replayed as user text.
+        """
+        target.nodelay(True)
+        drained = 0
+        try:
+            while True:
+                ch = target.getch()
+                if ch == curses.ERR:
+                    break
+                drained += 1
+        finally:
+            target.nodelay(False)
+        if drained:
+            logging.debug(
+                "startup guard: discarded %d pre-existing buffered terminal byte(s)",
+                drained,
+            )
 
     def _read_bracketed_paste(self, target: Any, initial: str) -> str:
         """Read a full bracketed-paste payload as one UTF-8 decoded string.
@@ -945,6 +973,14 @@ class KeyBinder:
         target = window or self.stdscr
 
         try:
+            # On the very first call: drain any bytes that were already in the
+            # terminal buffer before ECLI started.  This prevents shell residue
+            # or type-ahead from being inserted into a fresh buffer.
+            if self._startup_guard_active:
+                self._startup_guard_active = False
+                self._flush_startup_input_buffer(target)
+                return curses.ERR
+
             ch = target.getch()
             if ch != 27:
                 # Fast path. If this is a text byte and more text is already

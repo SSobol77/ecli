@@ -209,6 +209,15 @@ _SYNTAX_COLOR_STRUCTURE: dict[str, tuple[int, int]] = {
 }
 
 
+# --- Binary / large-file gate constants ------------------------------------
+# Files larger than this are gated before loading (interactive mode prompts).
+_LARGE_FILE_BYTES: int = 10 * 1024 * 1024  # 10 MiB
+# How many bytes to sample when probing for binary content.
+_BINARY_SAMPLE_BYTES: int = 65_536  # 64 KiB
+# Fraction of control bytes (outside normal text ranges) that flags a binary.
+_BINARY_CONTROL_RATIO: float = 0.02  # >2 % → reject as binary
+
+
 def _hex_color_looks_green(value: str) -> bool:
     """Return True when a hex colour is visibly green-dominant."""
     if not isinstance(value, str):
@@ -574,6 +583,7 @@ class Ecli:
         self._file_had_final_newline: bool = False
         self.insert_mode: bool = True
         self.status_message: str = "Ready"
+        self._sticky_status: Optional[str] = None
         self._last_status_msg_sent: Optional[str] = None
         self.lint_panel_message: str = ""
         self.lint_panel_active: bool = False
@@ -848,33 +858,15 @@ class Ecli:
     def open_or_create(self, path: str | Path) -> None:
         """Open the file if it exists; otherwise create
         an empty buffer with that path.
+
+        ``open_file`` already creates a clean, unmodified in-memory buffer
+        for a path that does not exist on disk (the file is written only on
+        an explicit save), so this delegates directly instead of touching
+        the path into existence up front. Touching it early both defeats
+        that "not written until saved" contract and previously masked a
+        broken buffer-creation probe that always raised ``TypeError``.
         """
         p = str(Path(path).expanduser().resolve())
-        if os.path.exists(p):
-            self.open_file(p)
-            self._set_current_path(p)
-            return
-        # try to create a named empty buffer via your APIs
-        for meth_name in (
-            "create_empty_buffer_with_name",
-            "new_buffer_named",
-            "new_file_with_name",
-            "new_file",
-        ):
-            if hasattr(self, meth_name):
-                try:
-                    meth = getattr(self, meth_name)
-                    try:
-                        meth(initial_path=p)  # type: ignore[call-arg]
-                    except TypeError:
-                        meth(p)  # type: ignore[misc]
-                    self._set_current_path(p)
-                    return
-                except Exception:
-                    logger.debug("%s failed, continue", meth_name, exc_info=True)
-        # fallback: touch then open
-        Path(p).parent.mkdir(parents=True, exist_ok=True)
-        Path(p).touch(exist_ok=True)
         self.open_file(p)
         self._set_current_path(p)
 
@@ -5251,6 +5243,36 @@ class Ecli:
             )
             raise
 
+    # =============== File safety helpers ==========================
+
+    @staticmethod
+    def _is_likely_binary(raw_sample: bytes) -> bool:
+        """Return True when the byte sample looks like binary (non-text) content.
+
+        Two-stage check:
+        1. NUL byte anywhere in the sample → definitely binary.
+        2. Fraction of suspicious control bytes (outside normal text ranges)
+           exceeds ``_BINARY_CONTROL_RATIO`` → treat as binary.
+        """
+        if b"\x00" in raw_sample:
+            return True
+        if not raw_sample:
+            return False
+        suspicious = sum(
+            1 for b in raw_sample if b < 0x08 or (0x0E <= b <= 0x1F)
+        )
+        return suspicious / len(raw_sample) > _BINARY_CONTROL_RATIO
+
+    def _set_sticky_error_message(self, message: str) -> None:
+        """Set a status message that persists across redraws until user acts."""
+        self._sticky_status = message
+        self._set_status_message(message)
+
+    def _clear_sticky_status(self) -> None:
+        """Clear the sticky error message (called on deliberate user action)."""
+        if getattr(self, "_sticky_status", None) is not None:
+            self._sticky_status = None
+
     # =============== Open file ============================
     def open_file(self, filename_to_open: Optional[str] = None) -> bool:  # noqa: python:S3516
         """Opens a specified file or prompts for one.
@@ -5338,26 +5360,30 @@ class Ecli:
                 )
 
             if not os.path.exists(actual_filename_to_open):
+                # Nonexistent path → open a new clean buffer at that path.
+                # This matches vim-style behaviour: the file will be created
+                # on the first save.  The buffer is clean (not modified).
                 self.text = [""]
-                self.filename = None
+                self.filename = actual_filename_to_open
                 self.clear_diagnostic_line_highlight()
                 self.modified = False
                 self.encoding = "utf-8"
                 self.history.clear()
                 self.history.add_action(
                     {
-                        "type": "open_file_missing",
-                        "attempted_path": actual_filename_to_open,
+                        "type": "new_buffer",
+                        "filename": actual_filename_to_open,
                         "content": [""],
                         "encoding": "utf-8",
                     }
                 )
                 self.set_initial_cursor_position()
                 self._set_status_message(
-                    f"Error: File not found '{os.path.basename(actual_filename_to_open)}'"
+                    f"New file: '{os.path.basename(actual_filename_to_open)}' (not yet saved)"
                 )
-                logging.warning(
-                    f"Open file failed: file not found at '{actual_filename_to_open}'"
+                logging.info(
+                    "New buffer created for nonexistent path: '%s'",
+                    actual_filename_to_open,
                 )
                 return True
 
@@ -5371,13 +5397,69 @@ class Ecli:
                 return True
 
             if not os.access(actual_filename_to_open, os.R_OK):
-                self._set_status_message(
-                    f"Error: No read permissions for '{os.path.basename(actual_filename_to_open)}'."
+                self._set_sticky_error_message(
+                    f"Error: No read permissions for"
+                    f" '{os.path.basename(actual_filename_to_open)}'."
                 )
                 logging.warning(
-                    f"Open file failed: no read permissions for '{actual_filename_to_open}'."
+                    "Open file failed: no read permissions for '%s'.",
+                    actual_filename_to_open,
                 )
                 return True
+
+            # Binary / large-file preflight — run before the full read so we
+            # never load garbage into the text buffer.
+            try:
+                file_size = os.path.getsize(actual_filename_to_open)
+            except OSError:
+                file_size = 0  # caught again by the read below
+
+            if file_size > _LARGE_FILE_BYTES:
+                mb = file_size // (1024 * 1024)
+                interactive = (
+                    not getattr(self, "is_lightweight", True)
+                    and getattr(self, "stdscr", None) is not None
+                )
+                if interactive:
+                    answer = self.prompt(
+                        f"'{os.path.basename(actual_filename_to_open)}' is very large"
+                        f" ({mb} MB). Open anyway? (y/n): "
+                    )
+                    if not (answer and answer.lower().startswith("y")):
+                        self._set_status_message(
+                            f"Open cancelled: file too large ({mb} MB)."
+                        )
+                        return True
+                else:
+                    self._set_status_message(
+                        f"File too large to open:"
+                        f" '{os.path.basename(actual_filename_to_open)}'"
+                        f" ({mb} MB, limit {_LARGE_FILE_BYTES // (1024 * 1024)} MB)"
+                    )
+                    logging.warning(
+                        "Open file rejected: file too large: %s (%d bytes)",
+                        actual_filename_to_open,
+                        file_size,
+                    )
+                    return True
+
+            if file_size > 0:
+                sample_size = min(file_size, _BINARY_SAMPLE_BYTES)
+                try:
+                    with self.safe_open(actual_filename_to_open, mode="rb") as _fb:
+                        sample = _fb.read(sample_size)
+                    if self._is_likely_binary(sample):
+                        self._set_status_message(
+                            f"Not opened: '{os.path.basename(actual_filename_to_open)}'"
+                            " appears to be a binary file."
+                        )
+                        logging.warning(
+                            "Open file rejected: likely binary: %s",
+                            actual_filename_to_open,
+                        )
+                        return True
+                except OSError:
+                    pass  # caught again by the main encoding-detection read
 
             # 4. Detect file encoding and read content
             try:
@@ -8918,6 +9000,14 @@ class Ecli:
             bool: The result from the called handler, indicating whether the key
                   press caused a state change (True) or not (False).
         """
+        # Any deliberate key action clears a sticky permission/read error so
+        # it does not persist indefinitely once the user has moved on. Guarded
+        # with getattr because lightweight/composed test doubles that borrow
+        # this method (e.g. DispatchEditor) do not carry sticky-status state.
+        clear_sticky = getattr(self, "_clear_sticky_status", None)
+        if clear_sticky is not None:
+            clear_sticky()
+
         if self.keybinder.is_key_for_action(key_input, "help"):
             return self.handle_input(key_input)
 
