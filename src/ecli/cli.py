@@ -146,8 +146,8 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--logs-root",
         type=Path,
-        default=_repo_logs_root(),
-        help="Repository logs root used by read-only service diagnostics.",
+        default=_effective_logs_root(),
+        help="Logs root used by read-only service diagnostics.",
     )
     parser.add_argument(
         "--category",
@@ -278,13 +278,61 @@ def _repo_root() -> Path:
 
 
 def _repo_logs_root() -> Path:
+    """Return the repository-local logs/ directory (dev-checkout mode)."""
     return (_repo_root() / "logs").resolve(strict=False)
 
 
+def _user_logs_root() -> Path:
+    """Return the user-owned runtime log directory for installed / user mode.
+
+    Delegates to ``resolve_log_dir()`` so the same precedence rules
+    (ECLI_LOG_DIR override → dev checkout → ~/.config/ecli/logs) apply here
+    as they do at runtime.  Falls back to the hard-coded XDG path when the
+    utils module cannot be imported (very early startup failures).
+    """
+    try:
+        from ecli.utils.utils import resolve_log_dir  # noqa: PLC0415
+
+        return resolve_log_dir()
+    except Exception:
+        return Path.home() / ".config" / "ecli" / "logs"
+
+
+def _effective_logs_root() -> Path:
+    """Return the correct default for ``--logs-root`` in any run mode.
+
+    In a development checkout the repository-local ``logs/`` directory is used
+    (same as before).  For an installed package the user-owned path is returned
+    so that ``--plan-preview`` never references a site-packages subdirectory.
+    """
+    repo = _repo_root()
+    if (repo / "pyproject.toml").is_file() and (repo / "config.toml").is_file():
+        return _repo_logs_root()
+    return _user_logs_root()
+
+
 def _assert_under_repo_logs(path: Path) -> None:
-    logs_root = _repo_logs_root()
-    if not path.resolve(strict=False).is_relative_to(logs_root):
-        raise ValueError("logs root must stay under repository-level logs/")
+    """Reject log paths outside the allowed roots.
+
+    Accepts both the repository-local logs/ (dev mode) and the user-owned
+    config logs directory (installed / user mode) so that ``--logs-root``
+    works correctly after ``pip install`` without touching a site-packages path.
+    """
+    resolved = path.resolve(strict=False)
+    allowed = [_repo_logs_root(), _user_logs_root()]
+    if not any(_safe_is_relative_to(resolved, root) for root in allowed):
+        raise ValueError(
+            "logs root must be under the repository logs/ or ~/.config/ecli/logs/"
+        )
+
+
+def _safe_is_relative_to(path: Path, parent: Path) -> bool:
+    """Return True when ``path`` is relative to ``parent`` (Python 3.9+)."""
+    try:
+        path.relative_to(parent)
+        return True
+    except ValueError:
+        return False
 
 
 class _TextIOProxy:

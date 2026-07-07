@@ -1374,7 +1374,13 @@ class DrawScreen:
             right_w = self.editor.get_string_width(git_txt)
 
             # -- middle = status message --------------------------------
-            msg = self.editor.status_message or "Ready"
+            # Sticky error messages (e.g. permission denied) take precedence
+            # over the normal status message and persist until user acts.
+            msg = (
+                getattr(self.editor, "_sticky_status", None)
+                or self.editor.status_message
+                or "Ready"
+            )
             spacing = width - left_w - right_w
             if spacing < self.editor.get_string_width(msg):
                 msg = self.truncate_string(msg, max(0, spacing - 1))
