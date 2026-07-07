@@ -38,6 +38,7 @@ Covers:
 from __future__ import annotations
 
 import ast
+import copy
 from pathlib import Path
 from typing import Any, Callable
 
@@ -49,15 +50,19 @@ from ecli.core.Ecli import Ecli
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MAIN_MODULE_PATH = REPO_ROOT / "src" / "ecli" / "__main__.py"
 
+PreloadWrapper = Callable[[Any, Path], None]
 
-def _extract_preload_cli_document() -> Callable[[Any, Path], None]:
+
+def _extract_preload_cli_document() -> PreloadWrapper:
     """Compile and return the real, current ``_preload_cli_document`` function.
 
     Parses ``src/ecli/__main__.py``, isolates the single function definition,
     and execs it on its own (with ``from __future__ import annotations``
     preserved so the ``editor: Ecli`` / ``candidate: Path`` annotations stay
     postponed strings rather than requiring those names to exist in this
-    minimal namespace). None of the module's other top-level code runs.
+    minimal namespace). None of the module's other top-level code runs, so
+    exec() here only ever compiles and runs one isolated function definition
+    extracted from a trusted, repository-local source file.
     """
     source = MAIN_MODULE_PATH.read_text(encoding="utf-8")
     tree = ast.parse(source, filename=str(MAIN_MODULE_PATH))
@@ -77,12 +82,12 @@ def _extract_preload_cli_document() -> Callable[[Any, Path], None]:
 
     code = compile(isolated, filename=str(MAIN_MODULE_PATH), mode="exec")
     namespace: dict[str, Any] = {}
-    exec(code, namespace)  # noqa: S102 - isolated, controlled source
+    exec(code, namespace)
     return namespace["_preload_cli_document"]
 
 
 @pytest.fixture(scope="module")
-def preload_cli_document_wrapper() -> Callable[[Any, Path], None]:
+def preload_cli_document_wrapper() -> PreloadWrapper:
     return _extract_preload_cli_document()
 
 
@@ -113,28 +118,33 @@ class _CallRecordingEditor:
         return self._fail_if_called(name)
 
 
-def test_delegates_exactly_once_to_editor_preload_cli_document(
-    preload_cli_document_wrapper: Callable[[Any, Path], None],
-) -> None:
+def _record_call(wrapper: PreloadWrapper, candidate: Path) -> _CallRecordingEditor:
+    """Invoke the wrapper against a fresh recording spy and return it."""
     editor = _CallRecordingEditor()
-    candidate = Path("/tmp/some-cli-argument.py")
+    wrapper(editor, candidate)
+    return editor
 
-    preload_cli_document_wrapper(editor, candidate)
+
+def test_delegates_exactly_once_to_editor_preload_cli_document(
+    preload_cli_document_wrapper: PreloadWrapper, tmp_path: Path
+) -> None:
+    candidate = tmp_path / "some-cli-argument.py"
+
+    editor = _record_call(preload_cli_document_wrapper, candidate)
 
     assert editor.calls == [("preload_cli_document", (candidate,))]
 
 
 def test_calls_no_fallback_probe_methods(
-    preload_cli_document_wrapper: Callable[[Any, Path], None],
+    preload_cli_document_wrapper: PreloadWrapper, tmp_path: Path
 ) -> None:
     """Regression: the removed probe loop tried open_or_create, open_file,
     create_empty_buffer_with_name, new_buffer_named, new_file_with_name, and
     new_file. None of those may be invoked any more.
     """
-    editor = _CallRecordingEditor()
-    candidate = Path("/tmp/no-fallback-probe.py")
+    candidate = tmp_path / "no-fallback-probe.py"
 
-    preload_cli_document_wrapper(editor, candidate)
+    editor = _record_call(preload_cli_document_wrapper, candidate)
 
     called_names = {name for name, _args in editor.calls}
     assert called_names == {"preload_cli_document"}
@@ -150,7 +160,7 @@ def test_calls_no_fallback_probe_methods(
 
 
 def test_does_not_swallow_exceptions_from_delegate(
-    preload_cli_document_wrapper: Callable[[Any, Path], None],
+    preload_cli_document_wrapper: PreloadWrapper, tmp_path: Path
 ) -> None:
     """Regression: the removed code caught every exception from
     preload_cli_document() and silently tried fallbacks instead of
@@ -161,8 +171,11 @@ def test_does_not_swallow_exceptions_from_delegate(
         def preload_cli_document(self, candidate: Path) -> None:
             raise TypeError("wrong signature")
 
+    editor = _RaisingEditor()
+    candidate = tmp_path / "whatever.py"
+
     with pytest.raises(TypeError, match="wrong signature"):
-        preload_cli_document_wrapper(_RaisingEditor(), Path("/tmp/whatever.py"))
+        preload_cli_document_wrapper(editor, candidate)
 
 
 # ---------------------------------------------------------------------------
@@ -179,55 +192,71 @@ class FakeHistory:
         return None
 
 
+# Attribute defaults for a minimal lightweight Ecli instance, mirroring
+# tests/core/test_file_open_safety.py's make_editor() helper. Mutable values
+# are deep-copied per instance in make_lightweight_editor() below so editors
+# never share list/dict state.
+_LIGHTWEIGHT_EDITOR_DEFAULTS: dict[str, Any] = {
+    "cursor_x": 0,
+    "cursor_y": 0,
+    "scroll_top": 0,
+    "scroll_left": 0,
+    "modified": False,
+    "encoding": "utf-8",
+    "filename": None,
+    "status_message": "Ready",
+    "_sticky_status": None,
+    "is_selecting": False,
+    "selection_start": None,
+    "selection_end": None,
+    "highlighted_matches": [],
+    "search_matches": [],
+    "search_term": "",
+    "current_match_idx": -1,
+    "git": None,
+    "git_panel_instance": None,
+    "_lexer": None,
+    "current_language": None,
+    "custom_syntax_patterns": [],
+    "colors": {"default": 0},
+    "config": {},
+    "is_256_color_terminal": True,
+    "_force_full_redraw": False,
+    "_file_loaded_from_disk": False,
+    "_file_had_final_newline": False,
+    "diagnostic_line_highlight": None,
+    "is_lightweight": True,
+    "stdscr": None,
+}
+
+
 def make_lightweight_editor(initial_text: list[str] | None = None) -> Ecli:
-    """Minimal lightweight Ecli instance, mirroring
-    tests/core/test_file_open_safety.py's make_editor() helper.
+    """Minimal lightweight Ecli instance for exercising open/preload/save
+    without curses or a config-backed constructor.
     """
     editor = Ecli.__new__(Ecli)
+    for attr, value in _LIGHTWEIGHT_EDITOR_DEFAULTS.items():
+        setattr(editor, attr, copy.deepcopy(value))
     editor.text = list(initial_text) if initial_text else ["existing content"]
-    editor.cursor_x = 0
-    editor.cursor_y = 0
-    editor.scroll_top = 0
-    editor.scroll_left = 0
-    editor.modified = False
-    editor.encoding = "utf-8"
-    editor.filename = None
-    editor.status_message = "Ready"
-    editor._sticky_status = None
-    editor.is_selecting = False
-    editor.selection_start = None
-    editor.selection_end = None
-    editor.highlighted_matches = []
-    editor.search_matches = []
-    editor.search_term = ""
-    editor.current_match_idx = -1
     editor.history = FakeHistory()
-    editor.git = None
-    editor.git_panel_instance = None
-    editor._lexer = None
-    editor.current_language = None
-    editor.custom_syntax_patterns = []
-    editor.colors = {"default": 0}
-    editor.config = {}
-    editor.is_256_color_terminal = True
-    editor._force_full_redraw = False
-    editor._file_loaded_from_disk = False
-    editor._file_had_final_newline = False
-    editor.diagnostic_line_highlight = None
-    editor.is_lightweight = True
-    editor.stdscr = None
     editor.run_lint_async = lambda *_a, **_k: False  # type: ignore[method-assign]
     return editor
 
 
+def _preload(wrapper: PreloadWrapper, candidate: Path) -> Ecli:
+    """Build a fresh lightweight editor and invoke the wrapper against it."""
+    editor = make_lightweight_editor()
+    wrapper(editor, candidate)
+    return editor
+
+
 def test_existing_file_cli_argument_loads_normally(
-    preload_cli_document_wrapper: Callable[[Any, Path], None], tmp_path: Path
+    preload_cli_document_wrapper: PreloadWrapper, tmp_path: Path
 ) -> None:
     src = tmp_path / "existing_main_wrapper.py"
     src.write_text("print('via main wrapper')\n", encoding="utf-8")
 
-    editor = make_lightweight_editor()
-    preload_cli_document_wrapper(editor, src)
+    editor = _preload(preload_cli_document_wrapper, src)
 
     assert editor.text[0] == "print('via main wrapper')"
     assert editor.filename == str(src.resolve())
@@ -235,12 +264,11 @@ def test_existing_file_cli_argument_loads_normally(
 
 
 def test_nonexistent_file_cli_argument_does_not_touch_disk_before_save(
-    preload_cli_document_wrapper: Callable[[Any, Path], None], tmp_path: Path
+    preload_cli_document_wrapper: PreloadWrapper, tmp_path: Path
 ) -> None:
     target = tmp_path / "main-wrapper-new-file.py"
 
-    editor = make_lightweight_editor()
-    preload_cli_document_wrapper(editor, target)
+    editor = _preload(preload_cli_document_wrapper, target)
 
     assert not target.exists()
     assert editor.text == [""]
@@ -249,12 +277,11 @@ def test_nonexistent_file_cli_argument_does_not_touch_disk_before_save(
 
 
 def test_nonexistent_file_cli_argument_then_save_creates_file(
-    preload_cli_document_wrapper: Callable[[Any, Path], None], tmp_path: Path
+    preload_cli_document_wrapper: PreloadWrapper, tmp_path: Path
 ) -> None:
     target = tmp_path / "main-wrapper-then-save.py"
 
-    editor = make_lightweight_editor()
-    preload_cli_document_wrapper(editor, target)
+    editor = _preload(preload_cli_document_wrapper, target)
     assert not target.exists()
 
     editor.text = ["print('saved via main wrapper')"]
@@ -266,7 +293,7 @@ def test_nonexistent_file_cli_argument_then_save_creates_file(
 
 
 def test_nonexistent_file_cli_argument_logs_no_type_error_traceback(
-    preload_cli_document_wrapper: Callable[[Any, Path], None],
+    preload_cli_document_wrapper: PreloadWrapper,
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
@@ -275,10 +302,9 @@ def test_nonexistent_file_cli_argument_logs_no_type_error_traceback(
     ``TypeError`` against methods that do not accept those arguments.
     """
     target = tmp_path / "main-wrapper-no-traceback.py"
-    editor = make_lightweight_editor()
 
     with caplog.at_level("DEBUG"):
-        preload_cli_document_wrapper(editor, target)  # must not raise
+        _preload(preload_cli_document_wrapper, target)  # must not raise
 
     assert "TypeError" not in caplog.text
     assert "Traceback" not in caplog.text
