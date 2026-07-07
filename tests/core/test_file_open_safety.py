@@ -235,6 +235,85 @@ def test_open_or_create_existing_file_opens_its_content(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# preload_cli_document (CLI startup entry point) delegates straight to
+# open_or_create() with no method-name probing. Regression coverage for the
+# dead-code cleanup that removed the unreachable probe loops.
+# ---------------------------------------------------------------------------
+
+
+def test_preload_cli_document_existing_file_delegates_and_loads_content(
+    tmp_path: Path,
+) -> None:
+    src = tmp_path / "existing_preload.py"
+    src.write_text("print('preload')\n", encoding="utf-8")
+
+    editor = make_editor()
+    editor.preload_cli_document(src)
+
+    assert editor.text[0] == "print('preload')"
+    assert editor.filename == str(src.resolve())
+    assert editor.modified is False
+
+
+def test_preload_cli_document_nonexistent_path_does_not_touch_disk(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "preload_not_yet_created.py"
+
+    editor = make_editor()
+    editor.preload_cli_document(target)
+
+    assert not target.exists()
+    assert editor.text == [""]
+    assert editor.modified is False
+
+
+def test_preload_cli_document_nonexistent_path_sets_clean_buffer_state(
+    tmp_path: Path,
+) -> None:
+    target = tmp_path / "preload_clean_buffer.txt"
+
+    editor = make_editor()
+    editor.preload_cli_document(target)
+
+    assert editor.filename == str(target.resolve())
+    assert editor.text == [""]
+    assert editor.modified is False
+
+
+def test_preload_cli_document_does_not_log_type_error_tracebacks(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Regression: the removed probe loops blindly guessed method signatures
+    (``meth(initial_path=...)`` then ``meth(...)``) and always raised
+    ``TypeError`` against methods that do not accept those arguments.
+    """
+    target = tmp_path / "preload_no_traceback.py"
+    editor = make_editor()
+
+    with caplog.at_level("DEBUG"):
+        editor.preload_cli_document(target)  # must not raise
+
+    assert "TypeError" not in caplog.text
+    assert "Traceback" not in caplog.text
+
+
+def test_preload_cli_document_then_save_creates_file(tmp_path: Path) -> None:
+    target = tmp_path / "preload_then_save.py"
+
+    editor = make_editor()
+    editor.preload_cli_document(target)
+    assert not target.exists()
+
+    editor.text = ["print('saved')"]
+    editor.modified = True
+    editor.save_file()
+
+    assert target.exists()
+    assert "print('saved')" in target.read_text(encoding="utf-8")
+
+
+# ---------------------------------------------------------------------------
 # P2 – Nonexistent path opens a clean new buffer
 # ---------------------------------------------------------------------------
 

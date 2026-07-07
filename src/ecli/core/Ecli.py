@@ -788,72 +788,18 @@ class Ecli:
         """Preload (open or create) a buffer named after 'path',
         even if it does not exist on disk.
         This ensures that Save will default to that path.
+
+        Delegates directly to ``open_or_create()``, which delegates to
+        ``open_file()`` -- the single real implementation of open/create/gate
+        semantics: existing-file open, a clean unmodified buffer for a
+        nonexistent path with no disk write before an explicit save,
+        binary/large-file gating, and sticky permission-error status.
+        There is no other supported buffer-creation API to probe for, so this
+        no longer guesses at method names or call signatures.
         """
         intended = str(path.resolve())
         self._cli_intended_path = intended
-
-        # 1) If editor already has a dedicated API, use it.
-        for meth_name in ("open_or_create",):
-            if hasattr(self, meth_name):
-                try:
-                    getattr(self, meth_name)(intended)  # type: ignore[misc]
-                    # also mirror filename state for downstream save logic
-                    self._set_current_path(intended)
-                    return
-                except Exception as exc:
-                    logger.debug(
-                        "%s(%s) failed, will try fallbacks: %s",
-                        meth_name,
-                        intended,
-                        exc,
-                    )
-
-        # 2) If file exists, use open_file; else create empty buffer with that name.
-        if os.path.exists(intended):
-            try:
-                self.open_file(intended)  # your method
-                self._set_current_path(intended)
-                return
-            except Exception:
-                logger.debug(
-                    "open_file(%s) failed, will try creating an empty buffer",
-                    intended,
-                    exc_info=True,
-                )
-
-        # 3) Create an empty in-memory buffer with given name if API exists.
-        for meth_name in (
-            "create_empty_buffer_with_name",
-            "new_buffer_named",
-            "new_file_with_name",
-            "new_file",
-        ):
-            if hasattr(self, meth_name):
-                try:
-                    meth = getattr(self, meth_name)
-                    try:
-                        meth(initial_path=intended)  # type: ignore[call-arg]
-                    except TypeError:
-                        meth(intended)  # type: ignore[misc]
-                    self._set_current_path(intended)
-                    return
-                except Exception:
-                    logger.debug(
-                        "%s failed, continue fallback", meth_name, exc_info=True
-                    )
-
-        # 4) Last resort: create on disk then open (guarantees correct default name).
-        try:
-            Path(intended).parent.mkdir(parents=True, exist_ok=True)
-            Path(intended).touch(exist_ok=True)
-            self.open_file(intended)
-            self._set_current_path(intended)
-        except Exception:
-            logger.warning(
-                "Could not preload CLI document %s; starting unnamed buffer.",
-                intended,
-                exc_info=True,
-            )
+        self.open_or_create(intended)
 
     def open_or_create(self, path: str | Path) -> None:
         """Open the file if it exists; otherwise create
