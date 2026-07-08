@@ -123,6 +123,34 @@ open ecli_<version>_macos_universal2.dmg
 
 Release artifacts are published at [GitHub Releases](https://github.com/SSobol77/ecli/releases) when available.
 
+Official releases upload exactly 21 ECLI-owned physical GitHub Release assets,
+one per canonical artifact contract entry. GitHub may display **Assets 23**
+because it adds generated `Source code (zip)` and `Source code (tar.gz)`
+archives automatically; those source archives are not part of the canonical 21
+artifact contract entries. SHA256 sidecars are CI/release verification evidence
+under `.checksums/`, not uploaded as separate GitHub Release assets.
+
+### ECLI Full and F4 Linters
+
+ECLI Full artifacts are the supported user path for complete F4 diagnostics.
+The Full installer must detect the operating system and artifact context, check
+already-installed required linters/toolchains first, install or bundle missing
+required tools with the correct OS/artifact-specific mechanism, and verify
+executability plus versions. A missing required linter after Full install is a
+packaging defect or damaged-install condition, not normal user setup.
+
+PyPI, `pipx`, and source checkouts are minimal/developer paths for non-Python
+linters because Python package metadata cannot reliably provision Node, Rust,
+Go, Zig, Java, and system binaries. Manual linter installation is reserved for
+developer checkouts, PyPI/source/minimal installs, repair, and advanced
+administration. See
+[F4 Linter Manual Installation Reference](https://github.com/SSobol77/ecli/blob/main/docs/extensions/f4-linter-manual-installation.md).
+
+Debian 13 testing validated a mixed provisioning strategy for Full artifacts:
+npm with a custom ECLI-managed prefix, dedicated Python virtual environments,
+prebuilt binaries, `cargo install`, JAR shims, verified upstream release
+downloads, and `rustup component add clippy`.
+
 ### Run from Source
 
 ```bash
@@ -135,7 +163,7 @@ make install
 make run
 ```
 
-### Install from PyPI
+### Install minimal from PyPI
 
 ```bash
 sudo apt update

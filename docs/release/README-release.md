@@ -16,12 +16,24 @@ See the LICENSE file in the project root for full license text.
 
 Defines canonical artifact contracts and release engineering process.
 
-Every official ECLI release publishes exactly 21 physical GitHub Release assets,
-one per canonical matrix entry. Release publication is blocked unless the exact
-21 assets are present under `releases/<version>/` and verified by
-`scripts/verify_release_assets.py`. Checksum sidecars are mandatory verification
-evidence, but they are not GitHub Release assets and must not increase the
-GitHub Release asset count.
+Every official ECLI release uploads exactly 21 ECLI-owned physical GitHub
+Release assets, one per canonical matrix entry. Release publication is blocked
+unless the exact 21 ECLI-owned assets are present under `releases/<version>/`
+and verified by `scripts/verify_release_assets.py`.
+
+The GitHub UI may show **Assets 23** because it adds `Source code (zip)` and
+`Source code (tar.gz)` automatically. Those generated source archives are not
+ECLI-owned uploaded artifacts and are not part of the canonical 21 artifact
+contract entries. Checksum sidecars are mandatory CI/release verification
+evidence under `.checksums/`, but they are not uploaded as separate GitHub
+Release assets.
+
+ECLI Full artifacts also carry the F4 linter provisioning contract. Release
+readiness requires OS/artifact-context detection, detection of already-installed
+required tools before provisioning, installation or bundling of missing required
+linters/toolchains, executable checks, version probes, and provenance/checksum
+evidence for bundled or GitHub/upstream downloaded binaries, JARs, and
+tarballs. A missing required linter after ECLI Full install is a release blocker.
 
 Authoritative files:
 - `artifact-contract.md`

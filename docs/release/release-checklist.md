@@ -15,9 +15,13 @@ See the LICENSE file in the project root for full license text.
 # Release Checklist
 
 - [ ] Version in `pyproject.toml` is correct.
-- [ ] Every official ECLI release publishes exactly 21 physical GitHub Release
-      assets, one per canonical matrix entry; release publication is blocked
-      unless the exact 21 assets are present and verified.
+- [ ] Every official ECLI release uploads exactly 21 ECLI-owned physical GitHub
+      Release assets, one per canonical matrix entry; release publication is
+      blocked unless the exact 21 ECLI-owned assets are present and verified.
+- [ ] If the GitHub UI shows **Assets 23**, confirm the extra two entries are
+      GitHub-generated `Source code (zip)` and `Source code (tar.gz)` archives.
+      They are not ECLI-owned uploaded artifacts and are not part of the
+      canonical 21 artifact contract entries.
 - [ ] `docs/release/artifact-contract.md` lists all 21 entries in the
       `Canonical 21-Item Platform & Packaging Artifact Matrix`, and every active
       platform/package surface in the `Platform & Packaging Release Contract
@@ -45,18 +49,18 @@ See the LICENSE file in the project root for full license text.
       dedicated tools migration restores equivalent Python tooling.
 - [ ] Workflow references are valid (no missing files such as packaging specs).
 - [ ] Checksums are generated for all release artifacts under
-      `releases/<version>/.checksums/`; `.sha256` sidecars are verification
-      evidence, not GitHub Release assets.
+      `releases/<version>/.checksums/`; `.sha256` sidecars are CI/release
+      verification evidence, not uploaded GitHub Release assets.
 - [ ] Contributor docs match actual release/build commands.
 - [ ] FreeBSD governance policy reviewed for artifact handling.
 - [ ] Release notes include known limitations and degraded flows.
 - [ ] AppImage, openSUSE, Arch, Slackware, FreeBSD `.pkg`,
       FreeBSD ports/chroot evidence, macOS app evidence, Nix flake evidence,
       NixOS package evidence, Docker helper evidence, and workflow contract
-      evidence are present in the canonical 21-asset set.
+      evidence are present in the canonical 21 ECLI-owned asset set.
 - [ ] FreeBSD may be built by native, VM, chroot, or ports route, but the
       official release remains blocked until both required FreeBSD assets are
-      present in the exact 21-asset set.
+      present in the exact 21 ECLI-owned asset set.
 - [ ] Confirm vmactions/freebsd-vm is still pinned to a known-good commit SHA
       in both `release.yml` and `freebsd-pkg.yml`.
 - [ ] Extensions Layer: confirm the curated runtime asset bundle under
@@ -69,6 +73,26 @@ See the LICENSE file in the project root for full license text.
       enforcement tests reject source/build/test/media artifacts, flat root
       folders, and VS Code UI/runtime-only folders; and confirm all 21 canonical
       assets remain green. See `docs/architecture/extensions-layer.md`.
+- [ ] F4 linter provisioning: every ECLI Full artifact maps provisioning to
+      exactly 21 artifact contract entries, detects OS/artifact context first,
+      detects already-installed required tools before installing missing tools,
+      verifies executable availability and version probes, and includes
+      deterministic provisioning evidence.
+- [ ] F4 linter package-manager dependencies: package metadata asserts the
+      dependency relationship and post-install executable availability for each
+      required linter/toolchain dependency it delegates to the OS package
+      manager.
+- [ ] F4 linter bundled/upstream tools: every bundled or GitHub/upstream
+      downloaded binary, JAR, or tarball has explicit source URL, pinned
+      version, checksum/provenance evidence, executable permission handling, and
+      no silent unverified execution.
+- [ ] Missing required F4 linter after ECLI Full install is treated as a release
+      blocker unless the artifact is explicitly documented as minimal or
+      constrained before release.
+- [ ] PyPI wheel/sdist limitations are documented honestly: plain Python
+      package metadata cannot reliably provision Node, Rust, Go, Zig, Java, or
+      system binaries, so complete F4 linter provisioning belongs to Full
+      platform artifacts.
 
 ## Mandatory GitHub Release Assets
 

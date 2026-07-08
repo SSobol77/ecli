@@ -37,6 +37,20 @@ flowchart LR
 
 ## Build Dependencies
 
+### F4 linter tools in source checkouts
+
+Source checkouts are not ECLI Full installs. They do not imply automatic
+provisioning of Biome, markdownlint-cli2, yamllint, ShellCheck, Zig, Hadolint,
+Taplo, actionlint, Clang-Tidy, Cppcheck, Checkstyle, PMD, Cargo Clippy,
+Clang-Format, SpotBugs, golangci-lint, SQLFluff, or TFLint.
+
+For source checkout diagnostics, install required tools manually using
+`docs/extensions/f4-linter-manual-installation.md` and verify every executable
+with its version command. For release packaging work, Full linter provisioning
+must be implemented and verified by the artifact-specific installer flow across
+exactly 21 artifact contract entries; manual setup is not release evidence for a
+Full artifact.
+
 ### TextMate syntax engine
 
 The default syntax engine is extension-backed and depends on `python-textmate`;

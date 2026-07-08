@@ -36,6 +36,13 @@ Recommended runtime environment:
 
 The official installer normally bundles required runtime components. Install a Visual C++ runtime only if the release notes for a specific artifact say it is required.
 
+For ECLI Full, the Windows installer/portable artifact must also provision the
+required F4 linter tools or managed runtime payload, detect already-installed
+tools before adding missing ones, and verify executable/version probes. Manual
+linter installation is only for developer checkouts, PyPI/source/minimal
+installs, damaged-install repair, or advanced administration; see
+`docs/extensions/f4-linter-manual-installation.md`.
+
 For source/development builds on Windows, install:
 
 - Python 3.11 or newer.

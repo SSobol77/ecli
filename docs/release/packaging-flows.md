@@ -17,18 +17,49 @@ See the LICENSE file in the project root for full license text.
 The active platform/package set is contract-bound by
 `docs/release/artifact-contract.md` under the `Canonical 21-Item Platform &
 Packaging Artifact Matrix` (summarized by the `Platform & Packaging Release
-Contract Matrix`). That canonical matrix defines exactly 21 physical GitHub
-Release assets. Every official ECLI release publishes exactly those 21 assets,
-one per canonical matrix entry; release publication is blocked unless
-`scripts/verify_release_assets.py` verifies the exact set under
-`releases/<version>/`. Release readiness is blocked if any active packaging
-surface is absent from docs, agent contracts, build/release runbooks, or
-validation tests under `tests/packaging/`. Empty, stale, decorative, or unused
-packaging files are forbidden.
+Contract Matrix`). That canonical matrix defines exactly 21 ECLI-owned uploaded
+physical GitHub Release assets. Every official ECLI release uploads exactly
+those 21 assets, one per canonical matrix entry; release publication is blocked
+unless `scripts/verify_release_assets.py` verifies the exact ECLI-owned set
+under `releases/<version>/`. GitHub may display **Assets 23** after adding its
+generated `Source code (zip)` and `Source code (tar.gz)` archives; those
+archives are outside the canonical 21 artifact contract entries. Release
+readiness is blocked if any active packaging surface is absent from docs, agent
+contracts, build/release runbooks, or validation tests under `tests/packaging/`.
+Empty, stale, decorative, or unused packaging files are forbidden.
 
-Checksum sidecars are mandatory verification evidence under
-`releases/<version>/.checksums/` or workflow validation artifacts, not GitHub
-Release assets.
+Checksum sidecars are mandatory CI/release verification evidence under
+`releases/<version>/.checksums/` or workflow validation artifacts. They are not
+uploaded as separate GitHub Release assets.
+
+## F4 Linter Provisioning in Full Artifacts
+
+Full F4 linter provisioning is part of release readiness. Each packaging flow
+that claims ECLI Full must map provisioning to exactly 21 artifact contract
+entries in `docs/release/artifact-contract.md`; the linter pack must not add a
+parallel artifact matrix.
+
+The required packaging flow is:
+
+1. Detect the operating system and canonical artifact context.
+2. Detect already-installed required tools before installing anything.
+3. Install or bundle missing required tools by the correct artifact-specific
+   mechanism.
+4. Verify executable availability and version probes.
+5. Preserve deterministic provisioning logs as release evidence.
+
+Allowed mechanisms include native package-manager dependencies where reliable,
+bundled tools, verified GitHub/upstream release downloads, language package
+manager installs, ECLI-managed tool directories, and shims/wrappers for JARs or
+toolchain components. GitHub/upstream binaries, JARs, and tarballs require
+explicit source URL, version pinning, checksum/provenance evidence, executable
+permission handling, and no silent unverified execution.
+
+Package-manager dependency flows must prove both the package relationship and
+post-install executable availability. A missing required linter after ECLI Full
+installation is a release blocker. Manual linter installation remains a
+developer checkout, PyPI/source/minimal install, damaged-install repair, or
+advanced administration path only.
 
 ## Mandatory GitHub Release Assets
 
@@ -82,9 +113,9 @@ and theme assets under `themes/<name>`. The packaging rules are:
   `.vscodeignore`, Node build configs, `node_modules/`, VS Code UI/runtime-only
   folders, and activation/runtime TypeScript or JavaScript under
   `src/ecli/extensions/` outside `ecli_integration/`.
-- The exact 21-asset GitHub Release contract is unchanged: extension assets ride
-  inside the wheel/sdist and downstream platform artifacts, not as new
-  top-level release assets.
+- The exact 21 ECLI-owned GitHub Release asset contract is unchanged: extension
+  assets ride inside the wheel/sdist and downstream platform artifacts, not as
+  new top-level release assets.
 
 ## Shell-to-Python Script Migration
 
@@ -127,9 +158,9 @@ map, `make list-targets` for public target discovery, `make doctor` for local
 tool availability, and `make sysinfo` for configured package variables.
 Maintainer-owned release/upload targets require `ECLI_ALLOW_RELEASE=1`.
 Legacy per-platform `release-*` targets fail closed because partial GitHub
-Release uploads are incompatible with the exact 21-asset contract. The aggregate
-`publish-all` target is the guarded GitHub Release asset publisher and must run
-the exact asset verifier first.
+Release uploads are incompatible with the exact 21 ECLI-owned asset contract.
+The aggregate `publish-all` target is the guarded GitHub Release asset publisher
+and must run the exact asset verifier first.
 
 `Taskfile.yml` is an optional developer convenience wrapper. It may expose
 developer-friendly commands such as `task help`, `task validate-packaging`, and
@@ -175,7 +206,8 @@ Governance rule:
 
 - FreeBSD outputs must be treated as release artifacts, not source-history payload by default.
 - Official release publication is blocked until the FreeBSD `.pkg` asset and
-  FreeBSD ports/chroot evidence asset are present in the exact 21-asset set.
+  FreeBSD ports/chroot evidence asset are present in the exact 21 ECLI-owned
+  asset set.
 
 ## macOS
 

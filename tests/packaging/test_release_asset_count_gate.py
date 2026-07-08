@@ -417,7 +417,14 @@ def test_release_docs_state_exact_physical_asset_rule(
         )
     )
 
-    assert "exactly 21 physical GitHub Release assets" in release_docs
+    assert "exactly 21 ECLI-owned" in release_docs
+    assert "Assets 23" in release_docs
+    assert "Source code (zip)" in release_docs
+    assert "Source code (tar.gz)" in release_docs
+    assert "not part of the canonical 21 artifact contract entries" in " ".join(
+        release_docs.split()
+    )
+    assert "not uploaded" in release_docs
     assert "scripts/verify_release_assets.py" in release_docs
     assert ".checksums/" in release_docs
     # Canonical names are clean (no numeric prefix).

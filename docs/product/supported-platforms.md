@@ -36,10 +36,16 @@ See the LICENSE file in the project root for full license text.
 
 The normative artifact list is the `Canonical 21-Item Platform & Packaging
 Artifact Matrix` in `docs/release/artifact-contract.md`. Every official ECLI
-release publishes exactly 21 physical GitHub Release assets, one per canonical
-matrix entry. Release publication is blocked unless `scripts/verify_release_assets.py`
-verifies the exact top-level asset set under `releases/<version>/`. Checksum
-sidecars are verification evidence, not GitHub Release assets.
+release uploads exactly 21 ECLI-owned physical GitHub Release assets, one per
+canonical matrix entry. Release publication is blocked unless
+`scripts/verify_release_assets.py` verifies the exact ECLI-owned top-level asset
+set under `releases/<version>/`.
+
+The GitHub UI may show **Assets 23** because GitHub adds `Source code (zip)` and
+`Source code (tar.gz)` automatically. Those generated source archives are not
+ECLI-owned uploaded artifacts and are not part of the canonical 21 artifact
+contract entries. Checksum sidecars are CI/release verification evidence under
+`.checksums/`, not uploaded GitHub Release assets.
 
 Every entry below must remain covered by tests under `tests/packaging/` and
 (where relevant) by a GitHub workflow:
@@ -65,6 +71,15 @@ Every entry below must remain covered by tests under `tests/packaging/` and
 19. Docker DEB build helper
 20. Docker RPM build helper
 21. GitHub Actions release/workflow contract map
+
+F4 linter provisioning for ECLI Full must also map to these exactly 21 artifact
+contract entries. A Full artifact must detect its OS/artifact context, check
+already-installed required linters/toolchains before installing missing ones,
+verify executable availability and versions, and retain provenance/checksum
+evidence for bundled or GitHub/upstream downloaded tools. PyPI wheel/sdist
+entries are constrained by Python packaging metadata and may be minimal for
+non-Python toolchains; complete linter provisioning is the supported user path
+for Full platform artifacts.
 
 Mandatory GitHub Release asset names for each `<version>`:
 

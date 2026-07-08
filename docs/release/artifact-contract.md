@@ -43,21 +43,67 @@ release contract, test, or workflow.
 
 ## Permanent Official Release Asset Rule
 
-Every official ECLI release publishes exactly 21 physical GitHub Release
-assets, one per canonical matrix entry. Release publication is blocked unless
-the exact 21 top-level asset files are present and verified by
-`scripts/verify_release_assets.py`.
+Every official ECLI release uploads exactly 21 ECLI-owned physical GitHub
+Release assets, one per canonical matrix entry. Release publication is blocked
+unless the exact 21 ECLI-owned top-level asset files are present and verified
+by `scripts/verify_release_assets.py`.
+
+The GitHub release page may display **Assets 23** because GitHub automatically
+adds two generated source archives: `Source code (zip)` and
+`Source code (tar.gz)`. Those GitHub-generated source archives are not
+ECLI-owned uploaded artifacts and are not part of the canonical 21 artifact
+contract entries.
 
 This rule applies to every official release version. Versioned filenames derive
 from `pyproject.toml`; hard-coded version-specific release gates are forbidden
 outside test fixtures. No reduced, subset, deferred, or partial official
 GitHub Release is allowed.
 
-Checksum sidecars are mandatory verification evidence, but they are not GitHub
-Release assets. The release asset directory may contain
-`releases/<version>/.checksums/` for sidecars; the top level of
-`releases/<version>/` must contain exactly the 21 files listed below and no
-additional files.
+Checksum sidecars are mandatory CI/release verification evidence, but they are
+not uploaded as separate GitHub Release assets. The release asset directory may
+contain `releases/<version>/.checksums/` for sidecars; the top level of
+`releases/<version>/` must contain exactly the 21 ECLI-owned uploaded files
+listed below and no additional ECLI-uploaded files.
+
+## F4 Linter Full Provisioning Contract
+
+F4 linter provisioning is part of release readiness for ECLI Full artifacts.
+The normative mapping is exactly 21 artifact contract entries: every Full
+installation behavior, dependency relationship, bundled tool payload, repair
+path, and verification check must map back to one of the entries in the
+canonical matrix below. Do not describe this as a loose platform list or add a
+parallel linter release matrix.
+
+For each Full artifact entry, the installer or package flow must prove:
+
+- it detects the operating system and artifact context before provisioning;
+- it checks already-installed required linter/toolchain executables before
+  installing or bundling missing tools;
+- it installs or bundles missing required tools by the entry's OS/artifact
+  mechanism: native package dependency, bundled binary, verified upstream
+  release download, language package-manager install, ECLI-managed tools
+  directory, or wrapper/shim;
+- it verifies executable availability and version probes after provisioning;
+- package-manager dependencies assert both the package relationship and
+  post-install executable availability;
+- bundled or upstream-downloaded binaries, JARs, and tarballs record explicit
+  source URL, pinned version, checksum/provenance evidence, executable
+  permission handling, and deterministic install logs;
+- no GitHub release or upstream binary artifact is executed silently without
+  verification evidence;
+- the per-linter `package_contract.py` metadata names the required binary and
+  version probe and records the provenance policy the artifact uses.
+
+A missing required F4 linter/toolchain after an ECLI Full install is a release
+blocker and a packaging defect, not normal user workflow. Manual linter
+installation documentation is only for developer checkouts, PyPI/source/minimal
+installs, damaged-install repair, and advanced administration.
+
+The PyPI wheel and source distribution entries are constrained by Python
+packaging metadata: they cannot reliably provision Node, Rust, Go, Zig, Java,
+or system binaries. Their release contract must document that limitation
+honestly and route complete F4 linter provisioning to Full platform artifacts
+or to manual developer/minimal/repair instructions.
 
 Mandatory GitHub Release asset names for each `<version>`:
 
@@ -98,13 +144,13 @@ below and in the verifier's template order, never in a filename.
 ## Canonical 21-Item Platform & Packaging Artifact Matrix
 
 This is the normative, complete list of active ECLI release-contract artifacts.
-It defines exactly 21 physical GitHub Release assets. Coverage in tests under
-`tests/packaging/` and GitHub workflows under `.github/workflows/` must
-never be smaller than this matrix. If an artifact exists here but lacks a test
-or (where relevant) a workflow mapping, release readiness is blocked. Do not
-add a packaging file, workflow, script, or platform descriptor unless it is
-wired into this matrix, build/release runbooks, and validation tests. Do not
-invent unsupported package types.
+It defines exactly 21 ECLI-owned uploaded physical GitHub Release assets.
+Coverage in tests under `tests/packaging/` and GitHub workflows under
+`.github/workflows/` must never be smaller than this matrix. If an artifact
+exists here but lacks a test or (where relevant) a workflow mapping, release
+readiness is blocked. Do not add a packaging file, workflow, script, or
+platform descriptor unless it is wired into this matrix, build/release runbooks,
+and validation tests. Do not invent unsupported package types.
 
 | # | Package / artifact | Platform / system | Repository source files | Expected artifact / output | Related GitHub workflow | Required test file | Release-readiness condition |
 |---|---|---|---|---|---|---|---|
@@ -163,7 +209,7 @@ release documentation, and repository-local packaging test.
 | Workflow | Classification | Contract role |
 |---|---|---|
 | `.github/workflows/ci.yml` | Global quality gate | Runs the global CI quality gate and release contract tests; keeps root `main.py` compatibility in the CI path filters. |
-| `.github/workflows/freebsd-pkg.yml` | Packaging workflow | FreeBSD `.pkg` package path covering native package, port, chroot, checksum, and workflow-artifact evidence. Official GitHub Release publication waits for the aggregate release workflow and exact 21-asset verifier. |
+| `.github/workflows/freebsd-pkg.yml` | Packaging workflow | FreeBSD `.pkg` package path covering native package, port, chroot, checksum, and workflow-artifact evidence. Official GitHub Release publication waits for the aggregate release workflow and exact 21 ECLI-owned asset verifier. |
 | `.github/workflows/macos-dmg.yml` | Packaging workflow | macOS `.app` / `.dmg` package path using the shared PyInstaller spec and DMG artifact contract. |
 | `.github/workflows/macos-validate.yml` | Packaging validation workflow | macOS package validation for the `.app` / `.dmg` contract. |
 | `.github/workflows/project-automation.yml` | Repository automation, non-packaging | Moves issues and pull requests between project columns. It is not a release artifact workflow and must not be counted as package coverage. |
@@ -360,7 +406,7 @@ scripts and release contract tests.
 | `scripts/sign_checksums.py` | Writes coreutils basename-only `<artifact>.sha256` sidecars (SHA256 only; not GPG signing) |
 | `scripts/check_log_invariant.py` | Read-only `git ls-files` log-location invariant |
 | `scripts/verify_artifact.py` | Structural SHA256 sidecar verifier; exit-code contract `0`-`5` preserved |
-| `scripts/verify_release_assets.py` | Read-only exact 21 GitHub Release asset verifier; ignores `.checksums/` only when it is a directory |
+| `scripts/verify_release_assets.py` | Read-only exact 21 ECLI-owned GitHub Release asset verifier; ignores `.checksums/` only when it is a directory |
 | `scripts/verify_runtime.py` | Cross-artifact launcher validation; exit codes (`0`/`2`/`3`/`4`/`5`/`6`) preserved |
 | `scripts/build_pyinstaller_linux.py` | Linux PyInstaller build; prefers `packaging/pyinstaller/ecli.spec` |
 | `scripts/build_and_package_deb.py` | `ecli_<version>_linux_<arch>.deb` via FPM; dependency set preserved |

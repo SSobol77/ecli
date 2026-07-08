@@ -16,7 +16,32 @@ See the LICENSE file in the project root for full license text.
 
 This page is the short user-facing install path. The fuller contributor and artifact matrix remains in `docs/contributor/install.md`.
 
-## Install from PyPI
+## ECLI Full vs. PyPI/source installs
+
+ECLI Full is the normal user path for complete F4 diagnostics. A Full installer
+or Full release artifact must detect the operating system and artifact context,
+check already-installed required linters/toolchains first, install or bundle
+missing required tools using the correct OS/artifact-specific mechanism, and
+verify executability plus versions before reporting success.
+
+Manual linter installation is not the normal Full path. It is documented for
+developer checkouts, PyPI/source/minimal installs, repair of damaged Full
+installs, and advanced/custom administration. See
+`docs/extensions/f4-linter-manual-installation.md`.
+
+PyPI, `pipx`, and source checkouts are useful minimal/developer paths, but plain
+Python package metadata cannot reliably provision Node, Rust, Go, Zig, Java, or
+system binaries. Use a Full platform artifact when you need complete F4 linter
+provisioning.
+
+Debian 13 testing proved that a valid provisioning implementation may need a
+mixed strategy: npm with a custom prefix under an ECLI-managed tools directory,
+dedicated Python virtual environments, prebuilt binaries, `cargo install`, JAR
+shims, upstream release downloads with verification, and `rustup component add
+clippy`. Full artifacts must automate and verify that work; users should not
+have to discover it after installation.
+
+## Install minimal from PyPI
 
 Recommended user-level installation with `pipx`:
 

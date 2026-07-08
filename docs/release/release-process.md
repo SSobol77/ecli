@@ -31,25 +31,41 @@ See the LICENSE file in the project root for full license text.
 
 - Contract validation must happen before publish.
 - `make validate-gate2` is the required pre-publish validation gate.
-- `make validate-release-assets` is the exact 21 GitHub Release asset gate.
+- `make validate-release-assets` is the exact 21 ECLI-owned GitHub Release asset
+  gate.
 - Missing required artifacts must block release.
-- Every official ECLI release publishes exactly 21 physical GitHub Release
-  assets, one per canonical matrix entry. Release publication is blocked unless
-  the exact 21 assets are present and verified.
+- Every official ECLI release uploads exactly 21 ECLI-owned physical GitHub
+  Release assets, one per canonical matrix entry. Release publication is
+  blocked unless the exact 21 ECLI-owned assets are present and verified.
+- The GitHub release page may show **Assets 23** because GitHub automatically
+  adds `Source code (zip)` and `Source code (tar.gz)`. Those generated source
+  archives are not ECLI-owned uploaded artifacts and are not part of the
+  canonical 21 artifact contract entries.
 - Workflow references to non-existent files must be resolved as release blockers.
 - Every active package/platform surface must appear in the `Canonical 21-Item
   Platform & Packaging Artifact Matrix` (summarized by the `Platform & Packaging
   Release Contract Matrix`), agent contracts, build/release runbooks, and
   repository-local validation tests under `tests/packaging/`. The canonical
-  matrix defines exactly 21 physical GitHub Release assets; coverage in tests,
-  Claude commands, Codex prompts, and workflows must never be smaller than that
-  matrix.
+  matrix defines exactly 21 ECLI-owned uploaded physical GitHub Release assets;
+  coverage in tests, Claude commands, Codex prompts, and workflows must never be
+  smaller than that matrix.
 - Empty, stale, decorative, or unused packaging files are release blockers until
   they are either wired into the contract matrix or explicitly removed from
   active workflows/scripts.
-- Checksum sidecars are mandatory verification evidence under
+- Checksum sidecars are mandatory CI/release verification evidence under
   `releases/<version>/.checksums/` or workflow validation artifacts; they are
-  not GitHub Release assets.
+  not uploaded as separate GitHub Release assets.
+- ECLI Full release readiness includes F4 linter provisioning across exactly 21
+  artifact contract entries. Each Full artifact must detect OS/artifact context,
+  check already-installed required tools before provisioning, install or bundle
+  missing tools by the entry's mechanism, and verify executable availability
+  plus version probes.
+- Bundled or GitHub/upstream downloaded linter tools require explicit source
+  URL, pinned version, checksum/provenance evidence, executable permission
+  handling, deterministic install logs, and no silent unverified binary
+  execution.
+- Missing required F4 linters after ECLI Full install are release blockers, not
+  normal user remediation.
 
 ## GitHub Actions Workflow Contract Map
 
@@ -66,7 +82,7 @@ contract drift.
 | `.github/workflows/macos-validate.yml` | macOS package validation. |
 | `.github/workflows/project-automation.yml` | Repository automation, non-packaging; not a release artifact workflow. |
 | `.github/workflows/pypi-validate.yml` | PyPI wheel and source distribution validation. |
-| `.github/workflows/release.yml` | Aggregate exact 21-asset release matrix and publication orchestration. |
+| `.github/workflows/release.yml` | Aggregate exact 21 ECLI-owned asset release matrix and publication orchestration. |
 | `.github/workflows/windows-installer.yml` | Windows portable EXE and NSIS installer package path. |
 | `.github/workflows/windows-validate.yml` | Windows package validation. |
 
@@ -201,7 +217,7 @@ itself. That risk does not relax the official release contract.
 
 FreeBSD may be built by VM, native host, chroot, or ports route, but official
 GitHub Release publication must wait until both required FreeBSD entries are
-present in the exact 21-asset set:
+present in the exact 21 ECLI-owned asset set:
 
 - `ecli_<version>_freebsd_x86_64.pkg`
 - `ecli_<version>_freebsd_ports_chroot_evidence.tar.gz`
@@ -237,8 +253,8 @@ removed as tracked tooling.
 Maintainer-owned release/upload Make targets are guarded. Set
 `ECLI_ALLOW_RELEASE=1` only when intentionally running the aggregate
 `publish-all` target. Legacy per-platform `release-*` targets fail closed
-because partial GitHub Release uploads are incompatible with the exact 21-asset
-contract.
+because partial GitHub Release uploads are incompatible with the exact 21
+ECLI-owned asset contract.
 
 `Taskfile.yml` may expose convenience tasks such as `task publish-all`,
 `task validate-release-assets`, `task release-linux`, `task release-freebsd`,
