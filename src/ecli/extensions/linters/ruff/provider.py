@@ -1,4 +1,24 @@
-"""Ruff diagnostics provider."""
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Project: Ecli
+# File: src/ecli/extensions/linters/ruff/provider.py
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+#
+# Copyright (c) 2026 Siergej Sobolewski
+#
+# Licensed under the GNU General Public License version 2 only.
+# See the LICENSE file in the project root for full license text.
+
+"""Ruff diagnostics provider -- the F4 linter microservices reference
+implementation.
+
+Parsing helpers are kept in this module rather than split into a separate
+``parser.py`` for this migration: behavior-preserving relocation from
+``ecli.diagnostics.ruff_provider`` takes priority over restructuring. See
+``docs/architecture/ecli-f4-linter-microservices-design.md`` section 3.1.
+"""
 
 from __future__ import annotations
 
@@ -11,7 +31,7 @@ from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 
-from ecli.diagnostics.models import (
+from ecli.extensions.linters.core.models import (
     Diagnostic,
     DiagnosticRequest,
     DiagnosticResult,
@@ -52,6 +72,17 @@ class RuffDiagnosticProvider:
         self.executable = executable
         self.timeout_seconds = timeout_seconds
         self._runner = runner
+
+    def supports(self, request: DiagnosticRequest) -> bool:
+        """Return True for Python buffer requests and all workspace requests.
+
+        Workspace-scope (``R``) diagnostics are project-wide by design and
+        do not depend on the currently open file's language, matching the
+        existing unconditional ``_run_workspace`` behavior.
+        """
+        if request.scope == "workspace":
+            return True
+        return _is_python_file(request.file_path, request.language)
 
     def run(self, request: DiagnosticRequest) -> DiagnosticResult:
         """Run Ruff for a buffer or workspace request."""

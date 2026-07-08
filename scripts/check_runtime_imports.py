@@ -31,12 +31,15 @@ SOURCE_ROOT = Path("src/ecli")
 # foreign-language code and intentionally-malformed Python fixtures, so this
 # guard must not parse it. See docs/architecture/extensions-layer.md.
 #
-# Exception (issue #100): ``src/ecli/extensions/ecli_integration/`` is ECLI-owned
-# deterministic adapter code, not imported upstream, so it MUST be scanned. Every
-# other direct child of ``src/ecli/extensions/`` stays an imported upstream asset
-# tree and remains skipped.
+# Exceptions: ``src/ecli/extensions/ecli_integration/`` (issue #100) is
+# ECLI-owned deterministic adapter code, and ``src/ecli/extensions/linters/``
+# (F4 linter microservices, see
+# docs/architecture/ecli-f4-linter-microservices-design.md) is ECLI-owned
+# diagnostics runtime code. Neither is imported upstream, so both MUST be
+# scanned. Every other direct child of ``src/ecli/extensions/`` stays an
+# imported upstream asset tree and remains skipped.
 IMPORTED_EXTENSIONS_DIR = "extensions"
-ECLI_OWNED_EXTENSIONS_SUBDIR = "ecli_integration"
+ECLI_OWNED_EXTENSIONS_SUBDIRS = frozenset({"ecli_integration", "linters"})
 
 
 def _forbidden_imports(path: Path) -> list[tuple[int, str]]:
@@ -67,14 +70,15 @@ def _is_imported_upstream(relative: Path) -> bool:
     """Return ``True`` if ``relative`` (under ``src/ecli``) is an imported asset.
 
     The imported VS Code extension tree lives under ``extensions/`` and is read
-    only (issue #98). The single ECLI-owned exception is the deterministic
-    adapter package ``extensions/ecli_integration/`` (issue #100), which is
-    scanned like any other ECLI source.
+    only (issue #98). The ECLI-owned exceptions are the deterministic adapter
+    package ``extensions/ecli_integration/`` (issue #100) and the F4 linter
+    microservices package ``extensions/linters/``, both of which are scanned
+    like any other ECLI source.
     """
     parts = relative.parts
     if not parts or parts[0] != IMPORTED_EXTENSIONS_DIR:
         return False
-    return len(parts) < 2 or parts[1] != ECLI_OWNED_EXTENSIONS_SUBDIR
+    return len(parts) < 2 or parts[1] not in ECLI_OWNED_EXTENSIONS_SUBDIRS
 
 
 def scanned_source_files(root: Path | None = None) -> list[Path]:

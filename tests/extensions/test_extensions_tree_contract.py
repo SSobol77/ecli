@@ -16,8 +16,13 @@
 ``src/ecli/extensions/`` is a small, curated runtime asset bundle, not a vendored
 copy of full VS Code extension source repositories. Its root contains only:
 
-* ``ecli_integration/`` — ECLI-owned Python adapter code (the only Python package
-  under this tree);
+* ``ecli_integration/`` — ECLI-owned Python adapter code;
+* ``linters/`` — ECLI-owned F4 linter microservices Python package (see
+  ``docs/architecture/ecli-f4-linter-microservices-design.md``); each linter
+  is its own microservice directory with a ``manifest.py`` and
+  ``package_contract.py``, and (for Ruff only, in this migration) a working
+  ``provider.py``. Raw upstream linter runtime source (VS Code TypeScript or
+  otherwise) is never permitted here -- only ECLI-authored Python;
 * ``lang/`` — imported language/runtime declarative extension assets, one folder
   per language or language bundle;
 * ``themes/`` — imported colour-theme extension assets, one folder per theme
@@ -36,6 +41,7 @@ These are read-only tree assertions. They never modify the imported tree.
 
 from __future__ import annotations
 
+import subprocess
 from fnmatch import fnmatch
 from pathlib import Path
 
@@ -50,8 +56,20 @@ ASSET_GROUP_DIRS: tuple[str, ...] = ("lang", "themes")
 
 # The only entries permitted directly under ``src/ecli/extensions/``.
 ALLOWED_ROOT_ENTRIES = frozenset(
-    {"ecli_integration", "lang", "themes", "THIRD_PARTY_NOTICES.md", "README.md"}
+    {
+        "ecli_integration",
+        "linters",
+        "lang",
+        "themes",
+        "THIRD_PARTY_NOTICES.md",
+        "README.md",
+    }
 )
+
+# Extensions-root Python packages that hold ECLI-owned runtime code, not
+# imported upstream declarative assets. Any file type is permitted inside
+# these; everything else under the root is asset-group-only (lang/, themes/).
+ECLI_OWNED_RUNTIME_PACKAGES = frozenset({"ecli_integration", "linters"})
 
 
 # Representative imported assets that must exist verbatim in the tree, expressed
@@ -170,7 +188,7 @@ def test_root_contains_only_allowed_entries() -> None:
         f"unexpected entries at extensions root (only {sorted(ALLOWED_ROOT_ENTRIES)} "
         f"allowed): {unexpected}"
     )
-    for required in ("ecli_integration", "lang", "themes"):
+    for required in ("ecli_integration", "linters", "lang", "themes"):
         assert (EXTENSIONS_ROOT / required).is_dir(), f"missing root dir: {required}"
 
 
@@ -254,8 +272,9 @@ def _is_allowed_runtime_asset(relative: Path) -> bool:
     parts = relative.parts
     if not parts:
         return False
-    # ECLI-owned adapter package: any Python file/data is allowed.
-    if parts[0] == "ecli_integration":
+    # ECLI-owned runtime packages (adapter code, F4 linter microservices):
+    # any Python file/data is allowed.
+    if parts[0] in ECLI_OWNED_RUNTIME_PACKAGES:
         return True
     # Root-level files (THIRD_PARTY_NOTICES.md, README.md, legal notices).
     if len(parts) == 1:
@@ -314,3 +333,79 @@ def test_forbidden_runtime_artifacts_absent() -> None:
     assert offenders == [], (
         f"forbidden runtime artifacts under extensions tree: {offenders}"
     )
+
+
+# ---------------------------------------------------------------------------
+# F4 linter microservices: src/ecli/extensions/linters/ is an allowed
+# Extensions Layer root entry, precisely scoped -- ECLI-owned Python runtime
+# is permitted, raw upstream (VS Code TypeScript/JavaScript) linter source
+# is not. See docs/architecture/ecli-f4-linter-microservices-design.md.
+# ---------------------------------------------------------------------------
+
+LINTERS_ROOT = EXTENSIONS_ROOT / "linters"
+
+
+def test_linters_root_is_an_allowed_extensions_entry() -> None:
+    assert "linters" in ALLOWED_ROOT_ENTRIES
+    assert LINTERS_ROOT.is_dir(), (
+        f"F4 linter microservices root missing: {LINTERS_ROOT}"
+    )
+    assert (LINTERS_ROOT / "__init__.py").is_file()
+    assert (LINTERS_ROOT / "core").is_dir()
+    assert (LINTERS_ROOT / "ruff").is_dir()
+
+
+def test_no_raw_typescript_or_javascript_under_linters() -> None:
+    offenders = [
+        str(path.relative_to(LINTERS_ROOT))
+        for path in LINTERS_ROOT.rglob("*")
+        if path.is_file() and path.suffix in FORBIDDEN_SOURCE_SUFFIXES
+    ]
+    assert offenders == [], (
+        f"raw upstream TypeScript/JavaScript source found under "
+        f"src/ecli/extensions/linters/: {offenders}"
+    )
+
+
+def test_no_node_build_artifacts_under_linters() -> None:
+    offenders = [
+        str(path.relative_to(LINTERS_ROOT))
+        for path in LINTERS_ROOT.rglob("*")
+        if path.is_file() and _matches_any(path.name, FORBIDDEN_FILE_PATTERNS)
+    ]
+    assert offenders == [], (
+        f"forbidden Node/TS build artifacts under "
+        f"src/ecli/extensions/linters/: {offenders}"
+    )
+
+
+def test_no_wrong_extensions_paths_at_src_root() -> None:
+    """``src/extentions`` (typo) and ``src/extensions`` (wrong nesting depth)
+    must never exist as siblings of ``src/ecli/``; the only valid location is
+    ``src/ecli/extensions/``.
+    """
+    src_root = REPO_ROOT / "src"
+    for wrong_name in ("extentions", "extensions"):
+        wrong_path = src_root / wrong_name
+        assert not wrong_path.exists(), (
+            f"wrong extensions path present: {wrong_path}; the only valid "
+            "location is src/ecli/extensions/"
+        )
+
+
+def test_no_pycache_or_pyc_tracked_under_linters() -> None:
+    """``__pycache__/`` and ``*.pyc`` are build artifacts, never source; they
+    must not be tracked by git under the F4 linter microservices tree.
+    """
+    completed = subprocess.run(
+        ["git", "ls-files", "src/ecli/extensions/linters"],
+        cwd=REPO_ROOT,
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    tracked = completed.stdout.splitlines()
+    offenders = [
+        path for path in tracked if "__pycache__" in path or path.endswith(".pyc")
+    ]
+    assert offenders == [], f"pycache/.pyc files are tracked by git: {offenders}"

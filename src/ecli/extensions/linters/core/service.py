@@ -1,3 +1,16 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Project: Ecli
+# File: src/ecli/extensions/linters/core/service.py
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+#
+# Copyright (c) 2026 Siergej Sobolewski
+#
+# Licensed under the GNU General Public License version 2 only.
+# See the LICENSE file in the project root for full license text.
+
 """Provider registry and bounded async diagnostics execution."""
 
 from __future__ import annotations
@@ -5,9 +18,8 @@ from __future__ import annotations
 import logging
 import queue
 import threading
-from typing import Protocol
 
-from ecli.diagnostics.models import (
+from ecli.extensions.linters.core.models import (
     Diagnostic,
     DiagnosticRequest,
     DiagnosticResult,
@@ -16,19 +28,10 @@ from ecli.diagnostics.models import (
     ProviderState,
     sort_diagnostics,
 )
+from ecli.extensions.linters.core.provider_protocol import DiagnosticProvider
 
 
 logger = logging.getLogger(__name__)
-
-
-class DiagnosticProvider(Protocol):
-    """Protocol implemented by diagnostics providers."""
-
-    name: str
-    enabled: bool
-
-    def run(self, request: DiagnosticRequest) -> DiagnosticResult:
-        """Run diagnostics for the given request."""
 
 
 class DiagnosticsService:
@@ -178,11 +181,25 @@ class DiagnosticsService:
                 provider_states=self.provider_states(),
             )
 
+        applicable = tuple(
+            provider
+            for provider in enabled
+            if self._provider_supports(provider, request)
+        )
+        if not applicable:
+            return DiagnosticResult(
+                generation=request.generation,
+                diagnostics=(),
+                status="skipped",
+                message="No diagnostics provider available for this file type.",
+                provider_states=self.provider_states(),
+            )
+
         diagnostics: list[Diagnostic] = []
         messages: list[str] = []
         status: DiagnosticStatus = "ready"
         saw_skipped = False
-        for provider in enabled:
+        for provider in applicable:
             status, saw_skipped = self._merge_provider_result(
                 provider.run(request),
                 diagnostics,
@@ -267,6 +284,29 @@ class DiagnosticsService:
                 for _name, provider in sorted(self._providers.items())
                 if provider.enabled
             )
+
+    @staticmethod
+    def _provider_supports(
+        provider: DiagnosticProvider, request: DiagnosticRequest
+    ) -> bool:
+        """Return whether ``provider`` applies to ``request``.
+
+        Providers registered without a ``supports`` method are treated as
+        applicable to every request (design doc section 7.1 migration
+        compatibility clause). A provider whose ``supports`` raises is
+        treated as not applicable rather than crashing the worker.
+        """
+        supports = getattr(provider, "supports", None)
+        if not callable(supports):
+            return True
+        try:
+            return bool(supports(request))
+        except Exception:
+            logger.exception(
+                "Provider %s.supports() raised; treating as not applicable",
+                getattr(provider, "name", "<unknown>"),
+            )
+            return False
 
 
 def initial_snapshot(provider_states: tuple[ProviderState, ...]) -> DiagnosticsSnapshot:

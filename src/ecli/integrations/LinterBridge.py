@@ -39,9 +39,24 @@ import types
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Optional
 
-from ecli.diagnostics.models import DiagnosticsSnapshot
-from ecli.diagnostics.ruff_provider import RuffDiagnosticProvider
-from ecli.diagnostics.service import DiagnosticsService, initial_snapshot
+from ecli.extensions.linters.actionlint.provider import ActionlintDiagnosticProvider
+from ecli.extensions.linters.biome.provider import BiomeDiagnosticProvider
+from ecli.extensions.linters.cargo_clippy.provider import CargoClippyDiagnosticProvider
+from ecli.extensions.linters.clang_tidy.provider import ClangTidyDiagnosticProvider
+from ecli.extensions.linters.core.models import DiagnosticsSnapshot
+from ecli.extensions.linters.core.service import DiagnosticsService, initial_snapshot
+from ecli.extensions.linters.cppcheck.provider import CppcheckDiagnosticProvider
+from ecli.extensions.linters.hadolint.provider import HadolintDiagnosticProvider
+from ecli.extensions.linters.java_checkstyle.provider import (
+    JavaCheckstyleDiagnosticProvider,
+)
+from ecli.extensions.linters.java_pmd.provider import JavaPmdDiagnosticProvider
+from ecli.extensions.linters.markdownlint.provider import MarkdownlintDiagnosticProvider
+from ecli.extensions.linters.ruff.provider import RuffDiagnosticProvider
+from ecli.extensions.linters.shellcheck.provider import ShellCheckDiagnosticProvider
+from ecli.extensions.linters.taplo.provider import TaploDiagnosticProvider
+from ecli.extensions.linters.yamllint.provider import YamllintDiagnosticProvider
+from ecli.extensions.linters.zig.provider import ZigDiagnosticProvider
 
 
 if TYPE_CHECKING:
@@ -71,9 +86,28 @@ class LinterBridge:
         linter_config = self.editor.config.get("linter", {})
         ruff_enabled = bool(linter_config.get("enabled", True))
         self.diagnostics_service = DiagnosticsService()
+        # Explicit, deterministic provider registration -- one microservice
+        # per linter, each applicability-gated via supports(request). See
+        # docs/architecture/ecli-f4-linter-microservices-design.md section 9.
+        # ESLint/Pylint/Stylelint/Oxlint/SpotBugs/Clang-Format are
+        # intentionally not registered: legacy/optional or not yet safely
+        # implementable per the design contract.
         self.diagnostics_service.register_provider(
             RuffDiagnosticProvider(enabled=ruff_enabled)
         )
+        self.diagnostics_service.register_provider(BiomeDiagnosticProvider())
+        self.diagnostics_service.register_provider(ZigDiagnosticProvider())
+        self.diagnostics_service.register_provider(ClangTidyDiagnosticProvider())
+        self.diagnostics_service.register_provider(CppcheckDiagnosticProvider())
+        self.diagnostics_service.register_provider(JavaCheckstyleDiagnosticProvider())
+        self.diagnostics_service.register_provider(JavaPmdDiagnosticProvider())
+        self.diagnostics_service.register_provider(ShellCheckDiagnosticProvider())
+        self.diagnostics_service.register_provider(MarkdownlintDiagnosticProvider())
+        self.diagnostics_service.register_provider(YamllintDiagnosticProvider())
+        self.diagnostics_service.register_provider(ActionlintDiagnosticProvider())
+        self.diagnostics_service.register_provider(HadolintDiagnosticProvider())
+        self.diagnostics_service.register_provider(TaploDiagnosticProvider())
+        self.diagnostics_service.register_provider(CargoClippyDiagnosticProvider())
         self.diagnostics_snapshot: DiagnosticsSnapshot = initial_snapshot(
             self.diagnostics_service.provider_states()
         )

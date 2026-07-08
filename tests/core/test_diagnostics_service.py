@@ -11,14 +11,19 @@ from typing import Any
 
 import pytest
 
-from ecli.diagnostics.models import (
+from ecli.extensions.linters.biome.provider import BiomeDiagnosticProvider
+from ecli.extensions.linters.core.models import (
     Diagnostic,
     DiagnosticRequest,
     DiagnosticResult,
     DiagnosticsSnapshot,
 )
-from ecli.diagnostics.ruff_provider import RuffDiagnosticProvider, parse_ruff_output
-from ecli.diagnostics.service import DiagnosticsService
+from ecli.extensions.linters.core.service import DiagnosticsService
+from ecli.extensions.linters.markdownlint.provider import MarkdownlintDiagnosticProvider
+from ecli.extensions.linters.ruff.provider import (
+    RuffDiagnosticProvider,
+    parse_ruff_output,
+)
 
 
 def request(tmp_path: Path, generation: int = 1) -> DiagnosticRequest:
@@ -134,7 +139,9 @@ def test_missing_ruff_produces_controlled_diagnostic(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr("ecli.diagnostics.ruff_provider.shutil.which", lambda _: None)
+    monkeypatch.setattr(
+        "ecli.extensions.linters.ruff.provider.shutil.which", lambda _: None
+    )
     provider = RuffDiagnosticProvider()
 
     result = provider.run(request(tmp_path))
@@ -149,7 +156,9 @@ def test_non_python_buffer_does_not_run_ruff(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[Any] = []
-    monkeypatch.setattr("ecli.diagnostics.ruff_provider.shutil.which", lambda _: "ruff")
+    monkeypatch.setattr(
+        "ecli.extensions.linters.ruff.provider.shutil.which", lambda _: "ruff"
+    )
     provider = RuffDiagnosticProvider(runner=lambda *args, **kwargs: calls.append(args))
     non_python = DiagnosticRequest(
         generation=1,
@@ -178,7 +187,9 @@ def test_buffer_refresh_uses_stdin_filename_and_project_cwd(
         calls.append({"command": command, **kwargs})
         return subprocess.CompletedProcess(command, 0, stdout="[]", stderr="")
 
-    monkeypatch.setattr("ecli.diagnostics.ruff_provider.shutil.which", lambda _: "ruff")
+    monkeypatch.setattr(
+        "ecli.extensions.linters.ruff.provider.shutil.which", lambda _: "ruff"
+    )
     provider = RuffDiagnosticProvider(runner=runner)
 
     result = provider.run(request(tmp_path))
@@ -195,6 +206,89 @@ def test_buffer_refresh_uses_stdin_filename_and_project_cwd(
     ]
     assert calls[0]["cwd"] == str(tmp_path)
     assert calls[0]["input"] == "import os\n"
+
+
+def test_markdown_request_with_missing_markdownlint_is_not_error(
+    tmp_path: Path,
+) -> None:
+    """Regression: a missing non-Ruff tool must not aggregate to status="error".
+
+    Reproduces the reported F4 regression for audit-report.md: pressing
+    ``r`` on a Markdown file with markdownlint-cli2 absent must surface a
+    controlled skipped result, not "Diagnostics failed", and must not leak
+    a Ruff-only skip message onto an unrelated file type.
+    """
+    service = DiagnosticsService()
+    service.register_provider(
+        MarkdownlintDiagnosticProvider(executable="ecli-definitely-not-a-real-binary")
+    )
+    service.register_provider(RuffDiagnosticProvider())
+
+    md_file = tmp_path / "audit-report.md"
+    md_file.write_text("# report\n", encoding="utf-8")
+    generation, started, _pending = service.request_refresh(
+        scope="buffer",
+        file_path=str(md_file),
+        text="# report\n",
+        project_root=str(tmp_path),
+        language="markdown",
+    )
+    assert started
+
+    deadline = time.monotonic() + 3
+    results: list[DiagnosticResult] = []
+    while time.monotonic() < deadline and not results:
+        results = service.drain_results()
+        if not results:
+            time.sleep(0.01)
+
+    assert len(results) == 1
+    result = results[0]
+    assert result.generation == generation
+    assert result.status != "error"
+    assert result.status == "skipped"
+    assert "only available for Python files" not in result.message
+    assert not result.message.startswith("Diagnostics failed")
+    assert len(result.message) <= 80
+
+
+def test_json_request_with_missing_biome_is_not_error(tmp_path: Path) -> None:
+    """Regression: a missing Biome must not aggregate to status="error".
+
+    Reproduces the reported F4 regression for pyrightconfig.json.
+    """
+    service = DiagnosticsService()
+    service.register_provider(
+        BiomeDiagnosticProvider(executable="ecli-definitely-not-a-real-binary")
+    )
+    service.register_provider(RuffDiagnosticProvider())
+
+    json_file = tmp_path / "pyrightconfig.json"
+    json_file.write_text("{}\n", encoding="utf-8")
+    generation, started, _pending = service.request_refresh(
+        scope="buffer",
+        file_path=str(json_file),
+        text="{}\n",
+        project_root=str(tmp_path),
+        language="json",
+    )
+    assert started
+
+    deadline = time.monotonic() + 3
+    results: list[DiagnosticResult] = []
+    while time.monotonic() < deadline and not results:
+        results = service.drain_results()
+        if not results:
+            time.sleep(0.01)
+
+    assert len(results) == 1
+    result = results[0]
+    assert result.generation == generation
+    assert result.status != "error"
+    assert result.status == "skipped"
+    assert not result.message.startswith("Diagnostics failed")
+    assert "ECLI Full installation is incomplete" in result.message
+    assert len(result.message) <= 80
 
 
 def test_diagnostics_snapshot_result_replaces_previous_diagnostics() -> None:

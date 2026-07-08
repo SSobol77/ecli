@@ -114,10 +114,14 @@ are listed here so the boundary is fixed before implementation begins.
   ECLI theme styles from that data. Imported themes are the source of truth;
   missing themes must be diagnosed, not synthesized from hand-written color
   dictionaries.
-- **diagnostics / linter integration path** — feed external linter/diagnostic
-  output into ECLI's existing diagnostics normalization model
-  (`docs/extensions/diagnostics-model.md`). The Extensions Layer supplies
-  language/linter metadata only; it does not itself run arbitrary tools.
+- **diagnostics / linter integration path** — extract language/linter
+  association metadata from imported `package.json` `contributes.*`
+  declarations in the `lang/` asset tree, feeding ECLI's existing
+  diagnostics normalization model (`docs/extensions/diagnostics-model.md`).
+  This is data extraction only, distinct from the F4 linter microservices
+  runtime under `src/ecli/extensions/linters/` (see
+  `docs/architecture/ecli-f4-linter-microservices-design.md`), which
+  executes tools and is ECLI-owned Python, not an imported asset.
 - **snippets registry** — load `snippets/*.code-snippets` into an ECLI snippet
   store.
 - **language-configuration registry** — load `language-configuration.json`
@@ -150,8 +154,16 @@ is amended.
 `src/ecli/extensions/` is intentionally pruned and **normalized**. Its root is
 small and contains only:
 
-- `ecli_integration/` — ECLI-owned Python adapter code (the only Python package
-  under this tree);
+- `ecli_integration/` — ECLI-owned Python adapter code;
+- `linters/` — ECLI-owned F4 linter microservices Python package (see
+  `docs/architecture/ecli-f4-linter-microservices-design.md` and
+  `docs/extensions/diagnostics-linter-layer.md`). Each supported linter is
+  its own microservice directory (`linters/ruff/`, `linters/biome/`, ...)
+  with `manifest.py` and `package_contract.py`, and, for Ruff only so far,
+  a working `provider.py`. This is ECLI-authored Python runtime, not an
+  imported asset -- raw upstream linter source (VS Code TypeScript or
+  otherwise) is never permitted here, same as everywhere else under
+  `src/ecli/extensions/`;
 - `lang/` — imported language / runtime declarative extension assets, one folder
   per language or language bundle (for example `lang/python`, `lang/rust`,
   `lang/cpp`, `lang/typescript-basics`, `lang/json`, `lang/yaml`,

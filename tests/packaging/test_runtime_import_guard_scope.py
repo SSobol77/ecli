@@ -11,12 +11,15 @@
 # Licensed under the GNU General Public License version 2 only.
 # See the LICENSE file in the project root for full license text.
 
-"""Scope tests for the runtime-import guard after the #100 adapter (issue #100).
+"""Scope tests for the runtime-import guard's extensions-tree boundary.
 
 The guard (`scripts/check_runtime_imports.py`) must skip the imported upstream
 extension tree under ``src/ecli/extensions/`` (issue #98) but still scan the
 ECLI-owned adapter package ``src/ecli/extensions/ecli_integration/`` (issue
-#100). These tests prove the predicate and the file walk honour that boundary.
+#100) and the ECLI-owned F4 linter microservices package
+``src/ecli/extensions/linters/`` (see
+``docs/architecture/ecli-f4-linter-microservices-design.md``). These tests
+prove the predicate and the file walk honour that boundary.
 """
 
 from __future__ import annotations
@@ -47,6 +50,10 @@ def test_predicate_scans_adapter_and_normal_source(guard: ModuleType) -> None:
         guard._is_imported_upstream(Path("extensions/ecli_integration/registry.py"))
         is False
     )
+    assert (
+        guard._is_imported_upstream(Path("extensions/linters/ruff/provider.py"))
+        is False
+    )
     assert guard._is_imported_upstream(Path("core/Ecli.py")) is False
 
 
@@ -66,12 +73,22 @@ def test_walk_includes_adapter_and_excludes_upstream(
     ):
         assert expected in relative, f"guard must scan {expected}"
 
-    # Every scanned path under extensions/ belongs to the adapter package; no
-    # imported upstream extension file is scanned.
+    # The ECLI-owned F4 linter microservices package is scanned.
+    for expected in (
+        "extensions/linters/__init__.py",
+        "extensions/linters/core/registry.py",
+        "extensions/linters/ruff/provider.py",
+    ):
+        assert expected in relative, f"guard must scan {expected}"
+
+    # Every scanned path under extensions/ belongs to an ECLI-owned package;
+    # no imported upstream extension file is scanned.
     extension_paths = {rel for rel in relative if rel.startswith("extensions/")}
     assert extension_paths
     assert all(
-        rel.startswith("extensions/ecli_integration/") for rel in extension_paths
+        rel.startswith("extensions/ecli_integration/")
+        or rel.startswith("extensions/linters/")
+        for rel in extension_paths
     )
 
     # Normal ECLI runtime source is still scanned.
