@@ -3,16 +3,26 @@
 from __future__ import annotations
 
 import curses
+import json
 import logging
 import os
+import subprocess
 import threading
+import time
 from pathlib import Path
 from typing import Any, cast
 
 import pytest
 
 from ecli.core.Ecli import Ecli
-from ecli.diagnostics.models import Diagnostic, DiagnosticsSnapshot
+from ecli.extensions.linters.biome.provider import BiomeDiagnosticProvider
+from ecli.extensions.linters.core.models import (
+    Diagnostic,
+    DiagnosticRequest,
+    DiagnosticsSnapshot,
+)
+from ecli.extensions.linters.core.service import DiagnosticsService
+from ecli.extensions.linters.ruff.provider import RuffDiagnosticProvider
 from ecli.ui.DrawScreen import DrawScreen
 from ecli.ui.KeyBinder import KeyBinder
 from ecli.ui.panels import DiagnosticsPanel
@@ -913,6 +923,67 @@ def test_long_path_truncation_preserves_location_and_message(tmp_path: Path) -> 
     assert len(row) <= panel.width - 2
 
 
+def test_selected_diagnostic_row_stays_readable_not_corrupted_composite(
+    tmp_path: Path,
+) -> None:
+    """Regression: selected-row attr must not OR two color_pair() values.
+
+    Reproduces the markdownlint audit-report.md bug: with a large,
+    mixed-severity diagnostics list, the previously-selected row combined
+    its severity attr and ``attr_selected`` via ``attr |= attr_selected``.
+    Both are independent ``curses.color_pair()`` encodings, so ORing them
+    corrupts the pair-number bits and can render as an unreadable black
+    bar. The row must instead substitute ``attr_selected`` outright, and
+    the drawn text for that row must stay non-empty.
+    """
+    diagnostics = tuple(
+        Diagnostic(
+            file_path=str(tmp_path / "audit-report.md"),
+            line=index + 1,
+            column=1,
+            severity="warning" if index % 2 == 0 else "error",
+            code="MD013",
+            message=(
+                f"Line length {80 + index} exceeds 80 characters "
+                f"[Expected: 80; Actual: {80 + index}] issue number {index}"
+            ),
+            source="markdownlint-cli2",
+        )
+        for index in range(6)
+    )
+    panel, editor = make_panel(
+        DiagnosticsSnapshot(
+            generation=1,
+            diagnostics=diagnostics,
+            status="ready",
+            message="Diagnostics: 6 issue(s).",
+        )
+    )
+    editor.filename = str(tmp_path / "audit-report.md")
+    panel.selected_idx = 2
+    panel.visible = True
+    panel.draw()
+
+    rows = diagnostics_rows(panel)
+    assert len(rows) == len(diagnostics)
+    selected_row = rows[2]
+
+    # The selected row's text must survive rendering: non-blank, and still
+    # carries recognizable source/location/message fragments.
+    assert selected_row.strip() != ""
+    assert "markdownl" in selected_row or "MD013" in selected_row
+    assert ":3:1" in selected_row
+
+    selected_attr = drawn_attr(panel, selected_row)
+    assert selected_attr == panel.attr_selected
+
+    # Non-selected rows keep their own severity attr, not attr_selected.
+    other_row = rows[0]
+    other_attr = drawn_attr(panel, other_row)
+    assert other_attr != panel.attr_selected
+    assert other_attr == panel.attr_warning
+
+
 def make_goto_editor(file_path: Path, lines: list[str]) -> Any:
     editor = cast(Any, Ecli.__new__(Ecli))
     editor.filename = str(file_path)
@@ -929,6 +1000,8 @@ def make_goto_editor(file_path: Path, lines: list[str]) -> Any:
     editor.focus = "panel"
     editor._force_full_redraw = False
     editor.service_registry = None
+    editor.visible_lines = DrawScreen.content_height(30)
+    editor.diagnostic_line_highlight = None
 
     def set_status(message: str, *_args: Any, **_kwargs: Any) -> None:
         editor.status_message = message
@@ -961,6 +1034,240 @@ def test_goto_diagnostic_reports_jump_status_with_relative_location(
     assert editor.status_messages[-1] == "Jumped to f4_bad.py:2:5"
 
 
+def test_goto_diagnostic_jump_centers_target_line_with_context(
+    tmp_path: Path,
+) -> None:
+    """Regression: a diagnostic jump must not pin the target to the last row.
+
+    ``_clamp_scroll()`` alone only nudges the viewport by the minimum
+    amount needed to keep the cursor on-screen, which for a downward jump
+    places the target line exactly on the final visible row -- the
+    "pinned to the bottom edge" bug reported for markdownlint diagnostics
+    on a large file. A deliberate jump (like a search jump via
+    ``_goto_match``) should instead land with margin on both sides.
+    """
+    total_lines = 200
+    lines = [f"line {index}" for index in range(total_lines)]
+    file_path = tmp_path / "audit-report.md"
+    file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    editor = make_goto_editor(file_path, lines)
+    target_line = 150  # 1-indexed; far below the initial viewport.
+    diagnostic = Diagnostic(
+        file_path=str(file_path),
+        line=target_line,
+        column=1,
+        severity="warning",
+        code="MD013",
+        message="Line length exceeds 80 characters",
+        source="markdownlint-cli2",
+    )
+
+    assert editor.goto_diagnostic(diagnostic) is True
+
+    assert editor.cursor_y == target_line - 1
+    viewport_height = editor.visible_lines
+    last_visible_row = editor.scroll_top + viewport_height - 1
+
+    # Target must be on-screen at all.
+    assert editor.scroll_top <= editor.cursor_y <= last_visible_row
+    # Not pinned to the very last visible row: enough lines exist below
+    # the target (200 - 150 = 50, far more than the viewport height) to
+    # leave a safety margin instead of jamming it against the edge.
+    assert editor.cursor_y < last_visible_row - 1
+    # Not pinned to the very top either -- there is context above it too.
+    assert editor.scroll_top < editor.cursor_y
+
+
+def test_goto_diagnostic_jump_near_end_of_file_stays_valid(tmp_path: Path) -> None:
+    """A jump near the end of a short file must still clamp to a valid scroll."""
+    lines = [f"line {index}" for index in range(10)]
+    file_path = tmp_path / "short.md"
+    file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    editor = make_goto_editor(file_path, lines)
+    diagnostic = Diagnostic(
+        file_path=str(file_path),
+        line=9,
+        column=1,
+        severity="warning",
+        code="MD013",
+        message="Line length exceeds 80 characters",
+        source="markdownlint-cli2",
+    )
+
+    assert editor.goto_diagnostic(diagnostic) is True
+
+    assert editor.cursor_y == 8
+    assert editor.scroll_top >= 0
+    assert (
+        editor.scroll_top
+        <= editor.cursor_y
+        <= editor.scroll_top + editor.visible_lines - 1
+    )
+
+
+def test_goto_diagnostic_jumps_for_biome_diagnostic_reporting_bare_basename(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Full-pipeline regression: Biome reporting only "layout.tsx" must
+    still let Enter jump and set the editor line highlight.
+
+    Reproduces the reported bug: Biome's JSON reporter often echoes back
+    a bare basename (or a path relative to its own detected project
+    root) instead of the exact path ECLI invoked it with. Before path
+    normalization, this Diagnostic's ``file_path`` was the literal string
+    "layout.tsx", and ``goto_diagnostic`` resolves a relative path against
+    the *editor process's* cwd -- not the file's own directory -- so the
+    jump failed with "Diagnostics: file not available: layout.tsx" and
+    the source-line highlight silently never matched the open file either
+    (``set_diagnostic_line_highlight`` also calls ``os.path.abspath`` on
+    the same unresolved value).
+    """
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    file_path = app_dir / "layout.tsx"
+    lines = [f"line {index}" for index in range(60)]
+    file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "ecli.extensions.linters.biome.provider.find_executable", lambda _: "biome"
+    )
+    stdout = json.dumps(
+        {
+            "diagnostics": [
+                {
+                    "category": "lint/style/useConst",
+                    "severity": "warning",
+                    "description": "Use const instead of let.",
+                    "location": {
+                        "path": {"file": "layout.tsx"},
+                        "start": {"line": 52, "column": 1},
+                    },
+                }
+            ]
+        }
+    )
+    provider = BiomeDiagnosticProvider(
+        runner=lambda command, **_kw: subprocess.CompletedProcess(
+            command, 1, stdout=stdout, stderr=""
+        )
+    )
+    request = DiagnosticRequest(
+        generation=1,
+        scope="buffer",
+        file_path=str(file_path),
+        text=file_path.read_text(),
+        project_root=str(tmp_path),
+        language="typescriptreact",
+    )
+    result = provider.run(request)
+    assert len(result.diagnostics) == 1
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.file_path == str(file_path)
+
+    editor = make_goto_editor(file_path, lines)
+
+    assert editor.goto_diagnostic(diagnostic) is True
+    assert "file not available" not in editor.status_messages[-1]
+    assert editor.cursor_y == 51
+
+    editor.set_diagnostic_line_highlight(diagnostic, generation=1)
+    assert editor.diagnostic_line_highlight is not None
+    assert editor.diagnostic_line_highlight["file_path"] == os.path.abspath(file_path)
+    assert editor.diagnostic_line_highlight["line"] == 52
+
+
+def test_goto_diagnostic_in_range_line_still_jumps_exactly(tmp_path: Path) -> None:
+    """An ordinary in-range diagnostic must jump to the exact reported line."""
+    lines = [f"line {index}" for index in range(67)]
+    file_path = tmp_path / "layout.tsx"
+    file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    editor = make_goto_editor(file_path, lines)
+    diagnostic = Diagnostic(
+        file_path=str(file_path),
+        line=52,
+        column=1,
+        severity="error",
+        code="parse",
+        message="expected `,` but instead found `export`",
+        source="biome",
+    )
+
+    assert editor.goto_diagnostic(diagnostic) is True
+
+    assert editor.cursor_y == 51
+    assert editor.cursor_x == 0
+    assert editor.status_messages[-1] == "Jumped to layout.tsx:52:1"
+
+
+def test_goto_diagnostic_jumps_for_biome_eof_diagnostic_past_end_of_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Full-pipeline regression: Biome reporting an EOF diagnostic one line
+    past the last physical line must clamp and jump, not fail with
+    "line out of range".
+
+    Reproduces the reported bug exactly: a 67-line ``layout.tsx`` with a
+    Biome parse diagnostic at ``68:1`` ("expected `}` but instead the file
+    ends").
+    """
+    app_dir = tmp_path / "app"
+    app_dir.mkdir()
+    file_path = app_dir / "layout.tsx"
+    lines = [f"line {index}" for index in range(67)]
+    file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    monkeypatch.setattr(
+        "ecli.extensions.linters.biome.provider.find_executable", lambda _: "biome"
+    )
+    stdout = json.dumps(
+        {
+            "diagnostics": [
+                {
+                    "category": "parse",
+                    "severity": "error",
+                    "description": "expected `}` but instead the file ends",
+                    "location": {
+                        "path": {"file": "layout.tsx"},
+                        "start": {"line": 68, "column": 1},
+                    },
+                }
+            ]
+        }
+    )
+    provider = BiomeDiagnosticProvider(
+        runner=lambda command, **_kw: subprocess.CompletedProcess(
+            command, 1, stdout=stdout, stderr=""
+        )
+    )
+    request = DiagnosticRequest(
+        generation=1,
+        scope="buffer",
+        file_path=str(file_path),
+        text=file_path.read_text(),
+        project_root=str(tmp_path),
+        language="typescriptreact",
+    )
+    result = provider.run(request)
+    assert len(result.diagnostics) == 1
+    diagnostic = result.diagnostics[0]
+    assert diagnostic.line == 68  # original, unclamped -- preserved for details popup
+
+    editor = make_goto_editor(file_path, lines)
+
+    assert editor.goto_diagnostic(diagnostic) is True
+    assert "line out of range" not in editor.status_messages[-1]
+    assert editor.cursor_y == 66  # clamped to line 67 (last real line)
+
+    editor.set_diagnostic_line_highlight(diagnostic, generation=1)
+    assert editor.diagnostic_line_highlight is not None
+    assert editor.diagnostic_line_highlight["file_path"] == os.path.abspath(file_path)
+    # Highlight is clamped to the same line the cursor jumped to (67), not
+    # the diagnostic's raw reported line (68): DrawScreen's gutter loop
+    # only iterates real buffer rows, so an unclamped line one past the
+    # buffer end would never match any row and silently paint nothing.
+    assert editor.diagnostic_line_highlight["line"] == 67
+
+
 def test_goto_diagnostic_missing_file_reports_controlled_status(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
@@ -986,10 +1293,15 @@ def test_goto_diagnostic_missing_file_reports_controlled_status(
     assert "file not available" in caplog.text
 
 
-def test_goto_diagnostic_out_of_range_location_reports_controlled_status(
+def test_goto_diagnostic_clamps_column_past_line_length(
     tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
 ) -> None:
+    """Regression: a column past the end of an existing line must clamp,
+    not fail.
+
+    Reported column is clamped to ``len(line) + 1`` (one past the last
+    character, a valid cursor position) instead of refusing the jump.
+    """
     file_path = tmp_path / "current.py"
     file_path.write_text("x = 1\n", encoding="utf-8")
     editor = make_goto_editor(file_path, ["x = 1"])
@@ -1003,11 +1315,141 @@ def test_goto_diagnostic_out_of_range_location_reports_controlled_status(
         source="ruff",
     )
 
-    with caplog.at_level(logging.WARNING):
-        assert editor.goto_diagnostic(diagnostic) is False
+    assert editor.goto_diagnostic(diagnostic) is True
 
-    assert (
-        editor.status_messages[-1]
-        == "Diagnostics: column out of range for current.py:1:80"
+    assert editor.cursor_y == 0
+    assert editor.cursor_x == 5  # len("x = 1") == 5, clamped column is 6 (1-indexed)
+    assert editor.status_messages[-1] == (
+        "Jumped to current.py:1:6 (diagnostic reported 1:80)"
     )
-    assert "column out of range" in caplog.text
+
+
+def test_goto_diagnostic_clamps_line_past_end_of_file(tmp_path: Path) -> None:
+    """Regression: an EOF/past-end-of-buffer diagnostic line must clamp
+    to the last real line, not fail with "line out of range".
+
+    Reproduces the reported Biome bug: a parser "unexpected end of file"
+    diagnostic on a 67-line file reported at line 68.
+    """
+    lines = [f"line {index}" for index in range(67)]
+    file_path = tmp_path / "layout.tsx"
+    file_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    editor = make_goto_editor(file_path, lines)
+    diagnostic = Diagnostic(
+        file_path=str(file_path),
+        line=68,
+        column=1,
+        severity="error",
+        code="parse",
+        message="expected `}` but instead the file ends",
+        source="biome",
+    )
+
+    assert editor.goto_diagnostic(diagnostic) is True
+
+    assert editor.cursor_y == 66  # line 67, 0-indexed
+    assert editor.cursor_x == 0
+    assert editor.status_messages[-1] == (
+        "Jumped to layout.tsx:67:1 (diagnostic reported 68:1)"
+    )
+    assert "line out of range" not in editor.status_messages[-1]
+
+
+def test_goto_diagnostic_clamps_to_line_one_for_empty_buffer(tmp_path: Path) -> None:
+    """Regression: an empty buffer must clamp to line 1 / column 1, not crash."""
+    file_path = tmp_path / "empty.py"
+    file_path.write_text("", encoding="utf-8")
+    editor = make_goto_editor(file_path, [])
+    diagnostic = Diagnostic(
+        file_path=str(file_path),
+        line=5,
+        column=5,
+        severity="warning",
+        code="E999",
+        message="Empty file",
+        source="ruff",
+    )
+
+    assert editor.goto_diagnostic(diagnostic) is True
+
+    assert editor.cursor_y == 0
+    assert editor.cursor_x == 0
+
+
+def test_ruff_diagnostic_via_full_service_pipeline_is_visible_and_actionable(
+    tmp_path: Path,
+) -> None:
+    """Full-pipeline regression: DiagnosticsService -> snapshot -> panel row.
+
+    The reference Ruff behavior is not just "a hand-built DiagnosticsSnapshot
+    renders a row" (already covered above) -- it is "a real DiagnosticsService
+    run, through a registered RuffDiagnosticProvider, produces a
+    DiagnosticResult whose row is visible, whose selection survives Enter
+    jump, and whose details popup opens for the correct diagnostic." This
+    closes the gap between provider-level and panel-level tests so a future
+    regression in how the two are wired together (result merging, snapshot
+    replacement, selection sync) is caught here rather than only in a manual
+    smoke test.
+    """
+    target_file = tmp_path / "bad.py"
+    target_file.write_text("import os\n", encoding="utf-8")
+
+    def fake_runner(
+        _command: list[str], **_kwargs: Any
+    ) -> subprocess.CompletedProcess[str]:
+        stdout = (
+            '[{"filename": "'
+            + str(target_file)
+            + '", "location": {"row": 1, "column": 8}, '
+            + '"code": "F401", "message": "`os` imported but unused"}]'
+        )
+        return subprocess.CompletedProcess(_command, 1, stdout=stdout, stderr="")
+
+    service = DiagnosticsService()
+    service.register_provider(RuffDiagnosticProvider(runner=fake_runner))
+    generation, started, _pending = service.request_refresh(
+        scope="buffer",
+        file_path=str(target_file),
+        text="import os\n",
+        project_root=str(tmp_path),
+        language="python",
+    )
+    assert started
+
+    deadline = time.monotonic() + 3
+    results = []
+    while time.monotonic() < deadline and not results:
+        results = service.drain_results()
+        if not results:
+            time.sleep(0.01)
+    assert len(results) == 1
+    result = results[0]
+    assert result.generation == generation
+    assert result.status == "ready"
+    assert len(result.diagnostics) == 1
+
+    snapshot = DiagnosticsSnapshot().with_result(
+        result, running_generation=None, pending_generation=None
+    )
+    panel, editor = make_panel(snapshot)
+    editor.filename = str(target_file)
+    panel.visible = True
+    panel.draw()
+
+    text = rendered(panel)
+    assert "Diagnostics: 1 issue(s)." in text
+    rows = diagnostics_rows(panel)
+    assert len(rows) == 1
+    assert rows[0].strip() != ""
+    assert "bad.py:1:8" in rows[0]
+    assert "imported but unused" in rows[0]
+
+    assert panel.handle_key(curses.KEY_ENTER) is True
+    assert editor.status_messages[-1] == "Jumped to bad.py:1:8"
+    assert len(editor.navigated) == 1
+
+    assert panel.handle_key(ord("d")) is True
+    panel.draw()
+    popup_text = rendered_popup()
+    assert "F401" in popup_text
+    assert "imported but unused" in popup_text

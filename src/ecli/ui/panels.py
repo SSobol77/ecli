@@ -56,12 +56,12 @@ from typing import TYPE_CHECKING, Any, Optional
 import pyperclip
 from wcwidth import wcswidth
 
-from ecli.diagnostics.display import (
+from ecli.extensions.linters.core.display import (
     diagnostic_display_path,
     truncate_end,
     truncate_middle,
 )
-from ecli.diagnostics.models import Diagnostic, DiagnosticsSnapshot
+from ecli.extensions.linters.core.models import Diagnostic, DiagnosticsSnapshot
 from ecli.integrations.GitBridge import GitBridge, GitCommandResult
 from ecli.ui.design import TuiDesign
 from ecli.ui.geometry import centered_modal_rect, compute_layout
@@ -2252,9 +2252,15 @@ class DiagnosticsPanel(_ReadOnlyRightPanel):
         for row_offset, line in enumerate(rows[self.scroll : self.scroll + viewport_height]):
             row = start_row + row_offset
             absolute_idx = self.scroll + row_offset
-            attr = self._line_attr(line)
             if diagnostics and absolute_idx == self.selected_idx:
-                attr |= self.attr_selected
+                # attr_selected is its own curses.color_pair(); OR-ing it onto
+                # a severity attr (also its own color_pair()) corrupts the
+                # pair-number bits of both and can render as an unreadable
+                # black bar. Substitute it outright instead, matching the
+                # selected-row pattern already used by FileBrowserPanel.
+                attr = self.attr_selected
+            else:
+                attr = self._line_attr(line)
             self._draw_panel_line(row, line, attr)
 
     def _draw_panel_line(self, row: int, line: str, attr: int) -> None:

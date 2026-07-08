@@ -1,0 +1,28 @@
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Project: Ecli
+# File: src/ecli/extensions/linters/yamllint/package_contract.py
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+#
+# Copyright (c) 2026 Siergej Sobolewski
+#
+# Licensed under the GNU General Public License version 2 only.
+# See the LICENSE file in the project root for full license text.
+
+"""Package delivery contract skeleton for the yamllint microservice."""
+
+from __future__ import annotations
+
+from ecli.extensions.linters.core.registry import PackageContract
+
+
+PACKAGE_CONTRACT = PackageContract(
+    service_name="yamllint",
+    mandatory_for_full_install=True,
+    bundled_with_full_install=True,
+    binary_names=("yamllint",),
+    version_probe=("yamllint", "--version"),
+    delivery_notes="Python package (pip); bundled with ECLI Full where platform packaging allows.",
+)

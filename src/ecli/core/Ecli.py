@@ -77,7 +77,7 @@ from wcwidth import wcswidth, wcwidth
 
 from ecli.core.AsyncEngine import AsyncEngine
 from ecli.core.CodeCommenter import CodeCommenter
-from ecli.diagnostics.display import diagnostic_display_path
+from ecli.extensions.linters.core.display import diagnostic_display_path
 
 # Imports from ecli package
 from ecli.core.History import History
@@ -623,21 +623,36 @@ class Ecli:
         *,
         generation: int | None = None,
     ) -> None:
-        """Expose the selected diagnostics-panel line to the renderer."""
+        """Expose the selected diagnostics-panel line to the renderer.
+
+        Clamps the highlighted line to the current buffer's line count
+        when the diagnostic belongs to the file currently open (matching
+        ``_apply_diagnostic_cursor_location``'s jump-target clamping): a
+        line past the end of the buffer would otherwise never match any
+        real row in ``DrawScreen``'s gutter-highlight loop and silently
+        paint nothing.
+        """
         file_path = str(getattr(diagnostic, "file_path", "") or "")
         if not file_path:
             self.clear_diagnostic_line_highlight()
             return
         try:
             line = max(1, int(getattr(diagnostic, "line", 1)))
+            column = max(1, int(getattr(diagnostic, "column", 1)))
         except (TypeError, ValueError):
             self.clear_diagnostic_line_highlight()
             return
+        resolved_path = os.path.abspath(file_path)
+        current_path = os.path.abspath(self.filename) if self.filename else None
+        if resolved_path == current_path:
+            line, _ = self._resolve_diagnostic_navigation_target(
+                line, column, self.text
+            )
         severity = str(getattr(diagnostic, "severity", "info") or "info")
         if severity not in {"error", "warning", "info", "hint"}:
             severity = "info"
         next_highlight = {
-            "file_path": os.path.abspath(file_path),
+            "file_path": resolved_path,
             "line": line,
             "severity": severity,
             "generation": generation,
@@ -5487,7 +5502,14 @@ class Ecli:
         ):
             return False
 
-        self._set_status_message(f"Jumped to {label}:{target_line}:{target_column}")
+        final_line, final_column = self.cursor_y + 1, self.cursor_x + 1
+        if (final_line, final_column) == (target_line, target_column):
+            self._set_status_message(f"Jumped to {label}:{target_line}:{target_column}")
+        else:
+            self._set_status_message(
+                f"Jumped to {label}:{final_line}:{final_column} "
+                f"(diagnostic reported {target_line}:{target_column})"
+            )
         return True
 
     def _normalize_diagnostic_location(self, diagnostic: Any) -> tuple[str, int, int] | None:
@@ -5535,44 +5557,74 @@ class Ecli:
         target_line: int,
         target_column: int,
     ) -> bool:
-        """Move the editor cursor to a validated diagnostic location."""
-        line_count = len(self.text)
-        if target_line > line_count:
-            self._set_status_message(
-                f"Diagnostics: line out of range for {label}:{target_line}:{target_column}"
-            )
-            logging.warning(
-                "Diagnostic navigation failed: line out of range: file=%s line=%s line_count=%s",
-                target_path,
-                target_line,
-                line_count,
-            )
-            return False
+        """Move the editor cursor to a diagnostic location, clamped to the buffer.
 
-        line_text = self.text[target_line - 1] if self.text else ""
-        max_column = len(line_text) + 1
-        if target_column > max_column:
-            self._set_status_message(
-                f"Diagnostics: column out of range for {label}:{target_line}:{target_column}"
-            )
-            logging.warning(
-                "Diagnostic navigation failed: column out of range: file=%s line=%s column=%s max_column=%s",
+        Linter parsers can legitimately report a location past the end of
+        the buffer (e.g. an "unexpected end of file" error one line after
+        the last physical line) or a column past the end of an existing
+        line. The file is real and open at this point, so this is not a
+        navigation failure -- clamp to the nearest valid position instead
+        of refusing to jump. See ``_resolve_diagnostic_navigation_target``.
+        """
+        clamped_line, clamped_column = self._resolve_diagnostic_navigation_target(
+            target_line, target_column, self.text
+        )
+        if (clamped_line, clamped_column) != (target_line, target_column):
+            logging.info(
+                "Diagnostic navigation clamped: file=%s reported=%s:%s clamped_to=%s:%s",
                 target_path,
                 target_line,
                 target_column,
-                max_column,
+                clamped_line,
+                clamped_column,
             )
-            return False
 
-        self.cursor_y = target_line - 1
-        self.cursor_x = target_column - 1
+        self.cursor_y = clamped_line - 1
+        self.cursor_x = clamped_column - 1
         self._ensure_cursor_in_bounds()
+        self._center_scroll_on_cursor()
         self._clamp_scroll()
         panel_manager = getattr(self, "panel_manager", None)
         if not (panel_manager and panel_manager.is_panel_active()):
             self.focus = "editor"
         self._force_full_redraw = True
         return True
+
+    @staticmethod
+    def _resolve_diagnostic_navigation_target(
+        target_line: int, target_column: int, buffer_lines: list[str]
+    ) -> tuple[int, int]:
+        """Clamp a diagnostic's reported 1-indexed line/column to the buffer.
+
+        ``target_line``/``target_column`` are already guaranteed >= 1 by
+        ``_normalize_diagnostic_location``. Clamps the line to the last
+        buffer line (line 1 for an empty buffer) and the column to the
+        nearest valid cursor position on that line.
+        """
+        line_count = len(buffer_lines)
+        clamped_line = min(target_line, max(1, line_count))
+        line_text = buffer_lines[clamped_line - 1] if buffer_lines else ""
+        max_column = len(line_text) + 1
+        clamped_column = min(target_column, max_column)
+        return clamped_line, clamped_column
+
+    def _center_scroll_on_cursor(self) -> None:
+        """Pre-adjust scroll_top so a deliberate jump lands with context.
+
+        ``_clamp_scroll()`` alone only nudges the viewport by the minimum
+        amount needed to keep the cursor on-screen, which pins a jump
+        target to the very last visible row when scrolling down. Diagnostic
+        jumps (like search jumps via ``_goto_match``) are deliberate,
+        far-reaching navigation, so pre-seed ``scroll_top`` to place the
+        target roughly a third of the way down the viewport before the
+        final clamp runs.
+        """
+        if self.visible_lines <= 0:
+            return
+        text_area_height = self.visible_lines
+        desired_scroll_top = self.cursor_y - (text_area_height // 3)
+        max_scroll_possible = max(0, len(self.text) - text_area_height)
+        self.scroll_top = max(0, min(desired_scroll_top, max_scroll_possible))
 
     def _diagnostic_display_label(self, file_path: str) -> str:
         """Return the path label used in diagnostics navigation status."""
