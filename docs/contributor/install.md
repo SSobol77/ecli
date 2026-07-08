@@ -30,6 +30,33 @@ See the LICENSE file in the project root for full license text.
 | Windows | `.exe` | Provisionally supported (validate per release) | run installer EXE or portable EXE | launch + version/help check | see `docs/install/windows.md`; NSIS installer is recommended |
 | Any | Python package | Fallback path | `pipx install ecli-editor` | `ecli` | distribution name is `ecli-editor`; import and CLI names remain `ecli` |
 
+## Full F4 Linter Provisioning Policy
+
+ECLI Full artifacts are responsible for complete F4 linter provisioning. The
+installer or package flow must detect the operating system and canonical
+artifact context, check already-installed required linters/toolchains before
+installing anything, install or bundle missing required tools with the
+OS/artifact-specific mechanism, and verify executable availability plus version
+probes.
+
+Manual linter installation is a developer checkout, PyPI/source/minimal install,
+damaged Full install repair, or advanced administration path only. It is not the
+normal post-install path for ECLI Full. The manual reference is
+`docs/extensions/f4-linter-manual-installation.md`.
+
+Debian 13 testing demonstrated a valid mixed provisioning class: npm with a
+custom prefix under an ECLI-managed tools directory, dedicated Python virtual
+environments, prebuilt binaries, `cargo install`, JAR shims, upstream release
+downloads with provenance/checksum/version verification, and `rustup component
+add clippy`. The Full installer must automate and verify those steps where that
+strategy is selected.
+
+The PyPI wheel/sdist and local source checkout cannot reliably provision Node,
+Rust, Go, Zig, Java, or system binaries through Python package metadata. Treat
+those paths as minimal/developer installs for F4 linter purposes unless a future
+artifact entry proves complete provisioning under the exact 21 artifact contract
+entries.
+
 ## Platform Dependencies
 
 ### SUSE / openSUSE

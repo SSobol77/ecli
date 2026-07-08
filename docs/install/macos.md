@@ -24,6 +24,13 @@ ecli_<version>_macos_universal2.dmg.sha256
 The Universal2 binary contains both `x86_64` and `arm64` slices, so the same
 DMG is used on Intel Macs and Apple Silicon Macs.
 
+For ECLI Full, the macOS `.app`/`.dmg` artifact must provision required F4
+linter tools inside app resources or a managed runtime directory, detect
+already-installed tools before adding missing ones, and verify executable/version
+probes. Homebrew is acceptable for developer checkout, minimal install, repair,
+or advanced administration, but a normal Full DMG/app install must not require a
+post-install Homebrew linter setup step.
+
 ## Install
 
 1. Download `ecli_<version>_macos_universal2.dmg` and its `.sha256` sidecar from

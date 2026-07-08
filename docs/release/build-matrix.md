@@ -19,16 +19,26 @@ See the LICENSE file in the project root for full license text.
 The normative platform/package list is the `Canonical 21-Item Platform &
 Packaging Artifact Matrix` (summarized by the `Platform & Packaging Release
 Contract Matrix`) in `docs/release/artifact-contract.md`. That canonical matrix
-defines exactly 21 physical GitHub Release assets, each mapped to repository
-source files, an expected artifact, a related GitHub workflow, a required
-`tests/packaging/` test file, a required Claude command, and a required Codex
-prompt. This file summarizes build-environment notes only; adding a packaging
-script, workflow, Docker helper, Nix descriptor, or platform document without
-adding it to the normative matrix is release contract drift.
+defines exactly 21 ECLI-owned uploaded physical GitHub Release assets, each
+mapped to repository source files, an expected artifact, a related GitHub
+workflow, a required `tests/packaging/` test file, a required Claude command,
+and a required Codex prompt. This file summarizes build-environment notes only;
+adding a packaging script, workflow, Docker helper, Nix descriptor, or platform
+document without adding it to the normative matrix is release contract drift.
 
-Every official ECLI release publishes exactly 21 physical GitHub Release assets,
-one per canonical matrix entry. Release publication is blocked unless the exact
-21 assets are present and verified by `scripts/verify_release_assets.py`.
+Every official ECLI release uploads exactly 21 ECLI-owned physical GitHub
+Release assets, one per canonical matrix entry. Release publication is blocked
+unless the exact 21 ECLI-owned assets are present and verified by
+`scripts/verify_release_assets.py`. GitHub may display **Assets 23** after
+adding its generated `Source code (zip)` and `Source code (tar.gz)` archives;
+those archives are outside the canonical 21 artifact contract entries.
+
+Full F4 linter provisioning is release-readiness scope for those exactly 21
+artifact contract entries. Each Full entry must prove OS/artifact-context
+detection, detection of already-installed required tools before install,
+installation or bundling of missing required tools, executable checks, version
+probes, and provenance/checksum evidence for bundled or upstream-downloaded
+tools.
 
 - Linux: DEB/RPM/openSUSE RPM/Arch/Slackware/AppImage scripts and workflows
 
@@ -64,7 +74,7 @@ one per canonical matrix entry. Release publication is blocked unless the exact
 ## GitHub Actions Workflow Contract Map
 
 The workflow map is normative in `docs/release/artifact-contract.md`. Build
-readiness depends on these CI/release surfaces remaining mapped:
+readiness depends on these CI/release contract entries remaining mapped:
 
 - `.github/workflows/ci.yml`: global quality gate, release contract tests, and
   root `main.py` compatibility contract.
@@ -75,7 +85,8 @@ readiness depends on these CI/release surfaces remaining mapped:
 - `.github/workflows/project-automation.yml`: repository automation,
   non-packaging; it must not be treated as a release artifact workflow.
 - `.github/workflows/pypi-validate.yml`: PyPI wheel/sdist validation.
-- `.github/workflows/release.yml`: aggregate exact 21-asset release matrix.
+- `.github/workflows/release.yml`: aggregate exact 21 ECLI-owned asset release
+  matrix.
 - `.github/workflows/windows-installer.yml`: Windows portable EXE and NSIS
   installer path.
 - `.github/workflows/windows-validate.yml`: Windows package validation.
@@ -87,9 +98,9 @@ exist on disk and does not change this matrix in issue #97. When the imported
 asset tree lands under `src/ecli/extensions/` (issue #98) and is covered by
 package-data tests (issue #99):
 
-- The 21-asset count is unchanged. Extension assets ship **inside** the existing
-  PyPI wheel/sdist and downstream artifacts, not as new top-level GitHub Release
-  assets.
+- The 21 ECLI-owned asset count is unchanged. Extension assets ship **inside**
+  the existing PyPI wheel/sdist and downstream artifacts, not as new top-level
+  GitHub Release assets.
 - Non-`.py` extension data files (`*.json`, `*.tmLanguage`,
   `*.code-snippets`, `schemas/*.json`, etc.) require explicit wheel
   `force-include` and sdist `include` coverage in `pyproject.toml`.

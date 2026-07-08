@@ -99,8 +99,20 @@ microservices under `src/ecli/extensions/linters/`, plus Ruff, which ships
 bundled with the editor itself. Each microservice's `manifest.py` declares
 one `LinterDefinition` carrying enough metadata (`tier`, `install_group`,
 `bundled_with_full_install`, `install_hint`, `homepage_url`,
-`package_hints`, `supersedes`, `provider_kind`) for a future installer and
-for F4's missing-tool UX to act on.
+`package_hints`, `supersedes`, `provider_kind`) for the installer and
+repair UX to reason about the tool without embedding linter-specific policy
+in the F4 panel.
+
+Each microservice's `package_contract.py` is the single source of truth for
+how that linter is provided per OS/artifact contract entry. The package
+contract is metadata only today, but the required shape is fixed: ECLI Full
+must provide mandatory tools, manual installation is only for developer
+checkouts/minimal installs/repair, version probes are required, and GitHub
+or upstream release artifacts require source URL, pinned version,
+checksum/provenance evidence, executable permission handling, and
+deterministic install logs. The mapping must cover exactly 21 artifact
+contract entries from `docs/release/artifact-contract.md`; it must not grow
+or shrink into a parallel release matrix.
 
 ### Modern defaults, not the most popular tool from 2015
 
@@ -172,7 +184,7 @@ Field meanings:
 | `capabilities` | `tuple["lint" \| "fix", ...]` | what a future integration could do with this definition |
 | `tier` | one of `ALLOWED_TIERS` | `"core" \| "recommended" \| "optional" \| "legacy"` |
 | `install_group` | one of `ALLOWED_INSTALL_GROUPS` | packaging bucket, see above |
-| `install_hint` | `str` | human-readable install instructions for F4's missing-tool UX |
+| `install_hint` | `str` | human-readable repair hint for developer/minimal/damaged installs; not the normal Full user path |
 | `homepage_url` | `str` | canonical upstream URL |
 | `enabled_by_default` | `bool` | future default on/off state; not consulted anywhere yet |
 | `bundled_with_full_install` | `bool` | whether an "ECLI Full" install should ship/depend on this tool where platform packaging allows |
@@ -258,12 +270,18 @@ Two install shapes are anticipated (not implemented in this change):
 
 - **Minimal install** — the editor only. Ruff works out of the box because
   it is bundled (`provider_kind="internal"`). Every other entry in the
-  catalog is inert metadata until its executable is found on `$PATH`.
-- **ECLI Full install** — the editor plus, where the target platform's
-  packaging system allows it, the `bundled_with_full_install=True` tools
-  (Biome, Cargo Clippy, Zig, Clang-Tidy, Cppcheck, Clang-Format,
-  Checkstyle, PMD, SpotBugs, ShellCheck, actionlint, hadolint, TFLint,
-  SQLFluff, golangci-lint, markdownlint-cli2, yamllint, Taplo).
+  catalog is inert metadata until its executable is found on `$PATH` or in
+  an ECLI-managed tools directory. Manual installation documentation applies
+  to this shape, to developer checkouts, and to repair of damaged Full
+  installs.
+- **ECLI Full install** — the editor plus the
+  `bundled_with_full_install=True` tools (Biome, Cargo Clippy, Zig,
+  Clang-Tidy, Cppcheck, Clang-Format, Checkstyle, PMD, SpotBugs,
+  ShellCheck, actionlint, hadolint, TFLint, SQLFluff, golangci-lint,
+  markdownlint-cli2, yamllint, Taplo). The Full installer/provisioner
+  detects the operating system and artifact context, checks already-installed
+  tools first, installs or bundles missing required tools using the correct
+  OS/artifact-specific method, and verifies executability plus versions.
   Legacy/optional entries (ESLint, Pylint, Stylelint, Oxlint) are
   deliberately excluded from Full — a user opts into those explicitly.
 
@@ -273,13 +291,17 @@ missing one of them, that is a packaging defect or a damaged/partial
 install condition, not expected product behavior — see
 `docs/architecture/ecli-f4-linter-microservices-design.md` sections 2.2
 and 4.2. Packaging work needed to satisfy this must land inside ECLI's
-existing 21 artifact contract entries, never a parallel or informal
-release matrix (design doc sections 4.3/18.2).
+existing 21 artifact contract entries, never a parallel or informal release
+matrix (design doc sections 4.3/18.2).
 
-"Where platform packaging allows it" is doing real work here: DEB/RPM
-packages can declare dependencies on system packages (e.g. `shellcheck`)
-if the target distro ships them; a Homebrew formula can declare `depends_on`
-the same way. A PyPI wheel cannot.
+The accepted provisioning strategies are OS-aware: native package-manager
+dependencies where reliable, bundled binaries where appropriate, verified
+GitHub/upstream release downloads, language package-manager installs,
+dedicated ECLI-managed tool directories, and shims/wrappers where a JAR or
+toolchain component needs one. Upstream binary/JAR/tarball downloads are
+allowed only with explicit source URL, version pinning, checksum verification
+where available, clear provenance in `package_contract.py`, no silent
+unverified execution, and deterministic install logs.
 
 ### The PyPI limitation
 
@@ -299,33 +321,35 @@ Pack's `recommended` tools are **not** Python packages:
   binaries with their own release channels.
 
 `pip install ecli-editor` therefore **cannot** transitively install any of
-these. The PyPI distribution of ECLI is, and will remain, a minimal
-install with respect to the Linter Pack — Ruff bundled, everything else
-optional and shown as absent until the user installs it themselves or
-installs ECLI via a platform package (DEB/RPM/Homebrew/etc.) that can
-declare real system dependencies. `install_hint` and `package_hints` on
-each catalog entry exist specifically to carry the user through that gap.
+these reliably. The PyPI distribution of ECLI is a minimal install with
+respect to the Linter Pack unless a future wheel policy explicitly proves
+otherwise. Ruff remains bundled; other tools require a Full platform
+artifact for the normal user path, or the manual installation reference for
+developer checkout, minimal install, or repair use. `install_hint` and
+`package_hints` on each catalog entry are repair/developer metadata, not a
+normal post-install checklist for ECLI Full.
 
 ## Proposed future commands (not implemented)
 
 Two `ecli doctor` subcommands are proposed for a later stage, once a real
 provider exists. Per the authoritative contract (design doc sections
 2.2/4.2), these are **repair and verification tools for damaged,
-development, or partial environments** — not the normal installation
-path. A normal ECLI Full installation already includes the base linter
-microservices' required executables; neither command is a required
-post-install step:
+development, minimal, or partial environments** — not the normal
+installation path. A normal ECLI Full installation already includes the
+base linter microservices' required executables; neither command is a
+required post-install step:
 
-- `ecli doctor --check-linters` — walk the catalog, check `$PATH` for each
+- `ecli doctor --check-linters` — walk the catalog, check the effective
+  tool search path (`$PATH` plus any ECLI-managed tools directory) for each
   `executable`, and report what is present, what is missing, and each
-  missing tool's `install_hint`/`homepage_url`.
-- `ecli doctor --install-linters` — where the host platform and package
-  manager allow it, offer to repair a damaged or partial install by
-  installing missing `bundled_with_full_install` tools (e.g. shell out to
-  `apt`/`brew`/`cargo install` on the user's explicit confirmation). This
-  is an opt-in, user-triggered repair action, never something F4 or any
-  background diagnostics pass does on its own, and never advertised as a
-  required step after installing ECLI.
+  missing tool's repair metadata.
+- `ecli doctor --install-linters` — where the host platform and artifact
+  context allow it, offer to repair a damaged/minimal/partial install by
+  installing missing `bundled_with_full_install` tools with the same
+  provenance/checksum/version rules as the installer. This is an opt-in,
+  user-triggered repair action, never something F4 or any background
+  diagnostics pass does on its own, and never advertised as a required step
+  after installing ECLI.
 
 Neither subcommand exists today. This document only records the intended
 shape so a later stage does not have to re-derive it.
@@ -345,9 +369,9 @@ intended behavior is:
   tool and framing it as an installation-defect condition (for example,
   "Diagnostics unavailable: Biome executable is missing from the ECLI Full
   installation. This indicates an incomplete or damaged ECLI
-  installation."), plus the catalog entry's `install_hint` and
-  `homepage_url` as repair information — not as instructions for a
-  routine post-install step.
+  installation."), plus the catalog entry's repair metadata as
+  developer/minimal/repair information — not as instructions for a routine
+  post-install step.
 - Repair is opt-in and explicit: `ecli doctor --install-linters` (see
   above) or manual installation, used to fix a damaged, partial, or
   minimal install — never presented as "install the linter pack after
@@ -394,7 +418,8 @@ defined by `docs/architecture/ecli-f4-linter-microservices-design.md`:
 3. Backend registration of each new provider with `DiagnosticsService` in
    `src/ecli/integrations/LinterBridge.py` (where `RuffDiagnosticProvider`
    is registered today), gated on `enabled_by_default` and on the target
-   binary actually being present on `$PATH`. This is registration only —
+   binary actually being present on `$PATH` or in an ECLI-managed tools
+   directory. This is registration only —
    the F4 panel, its layout, colors, keybindings, details popup, and PASS
    visualization stay frozen and reused unchanged (design doc section 4.1).
 4. `ecli doctor --check-linters` and `ecli doctor --install-linters` as

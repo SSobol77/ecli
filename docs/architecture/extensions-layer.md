@@ -56,6 +56,11 @@ The Extensions Layer is a **data layer plus adapter code**, not an extension
 *host*. ECLI consumes static metadata and grammars; it does not execute
 extension programs.
 
+The exact source root is `src/ecli/extensions/`. The misspelled
+`src/extentions/` path and a top-level `src/extensions/` path are forbidden:
+they bypass the ECLI package namespace, package-data tests, and runtime import
+contracts.
+
 ## Relationship to existing extension docs
 
 This document is distinct from the existing `docs/extensions/*` set:
@@ -194,8 +199,9 @@ Each imported folder under `lang/<name>` and `themes/<name>` may retain only:
 Disallowed imported files and directories include `.vscodeignore`, lockfiles,
 `tsconfig*.json`, `esbuild*.mts`, webpack/rollup configs, TypeScript or
 JavaScript activation/runtime source, `test/`, `tests/`, `media/`,
-`screenshots/`, demo assets, `out/`, `dist/`, `node_modules/`, `.vscode/`, and
-`.github/`.
+`screenshots/`, demo assets, `out/`, `dist/`, `node_modules/`, `.vscode/`,
+`.github/`, `__pycache__/`, `.pyc`, `.pyo`, generated inventories, generated
+bundles, and generated logs.
 
 VS Code UI/runtime-only extensions that do not provide ECLI-consumed declarative
 language, grammar, snippet, or theme assets are not part of the runtime bundle.
@@ -327,7 +333,7 @@ new matrix entry.
   that imported extension data files are present in the built wheel and sdist
   (added in #99), the same way other packaging contracts are enforced.
 - **All active platform packaging contracts must remain green.** Adding the asset
-  tree must not break any of the 21 canonical assets or their
+  tree must not break any of the exactly 21 artifact contract entries or their
   `tests/packaging/` contract tests across: PyPI wheel and sdist; Linux
   PyInstaller binary and tarball; Debian `.deb`; generic RPM; openSUSE RPM; Arch
   package; Slackware `.txz`; AppImage; FreeBSD `.pkg`, ports/chroot evidence, and

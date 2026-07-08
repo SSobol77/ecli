@@ -18,17 +18,34 @@ See the LICENSE file in the project root for full license text.
 
 - Artifact filename must follow the naming convention specified in `artifact-contract.md`
 - File location is `releases/<version>/`
-- Official GitHub Release publication requires exactly 21 top-level asset files,
-  one per canonical matrix entry.
+- Official GitHub Release publication requires exactly 21 ECLI-owned uploaded
+  top-level asset files, one per canonical matrix entry.
 - Checksum file exists under `releases/<version>/.checksums/` and matches
   generated digest.
 - Checksum sidecar format is `<hex>  <artifact basename>`
-- Top-level `.sha256` files in `releases/<version>/` are extra release assets
-  and must fail the release asset verifier.
+- Top-level `.sha256` files in `releases/<version>/` are extra ECLI-owned
+  uploaded release assets and must fail the release asset verifier. Checksum
+  sidecars are CI/release evidence, not uploaded GitHub Release assets.
+- The GitHub UI may show **Assets 23** because GitHub adds `Source code (zip)`
+  and `Source code (tar.gz)` automatically. Those generated source archives are
+  not part of the canonical 21 artifact contract entries.
+- ECLI Full artifacts must include F4 linter provisioning evidence for exactly
+  21 artifact contract entries: OS/artifact-context detection, pre-install
+  detection of already-installed tools, installation/bundling of missing
+  required tools, executable checks, and version probes.
+- For bundled or upstream-downloaded tools, including GitHub release binaries,
+  JARs, and tarballs, verification evidence must include source URL, pinned
+  version, checksum/provenance record, executable permission handling, and
+  deterministic install logs.
+- For native package-manager dependencies, verification evidence must assert
+  the package relationship and post-install executable availability.
+- A missing required linter after ECLI Full installation is a release blocker
+  unless the artifact entry is explicitly documented as minimal/constrained
+  before release.
 
 ## Exact Release Asset Gate
 
-Use the canonical 21-asset verifier before publication:
+Use the canonical 21 ECLI-owned asset verifier before publication:
 
 ```sh
 uv run python scripts/verify_release_assets.py
@@ -36,8 +53,11 @@ uv run python scripts/verify_release_assets.py
 
 The verifier reads the version from `pyproject.toml`, validates
 `releases/<version>/`, fails when the directory is missing, fails on missing or
-extra top-level files, and passes only when the exact 21 physical GitHub Release
-assets are present. It ignores `.checksums/` only when that path is a directory.
+extra top-level ECLI-owned files, and passes only when the exact 21 ECLI-owned
+uploaded physical GitHub Release assets are present. It ignores `.checksums/`
+only when that path is a directory. The verifier does not count GitHub-generated
+`Source code (zip)` or `Source code (tar.gz)` archives because they are not
+repository-built uploaded artifacts.
 
 Mandatory GitHub Release asset names for each `<version>`:
 
@@ -101,7 +121,8 @@ shell verifier wrapper must not be restored for existing callers.
 For package-builder output, the verifier expects the sidecar at
 `<artifact>.sha256` and requires the sidecar payload to use basename-only
 coreutils format. Before GitHub Release publication, sidecars must be moved or
-regenerated under `.checksums/` so the top-level asset set remains exactly 21.
+regenerated under `.checksums/` so the top-level ECLI-owned uploaded asset set
+remains exactly 21.
 
 ```text
 <64 lowercase hex characters>  <artifact basename>

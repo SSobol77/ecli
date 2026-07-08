@@ -16,9 +16,9 @@ Each supported linter must be represented as an independent diagnostics microser
 
 The F4 UI is already acceptable and must remain unchanged. The current Ruff-based user experience is the reference behavior. Every new linter must adapt its output to the existing normalized diagnostics contracts so the same panel, same list, same details popup, same PASS state, same navigation behavior, and same source-line highlight are reused without visual changes.
 
-The product expectation is also strict: ECLI Full installation must be complete. Users must not be expected to install linters manually after installing ECLI. Commands such as `ecli doctor --install-linter-pack` may exist later only as repair or verification tools for damaged, development, or partial environments. They must not be part of the normal installation experience. A normal ECLI Full installation must include the diagnostics microservices and the required linter executables or package dependencies for the supported base language set.
+The product expectation is also strict: ECLI Full installation must be complete. Users must not be expected to install linters manually after installing ECLI. A normal ECLI Full installer must detect the operating system and the canonical artifact context, check which required linter/toolchain executables already exist, install or bundle only the missing required tools through the correct OS/artifact-specific mechanism, and verify executability plus version probes before declaring the installation complete. Doctor commands or manual installation notes may exist later only as repair or verification tools for damaged, development, minimal, or partial environments. They must not be part of the normal installation experience.
 
-The release and packaging side of this feature must obey the existing canonical release contract: exactly 21 artifact contract entries. Not fewer, not more. Every change needed for full linter installation must be represented through that existing 21-artifact contract, its tests, docs, release runbooks, and packaging evidence.
+The release and packaging side of this feature must obey the existing canonical release contract: exactly 21 artifact contract entries. Not fewer, not more. Every change needed for full linter installation must be represented through those existing 21 artifact contract entries, their tests, docs, release runbooks, and packaging evidence.
 
 ---
 
@@ -54,11 +54,27 @@ Missing executable handling is a defensive fallback. It is not the intended prod
 
 A normal full installation must include the supported linter stack through one of these platform-appropriate mechanisms:
 
-- Native package dependencies.
-- Vendored or bundled standalone binaries.
-- Packaged helper distributions.
+- Native package-manager dependencies where the target OS repository is reliable.
+- Bundled standalone binaries where licensing, provenance, and artifact size allow it.
+- Verified upstream release downloads, including GitHub release artifacts, where native packages are unavailable or unsuitable.
+- Language package-manager installs where that ecosystem is the authoritative delivery channel.
+- Dedicated ECLI-managed tool directories, such as an app-local tools directory or `~/.local/share/ecli-linters` for repair/minimal paths.
+- Shims or wrappers where a tool is delivered as a JAR, toolchain component, or app-local binary.
 - Runtime resources shipped with the ECLI artifact.
 - Platform-specific packaging scripts that install or include the toolchain.
+
+The installer must inspect already-installed tools before installing anything. It must not overwrite a valid user/system tool just to satisfy the linter pack unless the artifact contract explicitly owns that tool location.
+
+GitHub and upstream binary, JAR, or tarball downloads are allowed provisioning strategies, but only under a provenance-aware contract:
+
+- explicit source URL;
+- pinned version;
+- checksum verification where upstream publishes checksums, and an ECLI-maintained checksum/provenance record otherwise;
+- executable permission handling;
+- no silent unverified binary execution;
+- clear provenance in each linter's `package_contract.py`;
+- release artifact verification evidence;
+- deterministic install logs.
 
 This must be documented and tested per release artifact contract.
 
@@ -171,7 +187,7 @@ The only acceptable uses of missing-tool messages are:
 
 ### 4.3 Packaging Contract Invariants
 
-The release contract has exactly 21 artifact entries. F4 linter installation work must be integrated into the existing 21-artifact matrix. It must not create an informal parallel release matrix and must not invent untracked packaging surfaces.
+The release contract has exactly 21 artifact contract entries. F4 linter installation work must be integrated into the existing 21-artifact matrix in `docs/release/artifact-contract.md`. It must not create an informal parallel release matrix and must not invent untracked packaging surfaces.
 
 Every packaging change related to linter installation must update:
 
@@ -351,8 +367,13 @@ Expected responsibilities:
 - Define binary names expected after installation.
 - Define validation commands.
 - Define package dependencies or bundled binary locations.
-- Define checks for all applicable artifacts in the canonical 21-entry release contract.
+- Define checks for all applicable artifacts in the canonical set of exactly 21 artifact contract entries.
 - Define whether the tool is mandatory for Full installation.
+- Define the preferred OS-aware delivery mode for each artifact family.
+- Define fallback delivery modes for platforms where native package names or repository quality are not reliable.
+- Define source URL, version pin, checksum/provenance evidence, and executable permission handling for GitHub or upstream release downloads.
+- Define deterministic version verification evidence after installation.
+- Treat manual install instructions as developer checkout, minimal install, or repair documentation only.
 
 ### 6.5 `fixtures/`
 
@@ -943,13 +964,37 @@ The full package must include or depend on:
 
 Some tools may require platform-specific handling. The packaging contract must make this explicit.
 
-### 18.2 Exactly 21 Artifact Entries
+### 18.2 Exactly 21 Artifact Contract Entries
 
-All packaging work must be integrated into the existing canonical 21-item contract. The linter pack must not create a shadow packaging matrix. Every artifact must be tested according to the existing release contract.
+All packaging work must be integrated into the existing canonical matrix in `docs/release/artifact-contract.md`. The linter pack must not create a shadow packaging matrix. Every Full installation provisioning contract must map to exactly 21 artifact contract entries:
+
+1. PyPI wheel
+2. PyPI source distribution
+3. Linux generic PyInstaller executable
+4. Linux release tarball
+5. Debian / Ubuntu `.deb`
+6. generic RPM `.rpm`
+7. openSUSE / SUSE RPM
+8. Arch Linux `PKGBUILD`
+9. Slackware `.txz`
+10. AppImage
+11. FreeBSD `.pkg`
+12. FreeBSD ports/chroot build path
+13. macOS `.app`
+14. macOS `.dmg`
+15. Windows portable `.exe`
+16. Windows NSIS installer `.exe`
+17. Nix flake
+18. Nix/NixOS package expression
+19. Docker DEB build helper
+20. Docker RPM build helper
+21. GitHub Actions release/workflow contract map
+
+Every entry must be tested according to the existing release contract. Do not describe this as a loose set of platforms or packaging targets when the normative requirement is exactly 21 artifact contract entries.
 
 ### 18.3 Platform Delivery Modes
 
-Different artifact types may deliver linters differently:
+Different artifact types may deliver linters differently, but every Full installer/provisioner path must first detect the OS/artifact context, then check for already-installed required tools before installing or bundling missing tools:
 
 - Debian/Ubuntu `.deb`: package dependencies or bundled tools.
 - RPM/openSUSE: package dependencies or bundled tools.
@@ -962,7 +1007,7 @@ Different artifact types may deliver linters differently:
 - macOS DMG: bundled tools inside app resources or companion runtime directory.
 - Windows portable and NSIS: bundled `.exe` tools or managed runtime payload.
 - Nix/NixOS: derivation dependencies.
-- PyPI wheel/sdist: limited by Python packaging; must still provide a clear Full-install strategy outside plain PyPI if non-Python binaries cannot be delivered safely.
+- PyPI wheel/sdist: limited by Python packaging; must document that plain PyPI cannot reliably provision Node, Rust, Go, Zig, Java, and system binaries. PyPI/source installs may be minimal; Full platform artifacts are the supported user path for complete linter provisioning.
 
 ### 18.4 Validation
 
@@ -970,11 +1015,17 @@ Every full-install artifact must have a validation path proving:
 
 - The linter microservice files are present.
 - Required binaries or package dependencies are present.
+- The installer detects the operating system and artifact context before provisioning.
+- Already-installed valid tools are detected before missing tools are installed or bundled.
 - Version probes work.
+- Executability checks pass.
 - F4 provider registration is available.
 - Basic smoke diagnostics can run or at least load without missing executable defects.
+- Package-manager dependencies assert the package relationship and post-install executable availability.
+- Bundled or upstream-downloaded tools have source URL, version pin, checksum/provenance evidence, executable permission handling, deterministic install logs, and post-install version checks.
 - Checksum sidecars remain valid.
 - The release artifact count remains exactly 21.
+- A missing required linter after ECLI Full installation is a release blocker, unless the artifact entry explicitly documents a platform limitation and downgraded/minimal status before release.
 
 ---
 
@@ -1006,7 +1057,7 @@ Shared tests must verify:
 - No provider runs package-manager install commands.
 - No provider mutates files during diagnostics.
 - Every full-install provider has a package contract.
-- Every full-install provider maps to the 21-artifact release contract.
+- Every full-install provider maps to exactly 21 artifact contract entries.
 
 ### 19.3 UI Regression Tests
 
@@ -1121,7 +1172,7 @@ Add:
 ### Stage 6: Full Installation Packaging
 
 - Update package contracts.
-- Update all 21 artifact validation surfaces.
+- Update validation for exactly 21 artifact contract entries.
 - Prove the full install includes the linter pack.
 - Add release gate tests.
 
@@ -1204,7 +1255,7 @@ The microservice metadata contract: language support, executable names, tier, in
 
 ### Package Contract
 
-The per-microservice packaging contract describing how the tool is included in ECLI Full across the canonical release artifacts.
+The per-microservice packaging contract describing how the tool is included in ECLI Full across exactly 21 artifact contract entries, including OS-aware delivery mode, version probe, executable names, and provenance/checksum requirements for upstream release downloads.
 
 ### Full Installation
 
@@ -1223,7 +1274,7 @@ One F4 panel.
 One normalized diagnostic contract.
 Many isolated linter microservices.
 One full installation.
-Exactly 21 release artifact contract entries.
+Exactly 21 artifact contract entries.
 No UI churn.
 No marketplace burden.
 No manual linter hunt.
