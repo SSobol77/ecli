@@ -25,4 +25,11 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("yamllint",),
     version_probe=("yamllint", "--version"),
     delivery_notes="Python package (pip); bundled with ECLI Full where platform packaging allows.",
+    allowed_install_mechanisms=(
+        "language-package-manager",
+        "os-package-manager",
+        "ecli-managed-tools",
+        "nix-derivation",
+    ),
+    source_url="https://yamllint.readthedocs.io/",
 )

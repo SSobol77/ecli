@@ -78,6 +78,10 @@ See the LICENSE file in the project root for full license text.
       detects already-installed required tools before installing missing tools,
       verifies executable availability and version probes, and includes
       deterministic provisioning evidence.
+- [ ] `scripts/provision_f4_linters.py --all-artifacts --mode dry-run` writes
+      21 deterministic `f4-linter-provisioning-<artifact-entry-id>.json`
+      evidence files, and
+      `scripts/verify_f4_linter_provisioning.py --all-artifacts` verifies them.
 - [ ] F4 linter package-manager dependencies: package metadata asserts the
       dependency relationship and post-install executable availability for each
       required linter/toolchain dependency it delegates to the OS package

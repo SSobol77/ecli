@@ -51,6 +51,19 @@ Use the canonical 21 ECLI-owned asset verifier before publication:
 uv run python scripts/verify_release_assets.py
 ```
 
+Use the F4 provisioning evidence verifier before declaring a Full artifact
+release-ready:
+
+```sh
+uv run python scripts/verify_f4_linter_provisioning.py --all-artifacts --evidence-dir <evidence-dir>
+```
+
+Provisioning evidence is written by:
+
+```sh
+uv run python scripts/provision_f4_linters.py --artifact deb --target-dir <target-dir> --evidence-dir <evidence-dir> --mode dry-run --json
+```
+
 The verifier reads the version from `pyproject.toml`, validates
 `releases/<version>/`, fails when the directory is missing, fails on missing or
 extra top-level ECLI-owned files, and passes only when the exact 21 ECLI-owned

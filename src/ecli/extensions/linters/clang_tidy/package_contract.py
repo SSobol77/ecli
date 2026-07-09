@@ -25,4 +25,11 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("clang-tidy",),
     version_probe=("clang-tidy", "--version"),
     delivery_notes="OS package dependency (LLVM tooling) or bundled binary; requires compile_commands.json / CMake context for full analysis, see the design doc section 11.1.",
+    allowed_install_mechanisms=(
+        "os-package-manager",
+        "ecli-managed-tools",
+        "bundled-binary",
+        "nix-derivation",
+    ),
+    source_url="https://clang.llvm.org/extra/clang-tidy/",
 )

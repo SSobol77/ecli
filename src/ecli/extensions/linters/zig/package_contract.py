@@ -25,4 +25,12 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("zig",),
     version_probe=("zig", "version"),
     delivery_notes="Zig toolchain download or OS package manager; bundled with ECLI Full where platform packaging allows.",
+    allowed_install_mechanisms=(
+        "os-package-manager",
+        "ecli-managed-tools",
+        "bundled-binary",
+        "verified-upstream-download",
+        "nix-derivation",
+    ),
+    source_url="https://ziglang.org/",
 )

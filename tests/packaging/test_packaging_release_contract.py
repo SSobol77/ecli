@@ -41,6 +41,8 @@ PACKAGING_SCRIPT_GLOBS = (
     "scripts/verify_artifact.py",
     "scripts/verify_release_assets.py",
     "scripts/verify_runtime.py",
+    "scripts/provision_f4_linters.py",
+    "scripts/verify_f4_linter_provisioning.py",
     "scripts/check_log_invariant.py",
 )
 

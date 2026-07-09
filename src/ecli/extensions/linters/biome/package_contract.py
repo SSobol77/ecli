@@ -25,4 +25,12 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("biome",),
     version_probe=("biome", "--version"),
     delivery_notes="npm package / standalone binary; bundled with ECLI Full where platform packaging allows.",
+    allowed_install_mechanisms=(
+        "language-package-manager",
+        "ecli-managed-tools",
+        "bundled-binary",
+        "verified-upstream-download",
+        "nix-derivation",
+    ),
+    source_url="https://biomejs.dev/",
 )

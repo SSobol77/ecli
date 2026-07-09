@@ -39,6 +39,8 @@ detection, detection of already-installed required tools before install,
 installation or bundling of missing required tools, executable checks, version
 probes, and provenance/checksum evidence for bundled or upstream-downloaded
 tools.
+`scripts/provision_f4_linters.py` emits the per-entry evidence, and
+`scripts/verify_f4_linter_provisioning.py` verifies one entry or all 21 entries.
 
 - Linux: DEB/RPM/openSUSE RPM/Arch/Slackware/AppImage scripts and workflows
 

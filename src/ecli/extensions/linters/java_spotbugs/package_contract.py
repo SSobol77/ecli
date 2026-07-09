@@ -25,4 +25,12 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("spotbugs",),
     version_probe=("spotbugs", "-version"),
     delivery_notes="Standalone distribution or Maven/Gradle plugin; workspace/project-scoped, requires compiled classes (design doc section 12.3).",
+    allowed_install_mechanisms=(
+        "jar-shim",
+        "os-package-manager",
+        "ecli-managed-tools",
+        "verified-upstream-download",
+        "nix-derivation",
+    ),
+    source_url="https://spotbugs.github.io/",
 )

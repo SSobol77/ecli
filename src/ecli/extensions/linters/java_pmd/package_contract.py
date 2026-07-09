@@ -25,4 +25,12 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("pmd",),
     version_probe=("pmd", "--version"),
     delivery_notes="Standalone distribution or Maven/Gradle plugin; bundled with ECLI Full where platform packaging allows.",
+    allowed_install_mechanisms=(
+        "jar-shim",
+        "os-package-manager",
+        "ecli-managed-tools",
+        "verified-upstream-download",
+        "nix-derivation",
+    ),
+    source_url="https://pmd.github.io/",
 )

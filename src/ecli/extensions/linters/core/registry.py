@@ -127,6 +127,83 @@ ALLOWED_INSTALL_GROUPS: frozenset[str] = frozenset(
 ProviderKind = Literal["internal", "external"]
 
 
+CANONICAL_ARTIFACT_ENTRY_IDS: tuple[str, ...] = (
+    "pypi-wheel",
+    "pypi-sdist",
+    "linux-pyinstaller",
+    "linux-tarball",
+    "deb",
+    "rpm",
+    "opensuse-rpm",
+    "arch-pkgbuild",
+    "slackware-txz",
+    "appimage",
+    "freebsd-pkg",
+    "freebsd-ports-chroot",
+    "macos-app",
+    "macos-dmg",
+    "windows-portable-exe",
+    "windows-nsis-installer",
+    "nix-flake",
+    "nixos-package",
+    "docker-deb-helper",
+    "docker-rpm-helper",
+    "gha-release-contract",
+)
+
+InstallMechanism = Literal[
+    "artifact-policy",
+    "bundled-binary",
+    "bundled-internal",
+    "ecli-managed-tools",
+    "jar-shim",
+    "language-package-manager",
+    "nix-derivation",
+    "os-package-manager",
+    "toolchain-component",
+    "verified-upstream-download",
+]
+
+ALLOWED_INSTALL_MECHANISMS: frozenset[str] = frozenset(
+    {
+        "artifact-policy",
+        "bundled-binary",
+        "bundled-internal",
+        "ecli-managed-tools",
+        "jar-shim",
+        "language-package-manager",
+        "nix-derivation",
+        "os-package-manager",
+        "toolchain-component",
+        "verified-upstream-download",
+    }
+)
+
+ProvenanceRequirement = Literal[
+    "artifact-entry-id",
+    "checksum-or-ecli-provenance-when-downloaded",
+    "deterministic-install-log",
+    "ecli-version",
+    "executable-permission",
+    "pinned-version-when-downloaded",
+    "source-url-when-downloaded",
+    "version-probe",
+]
+
+ALLOWED_PROVENANCE_REQUIREMENTS: frozenset[str] = frozenset(
+    {
+        "artifact-entry-id",
+        "checksum-or-ecli-provenance-when-downloaded",
+        "deterministic-install-log",
+        "ecli-version",
+        "executable-permission",
+        "pinned-version-when-downloaded",
+        "source-url-when-downloaded",
+        "version-probe",
+    }
+)
+
+
 @dataclass(frozen=True)
 class LinterDefinition:
     """Immutable declarative metadata for one ECLI Linter Pack entry.
@@ -218,6 +295,55 @@ class PackageContract:
     binary_names: tuple[str, ...]
     version_probe: tuple[str, ...]
     delivery_notes: str
+    allowed_install_mechanisms: tuple[InstallMechanism, ...] = (
+        "artifact-policy",
+    )
+    provenance_requirements: tuple[ProvenanceRequirement, ...] = (
+        "artifact-entry-id",
+        "version-probe",
+        "deterministic-install-log",
+        "checksum-or-ecli-provenance-when-downloaded",
+    )
+    source_url: str | None = None
+    pinned_version: str | None = None
+    checksum_required_for_downloads: bool = True
+    artifact_entry_ids: tuple[str, ...] = field(
+        default_factory=lambda: CANONICAL_ARTIFACT_ENTRY_IDS
+    )
+
+    def __post_init__(self) -> None:
+        """Validate declarative package/provisioning metadata."""
+        if not self.service_name:
+            raise ValueError("package contract service_name must be non-empty")
+        if not self.binary_names:
+            raise ValueError(
+                f"package contract {self.service_name!r} must name a binary"
+            )
+        if not self.version_probe:
+            raise ValueError(
+                f"package contract {self.service_name!r} must name a version probe"
+            )
+        unknown_mechanisms = sorted(
+            set(self.allowed_install_mechanisms) - ALLOWED_INSTALL_MECHANISMS
+        )
+        if unknown_mechanisms:
+            raise ValueError(
+                f"package contract {self.service_name!r} uses unknown install "
+                f"mechanism(s): {unknown_mechanisms}"
+            )
+        unknown_provenance = sorted(
+            set(self.provenance_requirements) - ALLOWED_PROVENANCE_REQUIREMENTS
+        )
+        if unknown_provenance:
+            raise ValueError(
+                f"package contract {self.service_name!r} uses unknown provenance "
+                f"requirement(s): {unknown_provenance}"
+            )
+        if tuple(self.artifact_entry_ids) != CANONICAL_ARTIFACT_ENTRY_IDS:
+            raise ValueError(
+                f"package contract {self.service_name!r} must cover exactly "
+                "the canonical 21 artifact entry ids"
+            )
 
 
 def get_linter(catalog: tuple[LinterDefinition, ...], name: str) -> LinterDefinition:

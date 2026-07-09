@@ -25,4 +25,12 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("checkstyle",),
     version_probe=("checkstyle", "--version"),
     delivery_notes="Standalone jar or Maven/Gradle plugin; bundled with ECLI Full where platform packaging allows.",
+    allowed_install_mechanisms=(
+        "jar-shim",
+        "os-package-manager",
+        "ecli-managed-tools",
+        "verified-upstream-download",
+        "nix-derivation",
+    ),
+    source_url="https://checkstyle.org/",
 )

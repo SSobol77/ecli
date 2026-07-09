@@ -46,13 +46,19 @@ Current state:
   provider; it remains the F4 linter microservices reference
   implementation and its Python behavior is unchanged by this migration.
 - Every other first-class and legacy/optional linter (22 in total) has its
-  own microservice directory with `manifest.py` and `package_contract.py`
-  only -- no `provider.py`, no execution, no output parsing.
+  own microservice directory with `manifest.py` and `package_contract.py`.
+  Implemented providers/parsers remain separate from provisioning; the
+  provisioning layer consumes only manifest/package-contract metadata and does
+  not run F4 diagnostics.
 - `src/ecli/extensions/linters/__init__.py` aggregates every
   microservice's `manifest.MANIFEST` into `LINTER_CATALOG` and exposes
   `get_linter(name)`, `iter_linters()`, `linters_for_language(language)`.
-- No new wiring into `DiagnosticsService` beyond Ruff, no output parsing
-  for non-Ruff tools, and no F4 UI change of any kind.
+- `src/ecli/extensions/linters/core/provisioning_contract.py`,
+  `provisioning_registry.py`, and `provisioning.py` implement the
+  provider-neutral Full-install provisioning model, installer component data,
+  dry-run evidence, and evidence verification. This is packaging/release
+  contract logic only: no F4 UI change, no package-manager calls from F4, and
+  no provider/parser behavior change.
 
 See `docs/extensions/diagnostics-model.md` for the normalized `Diagnostic`
 contract every provider must produce, and
@@ -266,7 +272,7 @@ reserves the identifier.
 
 ## ECLI Full vs. minimal install
 
-Two install shapes are anticipated (not implemented in this change):
+Two install shapes are represented in the provisioning contract:
 
 - **Minimal install** — the editor only. Ruff works out of the box because
   it is bundled (`provider_kind="internal"`). Every other entry in the
@@ -302,6 +308,12 @@ toolchain component needs one. Upstream binary/JAR/tarball downloads are
 allowed only with explicit source URL, version pinning, checksum verification
 where available, clear provenance in `package_contract.py`, no silent
 unverified execution, and deterministic install logs.
+
+The repository exposes this contract through
+`scripts/provision_f4_linters.py` and
+`scripts/verify_f4_linter_provisioning.py`. `dry-run` planning is deterministic
+and safe for CI; real missing-tool provisioning still belongs to
+artifact-specific installer/package flows.
 
 ### The PyPI limitation
 

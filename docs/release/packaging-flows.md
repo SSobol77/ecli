@@ -61,6 +61,15 @@ installation is a release blocker. Manual linter installation remains a
 developer checkout, PyPI/source/minimal install, damaged-install repair, or
 advanced administration path only.
 
+The shared provider-neutral entrypoints are
+`scripts/provision_f4_linters.py` and
+`scripts/verify_f4_linter_provisioning.py`. Packaging flows may call the
+planner in dry-run/verify-only mode to emit deterministic
+`f4-linter-provisioning-<artifact-entry-id>.json` evidence. Concrete
+package-manager or bundle installation remains the responsibility of each
+artifact-specific flow and must stay non-interactive for CI and unattended
+package-manager installs.
+
 ## Mandatory GitHub Release Assets
 
 ```text
@@ -135,6 +144,8 @@ list and migration rules live in `docs/release/artifact-contract.md` under
 Canonical Python entrypoints include `scripts/sign_checksums.py`,
 `scripts/check_log_invariant.py`, `scripts/verify_artifact.py`,
 `scripts/verify_release_assets.py`, `scripts/verify_runtime.py`,
+`scripts/provision_f4_linters.py`,
+`scripts/verify_f4_linter_provisioning.py`,
 `scripts/build_pyinstaller_linux.py`, `scripts/build_and_package_deb.py`,
 `scripts/build_and_package_rpm.py`,
 `scripts/build_and_package_opensuse_rpm.py`, `scripts/build_and_package_arch.py`,
