@@ -309,6 +309,31 @@ PACKAGE_POLICY_SOURCE_BY_HELPER = {
     "docker-rpm-helper": "rpm",
 }
 
+OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
+    ("deb", "yamllint"): {
+        "evidence_source": "Debian official package metadata for yamllint",
+        "evidence_source_type": "official-distro-metadata",
+        "evidence_status": "verified-official-source",
+        "evidence_note": (
+            "Verified against official Debian package index, package tracker, "
+            "source package, and manpage metadata for the existing yamllint "
+            "package/executable mapping."
+        ),
+        "official_source_name": "Debian Package Search: yamllint",
+        "official_source_url": "https://packages.debian.org/yamllint",
+        "official_source_kind": "distro-package-index",
+        "verification_scope": "package-name-and-executable",
+        "verification_note": (
+            "Verified against official Debian package, package-tracker, source "
+            "package, and manpage metadata: package name yamllint and "
+            "executable yamllint."
+        ),
+        "external_verification_required_for_new_mappings": False,
+        "release_blocking": False,
+        "blocker_reason": None,
+    }
+}
+
 OS_PACKAGE_NAMES: dict[str, dict[str, tuple[str, ...]]] = {
     "deb": {
         "yamllint": ("yamllint",),
@@ -1030,15 +1055,21 @@ def linux_unmapped_package_manager_tools(
 def linux_distro_mapping_evidence_record_id(
     policy: LinuxToolProvisioningPolicy,
 ) -> str:
-    """Return the deterministic repository-local distro evidence record ID."""
+    """Return the deterministic distro evidence record ID."""
     source_artifact_id = _package_policy_artifact_id(policy.artifact_entry_id)
-    return f"repository-local-policy:{source_artifact_id}:{policy.tool_id}"
+    source_type = (
+        "official-distro-metadata"
+        if (policy.artifact_entry_id, policy.tool_id)
+        in OFFICIAL_DISTRO_EVIDENCE_BY_POLICY
+        else "repository-local-policy"
+    )
+    return f"{source_type}:{source_artifact_id}:{policy.tool_id}"
 
 
 def linux_distro_mapping_evidence_for_policy(
     policy: LinuxToolProvisioningPolicy,
 ) -> LinuxDistroMappingEvidenceRecord | None:
-    """Return repository-local evidence for one approved distro mapping policy."""
+    """Return distro evidence for one approved distro mapping policy."""
     if policy.mechanism != "os-package-manager":
         return None
     if policy.artifact_entry_id not in LINUX_DISTRO_MAPPING_ARTIFACT_IDS:
@@ -1047,33 +1078,41 @@ def linux_distro_mapping_evidence_for_policy(
     package_names = OS_PACKAGE_NAMES.get(source_artifact_id, {}).get(policy.tool_id)
     if package_names != policy.package_names:
         return None
-    return LinuxDistroMappingEvidenceRecord(
-        artifact_entry_id=policy.artifact_entry_id,
-        source_policy_artifact_entry_id=source_artifact_id,
-        distro_family=DISTRO_FAMILY_BY_ARTIFACT[policy.artifact_entry_id],
-        tool_id=policy.tool_id,
-        package_names=policy.package_names,
-        executable_names=policy.executable_names,
-        evidence_record_id=linux_distro_mapping_evidence_record_id(policy),
-        evidence_source="OS_PACKAGE_NAMES",
-        evidence_source_type="repository-local-policy",
-        evidence_status="current-policy-baseline",
-        evidence_note=(
+    override = OFFICIAL_DISTRO_EVIDENCE_BY_POLICY.get(
+        (policy.artifact_entry_id, policy.tool_id)
+    )
+    fields: dict[str, Any] = {
+        "artifact_entry_id": policy.artifact_entry_id,
+        "source_policy_artifact_entry_id": source_artifact_id,
+        "distro_family": DISTRO_FAMILY_BY_ARTIFACT[policy.artifact_entry_id],
+        "tool_id": policy.tool_id,
+        "package_names": policy.package_names,
+        "executable_names": policy.executable_names,
+        "evidence_record_id": linux_distro_mapping_evidence_record_id(policy),
+        "evidence_source": "OS_PACKAGE_NAMES",
+        "evidence_source_type": "repository-local-policy",
+        "evidence_status": "current-policy-baseline",
+        "evidence_note": (
             "Repository-local OS_PACKAGE_NAMES baseline records the package names "
             "currently approved by ECLI policy; new mappings require external "
             "verification before promotion."
         ),
-        external_verification_required_for_new_mappings=True,
-        release_blocking=False,
-        blocker_reason=None,
-    )
+        "external_verification_required_for_new_mappings": True,
+        "release_blocking": False,
+        "blocker_reason": None,
+    }
+    if override is not None:
+        fields.update(override)
+        fields["verified_package_names"] = policy.package_names
+        fields["verified_executable_names"] = policy.executable_names
+    return LinuxDistroMappingEvidenceRecord(**fields)
 
 
 def linux_distro_mapping_evidence_catalog_for_artifact(
     artifact_entry_id: str,
     root: Path | None = None,
 ) -> tuple[LinuxDistroMappingEvidenceRecord, ...]:
-    """Return repository-local distro evidence records for one Linux artifact."""
+    """Return distro evidence records for one Linux artifact."""
     canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
     if canonical_id not in LINUX_DISTRO_MAPPING_ARTIFACT_IDS:
         return ()
@@ -1088,7 +1127,7 @@ def linux_distro_mapping_evidence_catalog_for_artifact(
 def linux_distro_mapping_evidence_matrix(
     root: Path | None = None,
 ) -> tuple[LinuxDistroMappingEvidenceRecord, ...]:
-    """Return repository-local evidence for every approved Linux distro mapping."""
+    """Return evidence for every approved Linux distro mapping."""
     required_contracts = _required_contracts(root)
     records: list[LinuxDistroMappingEvidenceRecord] = []
     for artifact_id in LINUX_DISTRO_MAPPING_ARTIFACT_IDS:
@@ -1107,7 +1146,7 @@ def linux_distro_mapping_evidence_summary_for_artifact(
     artifact_entry_id: str,
     root: Path | None = None,
 ) -> dict[str, Any]:
-    """Return deterministic repository-local distro evidence counts."""
+    """Return deterministic distro evidence counts."""
     canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
     records = linux_distro_mapping_evidence_catalog_for_artifact(canonical_id, root)
     return {
@@ -1735,6 +1774,12 @@ def _distro_mapping_evidence_value_mismatch_errors(
     fields = DISTRO_EVIDENCE_CANONICAL_FIELDS
     if record.get("evidence_status") == "current-policy-baseline":
         fields = (*fields, *DISTRO_EVIDENCE_BASELINE_FIELDS)
+    if expected.get("evidence_status") == "verified-official-source":
+        fields = (
+            *fields,
+            *DISTRO_EVIDENCE_BASELINE_FIELDS,
+            *DISTRO_EVIDENCE_PROMOTION_FIELDS,
+        )
     for field in fields:
         actual_value = _normalized_distro_evidence_value(field, record.get(field))
         expected_value = _normalized_distro_evidence_value(field, expected.get(field))
