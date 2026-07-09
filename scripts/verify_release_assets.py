@@ -27,15 +27,23 @@ GitHub Release assets and therefore make this verifier fail.
 
 The script is read-only: it never builds, publishes, uploads, tags, pushes, or
 modifies release files.
+
+When ``--f4-evidence-dir`` is supplied, this verifier also invokes
+``scripts/verify_f4_linter_provisioning.py --all-artifacts`` through the shared
+packaging helper so official release automation fails on missing or incomplete
+F4 provisioning evidence.
 """
 
 from __future__ import annotations
 
 import argparse
 import re
+import subprocess
 import sys
 import tomllib
 from pathlib import Path
+
+from f4_linter_packaging import build_verification_command
 
 
 EXIT_OK = 0
@@ -198,6 +206,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--release-dir",
         help="release asset directory; defaults to releases/<version>",
     )
+    parser.add_argument(
+        "--f4-evidence-dir",
+        help=(
+            "optional F4 linter provisioning evidence directory; when provided, "
+            "all 21 provisioning evidence files are verified after the asset gate"
+        ),
+    )
     return parser
 
 
@@ -205,9 +220,20 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path.cwd()
     version = args.version or read_project_version(root)
-    return verify_release_assets(
+    rc = verify_release_assets(
         release_dir_for(root, version, args.release_dir), version
     )
+    if rc != EXIT_OK or not args.f4_evidence_dir:
+        return rc
+    return subprocess.run(
+        build_verification_command(
+            root,
+            all_artifacts=True,
+            evidence_dir=Path(args.f4_evidence_dir),
+        ),
+        cwd=root,
+        check=False,
+    ).returncode
 
 
 if __name__ == "__main__":

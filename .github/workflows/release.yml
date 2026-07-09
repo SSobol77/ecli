@@ -656,6 +656,19 @@ jobs:
           cp -R .github/workflows build/evidence/workflow_contract/
           cp docs/release/artifact-contract.md build/evidence/workflow_contract/
           cp scripts/verify_release_assets.py build/evidence/workflow_contract/
+          mkdir -p build/evidence/f4_linter_provisioning
+          python3 scripts/provision_f4_linters.py \
+            --all-artifacts \
+            --target-dir build/f4-linter-provisioning/release/target \
+            --evidence-dir build/evidence/f4_linter_provisioning \
+            --mode dry-run \
+            --profile full \
+            --json
+          python3 scripts/verify_f4_linter_provisioning.py \
+            --all-artifacts \
+            --evidence-dir build/evidence/f4_linter_provisioning
+          cp -R build/evidence/f4_linter_provisioning \
+            build/evidence/workflow_contract/
           find release-inputs -maxdepth 5 -type f -print | sort \
             > build/evidence/workflow_contract/downloaded-workflow-artifacts.txt
 
@@ -675,7 +688,9 @@ jobs:
             (cd "$release_dir" && sha256sum "$(basename "$asset")" > ".checksums/$(basename "$asset").sha256")
           done
 
-          python3 scripts/verify_release_assets.py --version "$version"
+          python3 scripts/verify_release_assets.py \
+            --version "$version" \
+            --f4-evidence-dir build/evidence/f4_linter_provisioning
           find "$release_dir" -maxdepth 1 -type f -print | sort
           find "$release_dir/.checksums" -maxdepth 1 -type f -print | sort
 

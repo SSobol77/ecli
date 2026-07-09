@@ -38,6 +38,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from f4_linter_packaging import run_or_record_f4_linter_provisioning_for_artifacts
 from packaging_common import require_tool
 
 
@@ -138,6 +139,13 @@ def main(argv: list[str] | None = None) -> int:
         cwd=root,
         check=True,
     )
+    print("==> Recording F4 linter provisioning evidence")
+    f4_rc = run_or_record_f4_linter_provisioning_for_artifacts(
+        root,
+        ("linux-pyinstaller", "linux-tarball"),
+    )
+    if f4_rc != EXIT_OK:
+        return EXIT_ERROR
     return EXIT_OK
 
 
