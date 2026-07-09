@@ -193,6 +193,39 @@ def verify_release_assets(release_dir: Path, version: str) -> int:
     return EXIT_OK
 
 
+def _is_relative_to(child: Path, parent: Path) -> bool:
+    try:
+        child.relative_to(parent)
+    except ValueError:
+        return False
+    return True
+
+
+def _validated_f4_evidence_dir(root: Path, value: str) -> Path:
+    """Validate the optional F4 evidence path before subprocess use."""
+    if not value or not value.strip():
+        raise ValueError("--f4-evidence-dir must not be empty")
+
+    resolved_root = root.expanduser().resolve(strict=False)
+    raw_path = Path(value.strip()).expanduser()
+    candidate = raw_path if raw_path.is_absolute() else resolved_root / raw_path
+    resolved_candidate = candidate.resolve(strict=False)
+
+    if not _is_relative_to(resolved_candidate, resolved_root):
+        raise ValueError("--f4-evidence-dir must stay inside the repository root")
+
+    allowed_roots = (
+        (resolved_root / "build").resolve(strict=False),
+        (resolved_root / "releases").resolve(strict=False),
+    )
+    if not any(
+        _is_relative_to(resolved_candidate, allowed) for allowed in allowed_roots
+    ):
+        raise ValueError("--f4-evidence-dir must be under build/ or releases/")
+
+    return resolved_candidate
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = _ContractArgumentParser(
         prog="verify_release_assets.py",
@@ -225,11 +258,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     if rc != EXIT_OK or not args.f4_evidence_dir:
         return rc
+    try:
+        f4_evidence_dir = _validated_f4_evidence_dir(root, args.f4_evidence_dir)
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return EXIT_INVALID
     return subprocess.run(
         build_verification_command(
             root,
             all_artifacts=True,
-            evidence_dir=Path(args.f4_evidence_dir),
+            evidence_dir=f4_evidence_dir,
         ),
         cwd=root,
         check=False,

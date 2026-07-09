@@ -309,7 +309,7 @@ def test_release_verifier_invokes_f4_gate_when_evidence_dir_is_supplied(
             "--release-dir",
             str(tmp_path / "release"),
             "--f4-evidence-dir",
-            str(tmp_path / "f4-evidence"),
+            "build/evidence/f4_linter_provisioning",
         ]
     )
 
@@ -351,7 +351,7 @@ def test_release_verifier_propagates_f4_evidence_failure(
             "--release-dir",
             str(tmp_path / "release"),
             "--f4-evidence-dir",
-            str(tmp_path / "missing-f4-evidence"),
+            "build/evidence/f4_linter_provisioning",
         ]
     )
 
@@ -400,3 +400,65 @@ def test_nix_artifacts_record_nix_derivation_policy(tmp_path: Path) -> None:
             action.strategy.mechanism == "nix-derivation"
             for action in required_external
         )
+
+
+def test_release_verifier_rejects_f4_evidence_path_traversal(
+    repo_root: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release_assets = load_script_module(
+        repo_root,
+        "scripts/verify_release_assets.py",
+        "verify_release_assets_rejects_traversal_f4_gate",
+    )
+
+    monkeypatch.setattr(
+        release_assets,
+        "verify_release_assets",
+        lambda _release_dir, _version: release_assets.EXIT_OK,
+    )
+
+    rc = release_assets.main(
+        [
+            "--version",
+            "1.2.3",
+            "--release-dir",
+            str(tmp_path / "release"),
+            "--f4-evidence-dir",
+            "../outside",
+        ]
+    )
+
+    assert rc == release_assets.EXIT_INVALID
+
+
+def test_release_verifier_rejects_absolute_f4_evidence_path_outside_repo(
+    repo_root: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    release_assets = load_script_module(
+        repo_root,
+        "scripts/verify_release_assets.py",
+        "verify_release_assets_rejects_absolute_f4_gate",
+    )
+
+    monkeypatch.setattr(
+        release_assets,
+        "verify_release_assets",
+        lambda _release_dir, _version: release_assets.EXIT_OK,
+    )
+
+    rc = release_assets.main(
+        [
+            "--version",
+            "1.2.3",
+            "--release-dir",
+            str(tmp_path / "release"),
+            "--f4-evidence-dir",
+            str(repo_root.parent / "outside-f4-evidence"),
+        ]
+    )
+
+    assert rc == release_assets.EXIT_INVALID

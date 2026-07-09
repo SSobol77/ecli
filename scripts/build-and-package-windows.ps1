@@ -60,7 +60,7 @@ function Invoke-F4LinterEvidenceHook($ArtifactId) {
   } else {
     $env:ECLI_F4_LINTER_PROVISIONING_MODE
   }
-  $profile = if ([string]::IsNullOrWhiteSpace($env:ECLI_F4_LINTER_PROFILE)) {
+  $f4Profile = if ([string]::IsNullOrWhiteSpace($env:ECLI_F4_LINTER_PROFILE)) {
     "full"
   } else {
     $env:ECLI_F4_LINTER_PROFILE
@@ -76,7 +76,7 @@ function Invoke-F4LinterEvidenceHook($ArtifactId) {
     "--target-dir", $targetDir,
     "--evidence-dir", $evidenceDir,
     "--mode", $mode,
-    "--profile", $profile,
+    "--profile", $f4Profile,
     "--json"
   )
   foreach ($tool in Split-F4ToolList $env:ECLI_F4_LINTER_INCLUDE_TOOLS) {
