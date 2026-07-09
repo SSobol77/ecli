@@ -95,6 +95,13 @@ def _mapping_record(records: tuple[Any, ...], tool_id: str) -> Any:
     raise AssertionError(f"missing distro mapping record: {tool_id}")
 
 
+def _evidence_record(records: tuple[Any, ...], tool_id: str) -> Any:
+    for record in records:
+        if record.tool_id == tool_id:
+            return record
+    raise AssertionError(f"missing distro evidence record: {tool_id}")
+
+
 def test_linux_artifact_scope_is_exactly_active_linux_surfaces(
     linux_helper: ModuleType,
 ) -> None:
@@ -136,6 +143,38 @@ def test_distro_mapping_scope_is_package_manager_and_docker_only(
         "nixos-package",
     ):
         assert linux_helper.linux_distro_mapping_catalog_for_artifact(artifact_id) == ()
+
+
+def test_distro_evidence_scope_is_approved_package_mappings_only(
+    linux_helper: ModuleType,
+) -> None:
+    evidence_artifacts = {
+        "deb",
+        "rpm",
+        "opensuse-rpm",
+        "arch-pkgbuild",
+        "slackware-txz",
+        "docker-deb-helper",
+        "docker-rpm-helper",
+    }
+    matrix = linux_helper.linux_distro_mapping_evidence_matrix()
+
+    assert {record.artifact_entry_id for record in matrix} == evidence_artifacts
+    assert all(
+        record.evidence_source_type == "repository-local-policy" for record in matrix
+    )
+    assert all(record.evidence_status == "current-policy-baseline" for record in matrix)
+    for artifact_id in (
+        "linux-pyinstaller",
+        "linux-tarball",
+        "appimage",
+        "nix-flake",
+        "nixos-package",
+    ):
+        assert (
+            linux_helper.linux_distro_mapping_evidence_catalog_for_artifact(artifact_id)
+            == ()
+        )
 
 
 def test_every_full_required_tool_has_linux_policy_for_every_linux_artifact(
@@ -202,15 +241,52 @@ def test_existing_os_package_policy_has_approved_distro_mapping_evidence(
     linux_helper: ModuleType,
 ) -> None:
     deb = linux_helper.linux_distro_mapping_catalog_for_artifact("deb")
+    deb_evidence = linux_helper.linux_distro_mapping_evidence_catalog_for_artifact(
+        "deb"
+    )
     yamllint = _mapping_record(deb, "yamllint")
+    yamllint_evidence = _evidence_record(deb_evidence, "yamllint")
 
     assert yamllint.mapping_status == "approved-existing-policy"
     assert yamllint.provenance_status == "distro-signed-package"
     assert yamllint.trust_boundary == "distro-package-manager"
     assert yamllint.package_names == ("yamllint",)
+    assert yamllint.evidence_record_id == yamllint_evidence.evidence_record_id
     assert yamllint.evidence_source == "OS_PACKAGE_NAMES"
     assert "OS_PACKAGE_NAMES policy" in yamllint.evidence_note
     assert yamllint.release_blocking is False
+    assert yamllint_evidence.evidence_source == "OS_PACKAGE_NAMES"
+    assert yamllint_evidence.evidence_source_type == "repository-local-policy"
+    assert yamllint_evidence.evidence_status == "current-policy-baseline"
+    assert yamllint_evidence.package_names == yamllint.package_names
+
+
+def test_repository_local_evidence_exactly_mirrors_os_package_names(
+    linux_helper: ModuleType,
+) -> None:
+    for artifact_id in (
+        "deb",
+        "rpm",
+        "opensuse-rpm",
+        "arch-pkgbuild",
+        "slackware-txz",
+        "docker-deb-helper",
+        "docker-rpm-helper",
+    ):
+        source_artifact_id = linux_helper.PACKAGE_POLICY_SOURCE_BY_HELPER.get(
+            artifact_id,
+            artifact_id,
+        )
+        expected = linux_helper.OS_PACKAGE_NAMES[source_artifact_id]
+        evidence = linux_helper.linux_distro_mapping_evidence_catalog_for_artifact(
+            artifact_id
+        )
+
+        assert {record.tool_id for record in evidence} == set(expected)
+        for record in evidence:
+            assert record.source_policy_artifact_entry_id == source_artifact_id
+            assert record.package_names == expected[record.tool_id]
+            assert set(record.package_names) <= set(expected[record.tool_id])
 
 
 def test_docker_helper_distro_mappings_inherit_deb_and_rpm_policy(
@@ -222,15 +298,31 @@ def test_docker_helper_distro_mappings_inherit_deb_and_rpm_policy(
     docker_rpm = linux_helper.linux_distro_mapping_catalog_for_artifact(
         "docker-rpm-helper"
     )
+    docker_deb_evidence = (
+        linux_helper.linux_distro_mapping_evidence_catalog_for_artifact(
+            "docker-deb-helper"
+        )
+    )
+    docker_rpm_evidence = (
+        linux_helper.linux_distro_mapping_evidence_catalog_for_artifact(
+            "docker-rpm-helper"
+        )
+    )
     deb_yamllint = _mapping_record(docker_deb, "yamllint")
     rpm_yamllint = _mapping_record(docker_rpm, "yamllint")
+    deb_yamllint_evidence = _evidence_record(docker_deb_evidence, "yamllint")
+    rpm_yamllint_evidence = _evidence_record(docker_rpm_evidence, "yamllint")
 
     assert deb_yamllint.distro_family == "debian"
     assert deb_yamllint.package_names == ("yamllint",)
     assert deb_yamllint.source_policy_artifact_entry_id == "deb"
+    assert deb_yamllint_evidence.source_policy_artifact_entry_id == "deb"
+    assert deb_yamllint_evidence.evidence_record_id == (deb_yamllint.evidence_record_id)
     assert rpm_yamllint.distro_family == "rpm-generic"
     assert rpm_yamllint.package_names == ("python3-yamllint",)
     assert rpm_yamllint.source_policy_artifact_entry_id == "rpm"
+    assert rpm_yamllint_evidence.source_policy_artifact_entry_id == "rpm"
+    assert rpm_yamllint_evidence.evidence_record_id == (rpm_yamllint.evidence_record_id)
 
 
 def test_package_manager_unmapped_tools_remain_explicit_mapping_blockers(
@@ -315,10 +407,24 @@ def test_manifest_records_distro_mapping_for_package_manager_tools(
 
     assert yamllint["distro_mapping"]["mapping_status"] == "approved-existing-policy"
     assert yamllint["distro_mapping"]["package_names"] == ["yamllint"]
+    assert (
+        yamllint["distro_mapping"]["evidence_record_id"]
+        == (yamllint["distro_mapping"]["evidence"]["evidence_record_id"])
+    )
+    assert yamllint["distro_mapping"]["evidence"]["evidence_source"] == (
+        "OS_PACKAGE_NAMES"
+    )
+    assert yamllint["distro_mapping"]["evidence"]["evidence_source_type"] == (
+        "repository-local-policy"
+    )
+    assert yamllint["distro_mapping"]["evidence"]["evidence_status"] == (
+        "current-policy-baseline"
+    )
     assert biome["distro_mapping"]["mapping_status"] == (
         "blocked-missing-distro-mapping"
     )
     assert biome["distro_mapping"]["release_blocking"] is True
+    assert "evidence" not in biome["distro_mapping"]
     assert "distro_mapping" in biome["evidence_fields_required"]
     assert "distro_mapping" not in cargo_clippy
     assert "distro_mapping" not in ruff
@@ -502,6 +608,185 @@ def test_manifest_verifier_rejects_missing_distro_mapping_on_os_package_tool(
     assert any("yamllint: missing distro_mapping" in error for error in errors)
 
 
+def test_manifest_verifier_rejects_missing_evidence_on_approved_distro_mapping(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    del _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: approved distro_mapping requires evidence" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_tampered_distro_evidence_status(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence["evidence_status"] = "verified-official-source"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence evidence_status differs" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_unknown_distro_evidence_status(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence["evidence_status"] = "fabricated"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: unknown evidence_status 'fabricated'" in error for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_tampered_distro_evidence_source_type(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence["evidence_source_type"] = "official-distro-metadata"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence evidence_source_type differs" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_unknown_distro_evidence_source_type(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence["evidence_source_type"] = "fabricated"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: unknown evidence_source_type 'fabricated'" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_tampered_distro_evidence_packages(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence["package_names"] = ["wrong-package"]
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence package_names differs" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_distro_evidence_artifact_mismatch(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence["artifact_entry_id"] = "rpm"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence artifact_entry_id mismatch" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_distro_evidence_source_policy_mismatch(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence["source_policy_artifact_entry_id"] = "rpm"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence source_policy_artifact_entry_id mismatch"
+        in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_tampered_distro_evidence_record_id(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence["evidence_record_id"] = "repository-local-policy:rpm:yamllint"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence evidence_record_id differs" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_wrong_docker_evidence_inheritance(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "docker-deb-helper")
+    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence["source_policy_artifact_entry_id"] = "rpm"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: docker helper distro evidence must inherit deb" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_blocked_mapping_with_approved_evidence(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    approved_evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"][
+        "evidence"
+    ]
+    _manifest_tool(manifest, "biome")["distro_mapping"]["evidence"] = dict(
+        approved_evidence
+    )
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "biome: blocked distro_mapping must not declare approved evidence" in error
+        for error in errors
+    )
+
+
 def test_manifest_verifier_rejects_blocked_distro_mapping_without_reason(
     linux_helper: ModuleType,
     tmp_path: Path,
@@ -535,6 +820,24 @@ def test_manifest_verifier_rejects_self_contained_distro_mapping(
     )
 
 
+def test_manifest_verifier_rejects_self_contained_distro_evidence(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    deb_manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    manifest = _build_manifest(linux_helper, tmp_path, "linux-tarball")
+    _manifest_tool(manifest, "biome")["distro_evidence"] = dict(
+        _manifest_tool(deb_manifest, "yamllint")["distro_mapping"]["evidence"]
+    )
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "biome: self-contained artifact must not declare distro evidence" in error
+        for error in errors
+    )
+
+
 def test_manifest_verifier_rejects_nix_distro_mapping(
     linux_helper: ModuleType,
     tmp_path: Path,
@@ -549,6 +852,24 @@ def test_manifest_verifier_rejects_nix_distro_mapping(
 
     assert any(
         "yamllint: Nix artifact must not declare distro_mapping" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_nix_distro_evidence(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    deb_manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    manifest = _build_manifest(linux_helper, tmp_path, "nix-flake")
+    _manifest_tool(manifest, "yamllint")["distro_evidence"] = dict(
+        _manifest_tool(deb_manifest, "yamllint")["distro_mapping"]["evidence"]
+    )
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: Nix artifact must not declare distro evidence" in error
         for error in errors
     )
 
@@ -824,8 +1145,19 @@ def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
     deb_blockers = linux_helper.linux_release_blocking_provenance_items("deb")
     deb_summary = linux_helper.linux_provenance_summary_for_artifact("deb")
     mapping_summary = linux_helper.linux_distro_mapping_summary_for_artifact("deb")
+    evidence_summary = linux_helper.linux_distro_mapping_evidence_summary_for_artifact(
+        "deb"
+    )
     docker_summary = linux_helper.linux_distro_mapping_summary_for_artifact(
         "docker-deb-helper"
+    )
+    docker_evidence_summary = (
+        linux_helper.linux_distro_mapping_evidence_summary_for_artifact(
+            "docker-deb-helper"
+        )
+    )
+    tarball_evidence_summary = (
+        linux_helper.linux_distro_mapping_evidence_summary_for_artifact("linux-tarball")
     )
 
     assert tarball_blockers
@@ -852,9 +1184,27 @@ def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
         mapping_summary["mapping_status_counts"]["blocked-missing-distro-mapping"] > 0
     )
     assert (
+        evidence_summary["evidence_record_count"] == mapping_summary["approved_count"]
+    )
+    assert evidence_summary["evidence_status_counts"] == {
+        "current-policy-baseline": evidence_summary["evidence_record_count"]
+    }
+    assert evidence_summary["evidence_source_type_counts"] == {
+        "repository-local-policy": evidence_summary["evidence_record_count"]
+    }
+    assert (
+        mapping_summary["evidence_status_counts"]
+        == (evidence_summary["evidence_status_counts"])
+    )
+    assert (
         docker_summary["mapping_status_counts"]
         == (mapping_summary["mapping_status_counts"])
     )
+    assert (
+        docker_evidence_summary["evidence_status_counts"]
+        == (evidence_summary["evidence_status_counts"])
+    )
+    assert tarball_evidence_summary["evidence_record_count"] == 0
 
 
 def test_linux_provision_mode_writes_manifest_and_fails_on_blockers(

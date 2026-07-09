@@ -93,6 +93,19 @@ LinuxDistroMappingStatus = Literal[
     "blocked-unverified",
 ]
 
+LinuxDistroEvidenceSourceType = Literal[
+    "repository-local-policy",
+    "official-distro-metadata",
+    "upstream-project-docs",
+]
+
+LinuxDistroEvidenceStatus = Literal[
+    "current-policy-baseline",
+    "verified-official-source",
+    "blocked-missing-evidence",
+    "blocked-evidence-drift",
+]
+
 
 LINUX_MANIFEST_SCHEMA_VERSION = 1
 LINUX_MANIFEST_FILENAME = "f4-linux-tools.json"
@@ -209,6 +222,23 @@ LINUX_BLOCKED_DISTRO_MAPPING_STATUSES = frozenset(
         "blocked-ambiguous-package-name",
         "blocked-package-not-available",
         "blocked-unverified",
+    }
+)
+
+LINUX_ALLOWED_DISTRO_EVIDENCE_SOURCE_TYPES = frozenset(
+    {
+        "repository-local-policy",
+        "official-distro-metadata",
+        "upstream-project-docs",
+    }
+)
+
+LINUX_ALLOWED_DISTRO_EVIDENCE_STATUSES = frozenset(
+    {
+        "current-policy-baseline",
+        "verified-official-source",
+        "blocked-missing-evidence",
+        "blocked-evidence-drift",
     }
 )
 
@@ -329,6 +359,7 @@ DISTRO_MAPPING_MANIFEST_FIELDS: tuple[str, ...] = (
     "artifact_entry_id",
     "distro_family",
     "tool_id",
+    "evidence_record_id",
     "package_names",
     "executable_names",
     "provenance_status",
@@ -340,6 +371,23 @@ DISTRO_MAPPING_MANIFEST_FIELDS: tuple[str, ...] = (
     "release_blocking",
     "blocker_reason",
     "source_policy_artifact_entry_id",
+)
+
+DISTRO_EVIDENCE_MANIFEST_FIELDS: tuple[str, ...] = (
+    "artifact_entry_id",
+    "source_policy_artifact_entry_id",
+    "distro_family",
+    "tool_id",
+    "package_names",
+    "executable_names",
+    "evidence_record_id",
+    "evidence_source",
+    "evidence_source_type",
+    "evidence_status",
+    "evidence_note",
+    "external_verification_required_for_new_mappings",
+    "release_blocking",
+    "blocker_reason",
 )
 
 
@@ -370,6 +418,7 @@ class LinuxDistroMappingRecord(NamedTuple):
     artifact_entry_id: str
     distro_family: LinuxDistroFamily
     tool_id: str
+    evidence_record_id: str | None
     package_names: tuple[str, ...]
     executable_names: tuple[str, ...]
     provenance_status: LinuxProvenanceStatus
@@ -381,6 +430,25 @@ class LinuxDistroMappingRecord(NamedTuple):
     evidence_url: str | None = None
     blocker_reason: str | None = None
     source_policy_artifact_entry_id: str | None = None
+
+
+class LinuxDistroMappingEvidenceRecord(NamedTuple):
+    """Repository-local evidence for one approved distro package mapping."""
+
+    artifact_entry_id: str
+    source_policy_artifact_entry_id: str
+    distro_family: LinuxDistroFamily
+    tool_id: str
+    package_names: tuple[str, ...]
+    executable_names: tuple[str, ...]
+    evidence_record_id: str
+    evidence_source: str
+    evidence_source_type: LinuxDistroEvidenceSourceType
+    evidence_status: LinuxDistroEvidenceStatus
+    evidence_note: str
+    external_verification_required_for_new_mappings: bool
+    release_blocking: bool
+    blocker_reason: str | None = None
 
 
 class LinuxToolProvenanceRecord(NamedTuple):
@@ -856,6 +924,10 @@ def linux_distro_mapping_summary_for_artifact(
         "distro_family_counts": _record_counts(
             record.distro_family for record in records
         ),
+        "evidence_status_counts": linux_distro_mapping_evidence_summary_for_artifact(
+            canonical_id,
+            root,
+        )["evidence_status_counts"],
     }
 
 
@@ -874,6 +946,101 @@ def linux_unmapped_package_manager_tools(
     )
 
 
+def linux_distro_mapping_evidence_record_id(
+    policy: LinuxToolProvisioningPolicy,
+) -> str:
+    """Return the deterministic repository-local distro evidence record ID."""
+    source_artifact_id = _package_policy_artifact_id(policy.artifact_entry_id)
+    return f"repository-local-policy:{source_artifact_id}:{policy.tool_id}"
+
+
+def linux_distro_mapping_evidence_for_policy(
+    policy: LinuxToolProvisioningPolicy,
+) -> LinuxDistroMappingEvidenceRecord | None:
+    """Return repository-local evidence for one approved distro mapping policy."""
+    if policy.mechanism != "os-package-manager":
+        return None
+    if policy.artifact_entry_id not in LINUX_DISTRO_MAPPING_ARTIFACT_IDS:
+        return None
+    source_artifact_id = _package_policy_artifact_id(policy.artifact_entry_id)
+    package_names = OS_PACKAGE_NAMES.get(source_artifact_id, {}).get(policy.tool_id)
+    if package_names != policy.package_names:
+        return None
+    return LinuxDistroMappingEvidenceRecord(
+        artifact_entry_id=policy.artifact_entry_id,
+        source_policy_artifact_entry_id=source_artifact_id,
+        distro_family=DISTRO_FAMILY_BY_ARTIFACT[policy.artifact_entry_id],
+        tool_id=policy.tool_id,
+        package_names=policy.package_names,
+        executable_names=policy.executable_names,
+        evidence_record_id=linux_distro_mapping_evidence_record_id(policy),
+        evidence_source="OS_PACKAGE_NAMES",
+        evidence_source_type="repository-local-policy",
+        evidence_status="current-policy-baseline",
+        evidence_note=(
+            "Repository-local OS_PACKAGE_NAMES baseline records the package names "
+            "currently approved by ECLI policy; new mappings require external "
+            "verification before promotion."
+        ),
+        external_verification_required_for_new_mappings=True,
+        release_blocking=False,
+        blocker_reason=None,
+    )
+
+
+def linux_distro_mapping_evidence_catalog_for_artifact(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> tuple[LinuxDistroMappingEvidenceRecord, ...]:
+    """Return repository-local distro evidence records for one Linux artifact."""
+    canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
+    if canonical_id not in LINUX_DISTRO_MAPPING_ARTIFACT_IDS:
+        return ()
+    records: list[LinuxDistroMappingEvidenceRecord] = []
+    for policy in linux_provisioning_policy_for_artifact(canonical_id, root):
+        record = linux_distro_mapping_evidence_for_policy(policy)
+        if record is not None:
+            records.append(record)
+    return tuple(records)
+
+
+def linux_distro_mapping_evidence_matrix(
+    root: Path | None = None,
+) -> tuple[LinuxDistroMappingEvidenceRecord, ...]:
+    """Return repository-local evidence for every approved Linux distro mapping."""
+    required_contracts = _required_contracts(root)
+    records: list[LinuxDistroMappingEvidenceRecord] = []
+    for artifact_id in LINUX_DISTRO_MAPPING_ARTIFACT_IDS:
+        policies = _linux_policies_for_required_contracts(
+            _linux_artifact_entry_id(artifact_id, root),
+            required_contracts,
+        )
+        for policy in policies:
+            record = linux_distro_mapping_evidence_for_policy(policy)
+            if record is not None:
+                records.append(record)
+    return tuple(records)
+
+
+def linux_distro_mapping_evidence_summary_for_artifact(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Return deterministic repository-local distro evidence counts."""
+    canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
+    records = linux_distro_mapping_evidence_catalog_for_artifact(canonical_id, root)
+    return {
+        "artifact_entry_id": canonical_id,
+        "evidence_record_count": len(records),
+        "evidence_status_counts": _record_counts(
+            record.evidence_status for record in records
+        ),
+        "evidence_source_type_counts": _record_counts(
+            record.evidence_source_type for record in records
+        ),
+    }
+
+
 def _approved_distro_mapping_record(
     policy: LinuxToolProvisioningPolicy,
 ) -> LinuxDistroMappingRecord:
@@ -882,6 +1049,7 @@ def _approved_distro_mapping_record(
         artifact_entry_id=policy.artifact_entry_id,
         distro_family=DISTRO_FAMILY_BY_ARTIFACT[policy.artifact_entry_id],
         tool_id=policy.tool_id,
+        evidence_record_id=linux_distro_mapping_evidence_record_id(policy),
         package_names=policy.package_names,
         executable_names=policy.executable_names,
         provenance_status="distro-signed-package",
@@ -907,6 +1075,7 @@ def _blocked_distro_mapping_record(
         artifact_entry_id=policy.artifact_entry_id,
         distro_family=DISTRO_FAMILY_BY_ARTIFACT[policy.artifact_entry_id],
         tool_id=policy.tool_id,
+        evidence_record_id=None,
         package_names=(),
         executable_names=policy.executable_names,
         provenance_status="blocked-missing-distro-mapping",
@@ -1122,6 +1291,44 @@ def _distro_mapping_record_to_manifest_fields(
     data = record._asdict()
     data["package_names"] = list(record.package_names)
     data["executable_names"] = list(record.executable_names)
+    policy = _policy_from_distro_mapping_record(record)
+    evidence = linux_distro_mapping_evidence_for_policy(policy)
+    if evidence is not None:
+        data["evidence"] = _distro_mapping_evidence_record_to_manifest_fields(evidence)
+    return data
+
+
+def _policy_from_distro_mapping_record(
+    record: LinuxDistroMappingRecord,
+) -> LinuxToolProvisioningPolicy:
+    mechanism: LinuxProvisioningMechanism = (
+        "os-package-manager"
+        if record.mapping_status
+        in {"approved-existing-policy", "approved-with-evidence"}
+        else "blocked-missing-provenance"
+    )
+    return LinuxToolProvisioningPolicy(
+        artifact_entry_id=record.artifact_entry_id,
+        artifact_family=_artifact_family(record.artifact_entry_id),
+        tool_id=record.tool_id,
+        mechanism=mechanism,
+        executable_names=record.executable_names,
+        version_probe=(),
+        network_required=False,
+        checksum_required=False,
+        pin_required=False,
+        package_names=record.package_names,
+        release_blocking=record.release_blocking,
+        blocker_reason=record.blocker_reason,
+    )
+
+
+def _distro_mapping_evidence_record_to_manifest_fields(
+    record: LinuxDistroMappingEvidenceRecord,
+) -> dict[str, Any]:
+    data = record._asdict()
+    data["package_names"] = list(record.package_names)
+    data["executable_names"] = list(record.executable_names)
     return data
 
 
@@ -1269,6 +1476,127 @@ def verify_linux_distro_mapping_record(
     errors = _distro_mapping_required_field_errors(prefix, record)
     errors.extend(_distro_mapping_value_mismatch_errors(prefix, record, expected))
     errors.extend(_distro_mapping_semantic_errors(prefix, record, expected_policy))
+    errors.extend(
+        verify_linux_distro_mapping_evidence_record(
+            record.get("evidence"),
+            expected_policy,
+        )
+    )
+    return errors
+
+
+def verify_linux_distro_mapping_evidence_record(
+    record: Any,
+    expected_policy: LinuxToolProvisioningPolicy,
+) -> list[str]:
+    """Return validation errors for one repository-local distro evidence record."""
+    prefix = expected_policy.tool_id
+    expected_record = linux_distro_mapping_evidence_for_policy(expected_policy)
+    if record is None:
+        if expected_record is not None:
+            return [f"{prefix}: approved distro_mapping requires evidence"]
+        return []
+    if not isinstance(record, Mapping):
+        return [f"{prefix}: distro_mapping evidence must be an object"]
+    if expected_record is None:
+        return [_unexpected_distro_mapping_evidence_error(prefix, expected_policy)]
+
+    expected = _distro_mapping_evidence_record_to_manifest_fields(expected_record)
+    errors = _distro_mapping_evidence_required_field_errors(prefix, record)
+    errors.extend(
+        _distro_mapping_evidence_value_mismatch_errors(prefix, record, expected)
+    )
+    errors.extend(
+        _distro_mapping_evidence_semantic_errors(prefix, record, expected_policy)
+    )
+    return errors
+
+
+def _unexpected_distro_mapping_evidence_error(
+    prefix: str,
+    expected_policy: LinuxToolProvisioningPolicy,
+) -> str:
+    if expected_policy.artifact_family == "self-contained":
+        return f"{prefix}: self-contained artifact must not declare distro evidence"
+    if expected_policy.artifact_family == "nix-policy":
+        return f"{prefix}: Nix artifact must not declare distro evidence"
+    return f"{prefix}: blocked distro_mapping must not declare approved evidence"
+
+
+def _distro_mapping_evidence_required_field_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    source_type = record.get("evidence_source_type")
+    status = record.get("evidence_status")
+    if source_type not in LINUX_ALLOWED_DISTRO_EVIDENCE_SOURCE_TYPES:
+        errors.append(f"{prefix}: unknown evidence_source_type {source_type!r}")
+    if status not in LINUX_ALLOWED_DISTRO_EVIDENCE_STATUSES:
+        errors.append(f"{prefix}: unknown evidence_status {status!r}")
+    return errors
+
+
+def _distro_mapping_evidence_value_mismatch_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    for field in DISTRO_EVIDENCE_MANIFEST_FIELDS:
+        actual_value = _normalized_distro_evidence_value(field, record.get(field))
+        expected_value = _normalized_distro_evidence_value(field, expected.get(field))
+        if actual_value != expected_value:
+            errors.append(
+                f"{prefix}: distro_mapping evidence {field} differs from canonical evidence"
+            )
+    return errors
+
+
+def _normalized_distro_evidence_value(field: str, value: Any) -> Any:
+    if field in {"package_names", "executable_names"}:
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            return tuple(value)
+        if isinstance(value, tuple) and all(isinstance(item, str) for item in value):
+            return value
+        return ()
+    return value
+
+
+def _distro_mapping_evidence_semantic_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+    expected_policy: LinuxToolProvisioningPolicy,
+) -> list[str]:
+    errors: list[str] = []
+    if record.get("artifact_entry_id") != expected_policy.artifact_entry_id:
+        errors.append(f"{prefix}: distro_mapping evidence artifact_entry_id mismatch")
+    expected_source = _package_policy_artifact_id(expected_policy.artifact_entry_id)
+    if record.get("source_policy_artifact_entry_id") != expected_source:
+        errors.append(
+            f"{prefix}: distro_mapping evidence source_policy_artifact_entry_id mismatch"
+        )
+    if expected_policy.artifact_entry_id in PACKAGE_POLICY_SOURCE_BY_HELPER:
+        inherited = PACKAGE_POLICY_SOURCE_BY_HELPER[expected_policy.artifact_entry_id]
+        if record.get("source_policy_artifact_entry_id") != inherited:
+            errors.append(
+                f"{prefix}: docker helper distro evidence must inherit {inherited}"
+            )
+    if (
+        _normalized_distro_evidence_value(
+            "package_names",
+            record.get("package_names"),
+        )
+        != expected_policy.package_names
+    ):
+        errors.append(
+            f"{prefix}: distro_mapping evidence package_names differs from mapping"
+        )
+    expected_package_names = OS_PACKAGE_NAMES.get(expected_source, {}).get(
+        expected_policy.tool_id,
+    )
+    if expected_package_names != expected_policy.package_names:
+        errors.append(f"{prefix}: distro_mapping evidence has no OS_PACKAGE_NAMES base")
     return errors
 
 
@@ -1687,6 +2015,17 @@ def _tool_item_errors(
     if expected_policy is not None:
         errors.extend(_tool_policy_mismatch_errors(prefix, item, expected_policy))
         errors.extend(verify_linux_provenance_record(item, expected_policy))
+        if item.get("distro_evidence") is not None:
+            if expected_policy.artifact_family == "self-contained":
+                errors.append(
+                    f"{prefix}: self-contained artifact must not declare distro evidence"
+                )
+            elif expected_policy.artifact_family == "nix-policy":
+                errors.append(
+                    f"{prefix}: Nix artifact must not declare distro evidence"
+                )
+            else:
+                errors.append(f"{prefix}: unexpected top-level distro_evidence")
         errors.extend(
             verify_linux_distro_mapping_record(
                 item.get("distro_mapping"),
