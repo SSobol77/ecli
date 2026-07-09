@@ -16,8 +16,8 @@
 
 This module records the first concrete Linux provisioning layer: deterministic
 artifact-specific policy manifests, package-manager dependency metadata, Nix
-declaration evidence, and explicit release blockers where non-dry-run
-installation still lacks pinned/checksummed provenance.
+declaration evidence, explicit provenance records, and release blockers where
+non-dry-run installation still lacks pinned/checksummed provenance.
 
 It is intentionally non-invasive. Importing this module never runs package
 managers, shells, version probes, network requests, or upstream downloads.
@@ -49,6 +49,31 @@ LinuxArtifactFamily = Literal[
     "self-contained",
     "docker-helper",
     "nix-policy",
+]
+
+LinuxProvenanceStatus = Literal[
+    "internal-bundled",
+    "distro-signed-package",
+    "nix-derivation",
+    "toolchain-component",
+    "pinned-upstream-artifact",
+    "pinned-language-package",
+    "blocked-missing-version-pin",
+    "blocked-missing-checksum",
+    "blocked-missing-source-url",
+    "blocked-missing-install-strategy",
+    "blocked-missing-license-review",
+    "blocked-missing-distro-mapping",
+]
+
+LinuxTrustBoundary = Literal[
+    "ecli-source-tree",
+    "distro-package-manager",
+    "nix-store",
+    "rust-toolchain",
+    "upstream-release",
+    "language-registry",
+    "unresolved",
 ]
 
 
@@ -95,6 +120,61 @@ LINUX_ALLOWED_MECHANISMS = frozenset(
         "blocked-missing-provenance",
     }
 )
+
+LINUX_ALLOWED_PROVENANCE_STATUSES = frozenset(
+    {
+        "internal-bundled",
+        "distro-signed-package",
+        "nix-derivation",
+        "toolchain-component",
+        "pinned-upstream-artifact",
+        "pinned-language-package",
+        "blocked-missing-version-pin",
+        "blocked-missing-checksum",
+        "blocked-missing-source-url",
+        "blocked-missing-install-strategy",
+        "blocked-missing-license-review",
+        "blocked-missing-distro-mapping",
+    }
+)
+
+LINUX_BLOCKED_PROVENANCE_STATUSES = frozenset(
+    {
+        "blocked-missing-version-pin",
+        "blocked-missing-checksum",
+        "blocked-missing-source-url",
+        "blocked-missing-install-strategy",
+        "blocked-missing-license-review",
+        "blocked-missing-distro-mapping",
+    }
+)
+
+LINUX_ALLOWED_TRUST_BOUNDARIES = frozenset(
+    {
+        "ecli-source-tree",
+        "distro-package-manager",
+        "nix-store",
+        "rust-toolchain",
+        "upstream-release",
+        "language-registry",
+        "unresolved",
+    }
+)
+
+TRUST_BOUNDARY_BY_PROVENANCE_STATUS: dict[str, LinuxTrustBoundary] = {
+    "internal-bundled": "ecli-source-tree",
+    "distro-signed-package": "distro-package-manager",
+    "nix-derivation": "nix-store",
+    "toolchain-component": "rust-toolchain",
+    "pinned-upstream-artifact": "upstream-release",
+    "pinned-language-package": "language-registry",
+    "blocked-missing-version-pin": "unresolved",
+    "blocked-missing-checksum": "unresolved",
+    "blocked-missing-source-url": "unresolved",
+    "blocked-missing-install-strategy": "unresolved",
+    "blocked-missing-license-review": "unresolved",
+    "blocked-missing-distro-mapping": "unresolved",
+}
 
 PACKAGE_POLICY_SOURCE_BY_HELPER = {
     "docker-deb-helper": "deb",
@@ -154,6 +234,36 @@ EVIDENCE_FIELDS_BASE: tuple[str, ...] = (
     "pin_required",
 )
 
+PROVENANCE_EVIDENCE_FIELDS: tuple[str, ...] = (
+    "provenance_status",
+    "trust_boundary",
+    "source_name",
+    "source_url",
+    "package_names",
+    "pinned_version",
+    "checksum_algorithm",
+    "checksum",
+    "license_review_required",
+    "network_required",
+    "release_blocking",
+)
+
+PROVENANCE_MANIFEST_FIELDS: tuple[str, ...] = (
+    "provenance_status",
+    "trust_boundary",
+    "source_name",
+    "source_url",
+    "package_names",
+    "pinned_version",
+    "checksum_algorithm",
+    "checksum",
+    "license_review_required",
+    "network_required",
+    "release_blocking",
+    "blocker_reason",
+    "evidence_fields_required",
+)
+
 
 class LinuxToolProvisioningPolicy(NamedTuple):
     """Linux provisioning policy for one required tool and artifact."""
@@ -173,6 +283,27 @@ class LinuxToolProvisioningPolicy(NamedTuple):
     source_url: str | None = None
     pinned_version: str | None = None
     release_blocking: bool = False
+    blocker_reason: str | None = None
+
+
+class LinuxToolProvenanceRecord(NamedTuple):
+    """Auditable Linux provenance state for one required tool policy."""
+
+    tool_id: str
+    artifact_entry_id: str
+    mechanism: LinuxProvisioningMechanism
+    provenance_status: LinuxProvenanceStatus
+    trust_boundary: LinuxTrustBoundary
+    source_name: str
+    package_names: tuple[str, ...]
+    license_review_required: bool
+    network_required: bool
+    release_blocking: bool
+    evidence_fields_required: tuple[str, ...]
+    source_url: str | None = None
+    pinned_version: str | None = None
+    checksum_algorithm: str | None = None
+    checksum: str | None = None
     blocker_reason: str | None = None
 
 
@@ -469,6 +600,203 @@ def linux_tool_policy_matrix(
     )
 
 
+def linux_provenance_record_for_policy(
+    policy: LinuxToolProvisioningPolicy,
+) -> LinuxToolProvenanceRecord:
+    """Return the canonical provenance record for one Linux tool policy."""
+    status = _provenance_status_for_policy(policy)
+    trust_boundary = TRUST_BOUNDARY_BY_PROVENANCE_STATUS[status]
+    blocked = _is_blocked_provenance_status(status)
+    return LinuxToolProvenanceRecord(
+        tool_id=policy.tool_id,
+        artifact_entry_id=policy.artifact_entry_id,
+        mechanism=policy.mechanism,
+        provenance_status=status,
+        trust_boundary=trust_boundary,
+        source_name=_provenance_source_name(policy, status),
+        source_url=policy.source_url,
+        package_names=policy.package_names,
+        pinned_version=policy.pinned_version,
+        checksum_algorithm=None,
+        checksum=None,
+        license_review_required=_license_review_required(status),
+        network_required=policy.network_required,
+        release_blocking=blocked or policy.release_blocking,
+        blocker_reason=_provenance_blocker_reason(status, policy) if blocked else None,
+        evidence_fields_required=_provenance_evidence_fields(status),
+    )
+
+
+def linux_provenance_catalog_for_artifact(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> tuple[LinuxToolProvenanceRecord, ...]:
+    """Return provenance records for every Full-required tool in one artifact."""
+    return tuple(
+        linux_provenance_record_for_policy(policy)
+        for policy in linux_provisioning_policy_for_artifact(artifact_entry_id, root)
+    )
+
+
+def linux_provenance_matrix(
+    root: Path | None = None,
+) -> tuple[LinuxToolProvenanceRecord, ...]:
+    """Return the complete Linux artifact x Full-required provenance matrix."""
+    return tuple(
+        linux_provenance_record_for_policy(policy)
+        for policy in linux_tool_policy_matrix(root)
+    )
+
+
+def linux_release_blocking_provenance_items(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> tuple[LinuxToolProvenanceRecord, ...]:
+    """Return release-blocking provenance records for one Linux artifact."""
+    return tuple(
+        record
+        for record in linux_provenance_catalog_for_artifact(artifact_entry_id, root)
+        if record.release_blocking
+    )
+
+
+def linux_provenance_summary_for_artifact(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Return deterministic provenance counts for one Linux artifact."""
+    canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
+    records = linux_provenance_catalog_for_artifact(canonical_id, root)
+    release_blocking = tuple(record for record in records if record.release_blocking)
+    return {
+        "artifact_entry_id": canonical_id,
+        "tool_count": len(records),
+        "release_blocking_count": len(release_blocking),
+        "provenance_status_counts": _record_counts(
+            record.provenance_status for record in records
+        ),
+        "trust_boundary_counts": _record_counts(
+            record.trust_boundary for record in records
+        ),
+    }
+
+
+def _record_counts(values: tuple[str, ...] | Any) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for value in values:
+        counts[value] = counts.get(value, 0) + 1
+    return counts
+
+
+def _provenance_status_for_policy(
+    policy: LinuxToolProvisioningPolicy,
+) -> LinuxProvenanceStatus:
+    if policy.mechanism == "bundled-internal":
+        return "internal-bundled"
+    if policy.mechanism == "os-package-manager":
+        return "distro-signed-package"
+    if policy.mechanism == "nix-derivation":
+        return "nix-derivation"
+    if policy.mechanism == "toolchain-component":
+        return "toolchain-component"
+    if policy.mechanism == "language-package-manager":
+        return "pinned-language-package"
+    if policy.mechanism in {
+        "ecli-managed-tools",
+        "jar-shim",
+        "verified-upstream-download",
+    }:
+        return "pinned-upstream-artifact"
+    if policy.mechanism == "blocked-missing-provenance":
+        return _blocked_provenance_status(policy)
+    raise ValueError(
+        f"{policy.tool_id}: unsupported Linux mechanism {policy.mechanism!r}"
+    )
+
+
+def _blocked_provenance_status(
+    policy: LinuxToolProvisioningPolicy,
+) -> LinuxProvenanceStatus:
+    if not policy.source_url:
+        return "blocked-missing-source-url"
+    if policy.artifact_family in {"package-manager", "docker-helper"}:
+        return "blocked-missing-distro-mapping"
+    if policy.pinned_version is None:
+        return "blocked-missing-version-pin"
+    if policy.checksum_required:
+        return "blocked-missing-checksum"
+    return "blocked-missing-install-strategy"
+
+
+def _provenance_source_name(
+    policy: LinuxToolProvisioningPolicy,
+    status: LinuxProvenanceStatus,
+) -> str:
+    if status == "internal-bundled":
+        return "ECLI source tree"
+    if status == "distro-signed-package":
+        return f"{policy.artifact_entry_id} package metadata"
+    if status == "nix-derivation":
+        return "Nix derivation/input"
+    if status == "toolchain-component":
+        return TOOLCHAIN_COMPONENTS.get(policy.tool_id, "toolchain component")
+    if policy.source_url:
+        return policy.source_url
+    return policy.tool_id
+
+
+def _license_review_required(status: LinuxProvenanceStatus) -> bool:
+    return status in {
+        "pinned-upstream-artifact",
+        "pinned-language-package",
+        *LINUX_BLOCKED_PROVENANCE_STATUSES,
+    }
+
+
+def _provenance_blocker_reason(
+    status: LinuxProvenanceStatus,
+    policy: LinuxToolProvisioningPolicy,
+) -> str:
+    reasons = {
+        "blocked-missing-version-pin": (
+            "missing audited pinned version for this Linux Full-required tool"
+        ),
+        "blocked-missing-checksum": (
+            "missing audited checksum for this Linux Full-required tool"
+        ),
+        "blocked-missing-source-url": (
+            "missing audited source URL for this Linux Full-required tool"
+        ),
+        "blocked-missing-install-strategy": (
+            "missing concrete non-dry-run Linux install strategy"
+        ),
+        "blocked-missing-license-review": (
+            "missing license review for this Linux Full-required tool"
+        ),
+        "blocked-missing-distro-mapping": (
+            "missing safe distro package or delegated toolchain mapping for this "
+            "Linux Full-required tool"
+        ),
+    }
+    base = reasons.get(status, "blocked Linux provenance state")
+    if policy.blocker_reason:
+        return f"{base}: {policy.blocker_reason}"
+    return base
+
+
+def _is_blocked_provenance_status(status: str) -> bool:
+    return status in LINUX_BLOCKED_PROVENANCE_STATUSES
+
+
+def _provenance_evidence_fields(
+    status: LinuxProvenanceStatus,
+) -> tuple[str, ...]:
+    fields = (*EVIDENCE_FIELDS_BASE, *PROVENANCE_EVIDENCE_FIELDS)
+    if _is_blocked_provenance_status(status):
+        fields = (*fields, "blocker_reason")
+    return fields
+
+
 def linux_package_manager_dependency_names(
     artifact_entry_id: str,
     root: Path | None = None,
@@ -519,12 +847,24 @@ def _policy_to_manifest_item(
     evidence_dir: Path,
 ) -> dict[str, Any]:
     data = policy._asdict()
+    data.update(
+        _provenance_record_to_manifest_fields(
+            linux_provenance_record_for_policy(policy)
+        )
+    )
     data["executable_names"] = list(policy.executable_names)
     data["version_probe"] = list(policy.version_probe)
-    data["package_names"] = list(policy.package_names)
-    data["evidence_fields_required"] = list(policy.evidence_fields_required)
     data["target_dir"] = str(_tool_target_dir(target_dir, policy))
     data["evidence_dir"] = str(_safe_base_dir(evidence_dir))
+    return data
+
+
+def _provenance_record_to_manifest_fields(
+    record: LinuxToolProvenanceRecord,
+) -> dict[str, Any]:
+    data = record._asdict()
+    data["package_names"] = list(record.package_names)
+    data["evidence_fields_required"] = list(record.evidence_fields_required)
     return data
 
 
@@ -634,6 +974,195 @@ def _load_manifest(path_or_manifest: Path | Mapping[str, Any]) -> Mapping[str, A
             raise ValueError(f"Linux manifest must contain a JSON object: {path}")
         return data
     return path_or_manifest
+
+
+def verify_linux_provenance_record(
+    record: Mapping[str, Any],
+    expected_policy: LinuxToolProvisioningPolicy,
+) -> list[str]:
+    """Return validation errors for one tool provenance record."""
+    prefix = str(record.get("tool_id", expected_policy.tool_id))
+    expected_record = linux_provenance_record_for_policy(expected_policy)
+    expected = _provenance_record_to_manifest_fields(expected_record)
+    errors = _provenance_required_field_errors(prefix, record)
+    errors.extend(_provenance_value_mismatch_errors(prefix, record, expected))
+    errors.extend(_provenance_semantic_errors(prefix, record, expected_policy))
+    return errors
+
+
+def _provenance_required_field_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    if "provenance_status" not in record:
+        errors.append(f"{prefix}: missing provenance_status")
+    elif record.get("provenance_status") not in LINUX_ALLOWED_PROVENANCE_STATUSES:
+        errors.append(
+            f"{prefix}: unknown provenance_status {record.get('provenance_status')!r}"
+        )
+    if "trust_boundary" not in record:
+        errors.append(f"{prefix}: missing trust_boundary")
+    elif record.get("trust_boundary") not in LINUX_ALLOWED_TRUST_BOUNDARIES:
+        errors.append(
+            f"{prefix}: unknown trust_boundary {record.get('trust_boundary')!r}"
+        )
+    return errors
+
+
+def _provenance_value_mismatch_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    for field in PROVENANCE_MANIFEST_FIELDS:
+        actual_value = _normalized_provenance_value(field, record.get(field))
+        expected_value = _normalized_provenance_value(field, expected.get(field))
+        if actual_value != expected_value:
+            errors.append(f"{prefix}: {field} differs from canonical provenance")
+    return errors
+
+
+def _normalized_provenance_value(field: str, value: Any) -> Any:
+    if field in {"package_names", "evidence_fields_required"}:
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            return tuple(value)
+        if isinstance(value, tuple) and all(isinstance(item, str) for item in value):
+            return value
+        return ()
+    return value
+
+
+def _provenance_semantic_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+    expected_policy: LinuxToolProvisioningPolicy,
+) -> list[str]:
+    errors: list[str] = []
+    status = record.get("provenance_status")
+    trust_boundary = record.get("trust_boundary")
+    mechanism = record.get("mechanism")
+    if isinstance(status, str) and status in LINUX_ALLOWED_PROVENANCE_STATUSES:
+        errors.extend(
+            _provenance_status_semantic_errors(
+                prefix,
+                record,
+                status,
+                trust_boundary,
+                mechanism,
+                expected_policy,
+            )
+        )
+    return errors
+
+
+def _provenance_status_semantic_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+    status: str,
+    trust_boundary: Any,
+    mechanism: Any,
+    expected_policy: LinuxToolProvisioningPolicy,
+) -> list[str]:
+    errors: list[str] = []
+    expected_trust = TRUST_BOUNDARY_BY_PROVENANCE_STATUS[status]
+    if (
+        trust_boundary in LINUX_ALLOWED_TRUST_BOUNDARIES
+        and trust_boundary != expected_trust
+    ):
+        errors.append(
+            f"{prefix}: trust_boundary is inconsistent with provenance_status"
+        )
+    if isinstance(mechanism, str) and mechanism in LINUX_ALLOWED_MECHANISMS:
+        allowed_statuses = _provenance_statuses_for_mechanism(mechanism)
+        if status not in allowed_statuses:
+            errors.append(f"{prefix}: provenance_status is inconsistent with mechanism")
+    if status == "distro-signed-package" and not record.get("package_names"):
+        errors.append(
+            f"{prefix}: distro-signed-package provenance requires package_names"
+        )
+    if status == "pinned-upstream-artifact":
+        errors.extend(_pinned_upstream_errors(prefix, record))
+    if status == "pinned-language-package":
+        errors.extend(_pinned_language_package_errors(prefix, record))
+    if _is_blocked_provenance_status(status):
+        errors.extend(_blocked_provenance_errors(prefix, record))
+    elif (
+        record.get("release_blocking") is True
+        and expected_policy.release_blocking is not True
+    ):
+        errors.append(f"{prefix}: non-blocked provenance must not be release_blocking")
+    return errors
+
+
+def _provenance_statuses_for_mechanism(mechanism: str) -> frozenset[str]:
+    if mechanism == "bundled-internal":
+        return frozenset({"internal-bundled"})
+    if mechanism == "os-package-manager":
+        return frozenset({"distro-signed-package"})
+    if mechanism == "nix-derivation":
+        return frozenset({"nix-derivation"})
+    if mechanism == "toolchain-component":
+        return frozenset({"toolchain-component"})
+    if mechanism == "language-package-manager":
+        return frozenset({"pinned-language-package"})
+    if mechanism in {"ecli-managed-tools", "jar-shim", "verified-upstream-download"}:
+        return frozenset({"pinned-upstream-artifact"})
+    if mechanism == "blocked-missing-provenance":
+        return LINUX_BLOCKED_PROVENANCE_STATUSES
+    return frozenset()
+
+
+def _pinned_upstream_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    if (
+        not isinstance(record.get("pinned_version"), str)
+        or not record["pinned_version"].strip()
+    ):
+        errors.append(f"{prefix}: pinned-upstream-artifact requires pinned_version")
+    if not isinstance(record.get("checksum"), str) or not record["checksum"].strip():
+        errors.append(f"{prefix}: pinned-upstream-artifact requires checksum")
+    if (
+        not isinstance(record.get("checksum_algorithm"), str)
+        or not record["checksum_algorithm"].strip()
+    ):
+        errors.append(f"{prefix}: pinned-upstream-artifact requires checksum_algorithm")
+    return errors
+
+
+def _pinned_language_package_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    if (
+        not isinstance(record.get("pinned_version"), str)
+        or not record["pinned_version"].strip()
+    ):
+        errors.append(f"{prefix}: pinned-language-package requires pinned_version")
+    if (
+        not isinstance(record.get("source_url"), str)
+        or not record["source_url"].strip()
+    ):
+        errors.append(f"{prefix}: pinned-language-package requires source_url")
+    return errors
+
+
+def _blocked_provenance_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    if record.get("release_blocking") is not True:
+        errors.append(f"{prefix}: blocked provenance must be release_blocking")
+    reason = record.get("blocker_reason")
+    if not isinstance(reason, str) or not reason.strip():
+        errors.append(f"{prefix}: blocked provenance requires blocker_reason")
+    return errors
 
 
 def verify_linux_provisioning_manifest(
@@ -793,6 +1322,7 @@ def _tool_item_errors(
         errors.append(f"{prefix}: invalid Linux mechanism {mechanism!r}")
     if expected_policy is not None:
         errors.extend(_tool_policy_mismatch_errors(prefix, item, expected_policy))
+        errors.extend(verify_linux_provenance_record(item, expected_policy))
     if (
         not isinstance(item.get("executable_names"), list)
         or not item["executable_names"]
