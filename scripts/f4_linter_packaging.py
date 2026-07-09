@@ -19,8 +19,9 @@ entrypoints with deterministic artifact-specific target and evidence paths. The
 helpers construct explicit argv lists only; they do not use a shell and do not
 install, download, or bundle actual linter tools themselves.
 
-Concrete non-dry-run installer/download/bundling implementations are handled by
-the next implementation PR.
+Linux-specific policy manifests and release-blocking provenance checks live in
+``scripts/f4_linter_linux_provisioning.py``. This helper remains the shared
+packaging command/evidence wiring layer.
 """
 
 from __future__ import annotations

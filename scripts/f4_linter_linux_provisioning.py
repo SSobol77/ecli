@@ -1,0 +1,840 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Project: Ecli
+# File: scripts/f4_linter_linux_provisioning.py
+# Website: https://www.ecli.io
+# Repository: https://github.com/SSobol77/ecli
+# PyPI: https://pypi.org/project/ecli-editor/0.0.1/
+#
+# Copyright (c) 2026 Siergej Sobolewski
+#
+# Licensed under the GNU General Public License version 2 only.
+# See the LICENSE file in the project root for full license text.
+
+"""Linux F4 provisioning policy manifests for release artifacts.
+
+This module records the first concrete Linux provisioning layer: deterministic
+artifact-specific policy manifests, package-manager dependency metadata, Nix
+declaration evidence, and explicit release blockers where non-dry-run
+installation still lacks pinned/checksummed provenance.
+
+It is intentionally non-invasive. Importing this module never runs package
+managers, shells, version probes, network requests, or upstream downloads.
+"""
+
+from __future__ import annotations
+
+import importlib
+import json
+import sys
+from pathlib import Path, PurePosixPath, PureWindowsPath
+from typing import Any, Literal, Mapping, NamedTuple, cast
+
+
+LinuxProvisioningMechanism = Literal[
+    "bundled-internal",
+    "os-package-manager",
+    "language-package-manager",
+    "ecli-managed-tools",
+    "toolchain-component",
+    "jar-shim",
+    "nix-derivation",
+    "verified-upstream-download",
+    "blocked-missing-provenance",
+]
+
+LinuxArtifactFamily = Literal[
+    "package-manager",
+    "self-contained",
+    "docker-helper",
+    "nix-policy",
+]
+
+
+LINUX_MANIFEST_SCHEMA_VERSION = 1
+LINUX_MANIFEST_FILENAME = "f4-linux-tools.json"
+
+LINUX_PACKAGE_MANAGER_ARTIFACT_IDS: tuple[str, ...] = (
+    "deb",
+    "rpm",
+    "opensuse-rpm",
+    "arch-pkgbuild",
+    "slackware-txz",
+)
+LINUX_SELF_CONTAINED_ARTIFACT_IDS: tuple[str, ...] = (
+    "linux-pyinstaller",
+    "linux-tarball",
+    "appimage",
+)
+LINUX_DOCKER_HELPER_ARTIFACT_IDS: tuple[str, ...] = (
+    "docker-deb-helper",
+    "docker-rpm-helper",
+)
+LINUX_NIX_ARTIFACT_IDS: tuple[str, ...] = (
+    "nix-flake",
+    "nixos-package",
+)
+LINUX_ARTIFACT_IDS: tuple[str, ...] = (
+    *LINUX_SELF_CONTAINED_ARTIFACT_IDS,
+    *LINUX_PACKAGE_MANAGER_ARTIFACT_IDS,
+    *LINUX_DOCKER_HELPER_ARTIFACT_IDS,
+    *LINUX_NIX_ARTIFACT_IDS,
+)
+
+LINUX_ALLOWED_MECHANISMS = frozenset(
+    {
+        "bundled-internal",
+        "os-package-manager",
+        "language-package-manager",
+        "ecli-managed-tools",
+        "toolchain-component",
+        "jar-shim",
+        "nix-derivation",
+        "verified-upstream-download",
+        "blocked-missing-provenance",
+    }
+)
+
+PACKAGE_POLICY_SOURCE_BY_HELPER = {
+    "docker-deb-helper": "deb",
+    "docker-rpm-helper": "rpm",
+}
+
+OS_PACKAGE_NAMES: dict[str, dict[str, tuple[str, ...]]] = {
+    "deb": {
+        "yamllint": ("yamllint",),
+        "shellcheck": ("shellcheck",),
+        "clang-tidy": ("clang-tidy",),
+        "cppcheck": ("cppcheck",),
+        "clang-format": ("clang-format",),
+        "checkstyle": ("checkstyle",),
+    },
+    "rpm": {
+        "yamllint": ("python3-yamllint",),
+        "shellcheck": ("ShellCheck",),
+        "clang-tidy": ("clang-tools-extra",),
+        "cppcheck": ("cppcheck",),
+        "clang-format": ("clang-tools-extra",),
+    },
+    "opensuse-rpm": {
+        "yamllint": ("yamllint",),
+        "shellcheck": ("ShellCheck",),
+        "clang-tidy": ("clang-tools",),
+        "cppcheck": ("cppcheck",),
+        "clang-format": ("clang-tools",),
+    },
+    "arch-pkgbuild": {
+        "yamllint": ("yamllint",),
+        "shellcheck": ("shellcheck",),
+        "clang-tidy": ("clang",),
+        "cppcheck": ("cppcheck",),
+        "clang-format": ("clang",),
+    },
+    "slackware-txz": {
+        "clang-tidy": ("llvm",),
+        "clang-format": ("llvm",),
+    },
+}
+
+TOOLCHAIN_COMPONENTS: dict[str, str] = {
+    "cargo-clippy": "Rust toolchain component: cargo clippy",
+}
+
+EVIDENCE_FIELDS_BASE: tuple[str, ...] = (
+    "artifact_entry_id",
+    "tool_id",
+    "mechanism",
+    "executable_names",
+    "version_probe",
+    "target_dir",
+    "evidence_dir",
+    "network_required",
+    "checksum_required",
+    "pin_required",
+)
+
+
+class LinuxToolProvisioningPolicy(NamedTuple):
+    """Linux provisioning policy for one required tool and artifact."""
+
+    artifact_entry_id: str
+    artifact_family: LinuxArtifactFamily
+    tool_id: str
+    mechanism: LinuxProvisioningMechanism
+    executable_names: tuple[str, ...]
+    version_probe: tuple[str, ...]
+    network_required: bool
+    checksum_required: bool
+    pin_required: bool
+    package_names: tuple[str, ...] = ()
+    target_subdir: str = "tools"
+    evidence_fields_required: tuple[str, ...] = EVIDENCE_FIELDS_BASE
+    source_url: str | None = None
+    pinned_version: str | None = None
+    release_blocking: bool = False
+    blocker_reason: str | None = None
+
+
+def _repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def _ensure_src_path(root: Path) -> None:
+    src = str(root / "src")
+    if src not in sys.path:
+        sys.path.insert(0, src)
+
+
+def _provisioning_module(root: Path | None = None) -> Any:
+    resolved_root = _repo_root() if root is None else root
+    _ensure_src_path(resolved_root)
+    return importlib.import_module("ecli.extensions.linters.core.provisioning")
+
+
+def _registry_module(root: Path | None = None) -> Any:
+    resolved_root = _repo_root() if root is None else root
+    _ensure_src_path(resolved_root)
+    return importlib.import_module("ecli.extensions.linters.core.provisioning_registry")
+
+
+def _canonical_artifact_entry_id(
+    artifact_entry_id: str, root: Path | None = None
+) -> str:
+    return cast(
+        str, _provisioning_module(root).canonical_artifact_entry_id(artifact_entry_id)
+    )
+
+
+def _looks_like_path(value: str) -> bool:
+    posix = PurePosixPath(value)
+    windows = PureWindowsPath(value)
+    if posix.is_absolute() or windows.is_absolute():
+        return True
+    if "/" in value or "\\" in value:
+        return True
+    return any(part in {"", ".", ".."} for part in (*posix.parts, *windows.parts))
+
+
+def _validate_path_part(value: str, label: str) -> str:
+    if not isinstance(value, str) or not value:
+        raise ValueError(f"{label} must be a non-empty path segment")
+    if _looks_like_path(value):
+        raise ValueError(f"{label} must be a plain path segment: {value!r}")
+    return value
+
+
+def _safe_base_dir(path: Path) -> Path:
+    return path.expanduser().resolve(strict=False)
+
+
+def _safe_child(base: Path, *parts: str) -> Path:
+    resolved_base = _safe_base_dir(base)
+    child = resolved_base
+    for index, part in enumerate(parts, start=1):
+        child = child / _validate_path_part(part, f"path part {index}")
+    resolved_child = child.resolve(strict=False)
+    try:
+        resolved_child.relative_to(resolved_base)
+    except ValueError as exc:
+        raise ValueError(f"path escapes base directory: {resolved_child}") from exc
+    return resolved_child
+
+
+def _ensure_child(base: Path, child: Path, label: str) -> None:
+    try:
+        child.relative_to(base)
+    except ValueError as exc:
+        raise ValueError(f"{label} escapes base directory: {child}") from exc
+
+
+def linux_artifact_ids() -> tuple[str, ...]:
+    """Return the Linux-scope artifact IDs for PR #127."""
+    return LINUX_ARTIFACT_IDS
+
+
+def linux_full_artifact_ids(root: Path | None = None) -> tuple[str, ...]:
+    """Return Linux-scope artifacts that claim Full provisioning support."""
+    registry = _registry_module(root)
+    entries = {
+        entry.artifact_entry_id: entry for entry in registry.ARTIFACT_CONTRACT_ENTRIES
+    }
+    return tuple(
+        artifact_id
+        for artifact_id in LINUX_ARTIFACT_IDS
+        if entries[artifact_id].full_provisioning_supported
+    )
+
+
+def is_linux_artifact_id(artifact_entry_id: str, root: Path | None = None) -> bool:
+    """Return whether *artifact_entry_id* is a canonical Linux-scope artifact."""
+    try:
+        canonical_id = _canonical_artifact_entry_id(artifact_entry_id, root)
+    except (KeyError, ValueError):
+        return False
+    return canonical_id in LINUX_ARTIFACT_IDS
+
+
+def _linux_artifact_entry_id(artifact_entry_id: str, root: Path | None = None) -> str:
+    canonical_id = _canonical_artifact_entry_id(artifact_entry_id, root)
+    if canonical_id not in LINUX_ARTIFACT_IDS:
+        raise ValueError(f"not a Linux F4 provisioning artifact: {canonical_id!r}")
+    return canonical_id
+
+
+def _artifact_family(artifact_entry_id: str) -> LinuxArtifactFamily:
+    if artifact_entry_id in LINUX_PACKAGE_MANAGER_ARTIFACT_IDS:
+        return "package-manager"
+    if artifact_entry_id in LINUX_SELF_CONTAINED_ARTIFACT_IDS:
+        return "self-contained"
+    if artifact_entry_id in LINUX_DOCKER_HELPER_ARTIFACT_IDS:
+        return "docker-helper"
+    if artifact_entry_id in LINUX_NIX_ARTIFACT_IDS:
+        return "nix-policy"
+    raise ValueError(f"not a Linux F4 provisioning artifact: {artifact_entry_id!r}")
+
+
+def _contracts(root: Path | None = None) -> tuple[Any, ...]:
+    return tuple(_registry_module(root).load_linter_tool_contracts())
+
+
+def _required_contracts(root: Path | None = None) -> tuple[Any, ...]:
+    return tuple(
+        contract for contract in _contracts(root) if contract.required_for_full
+    )
+
+
+def _package_policy_artifact_id(artifact_entry_id: str) -> str:
+    return PACKAGE_POLICY_SOURCE_BY_HELPER.get(artifact_entry_id, artifact_entry_id)
+
+
+def _os_package_names(artifact_entry_id: str, tool_id: str) -> tuple[str, ...]:
+    package_artifact_id = _package_policy_artifact_id(artifact_entry_id)
+    return OS_PACKAGE_NAMES.get(package_artifact_id, {}).get(tool_id, ())
+
+
+def _blocked_policy(
+    *,
+    artifact_entry_id: str,
+    artifact_family: LinuxArtifactFamily,
+    contract: Any,
+    reason: str,
+) -> LinuxToolProvisioningPolicy:
+    fields = (*EVIDENCE_FIELDS_BASE, "blocker_reason")
+    return LinuxToolProvisioningPolicy(
+        artifact_entry_id=artifact_entry_id,
+        artifact_family=artifact_family,
+        tool_id=contract.tool_id,
+        mechanism="blocked-missing-provenance",
+        executable_names=tuple(contract.executable_names),
+        version_probe=tuple(contract.version_probe.command),
+        network_required=False,
+        checksum_required=bool(contract.checksum_required_for_downloads),
+        pin_required=True,
+        source_url=contract.source_url,
+        pinned_version=contract.pinned_version,
+        release_blocking=True,
+        blocker_reason=reason,
+        evidence_fields_required=fields,
+    )
+
+
+def _policy_for_contract(
+    artifact_entry_id: str,
+    contract: Any,
+) -> LinuxToolProvisioningPolicy:
+    artifact_family = _artifact_family(artifact_entry_id)
+    if contract.provider_kind == "internal":
+        return LinuxToolProvisioningPolicy(
+            artifact_entry_id=artifact_entry_id,
+            artifact_family=artifact_family,
+            tool_id=contract.tool_id,
+            mechanism="bundled-internal",
+            executable_names=tuple(contract.executable_names),
+            version_probe=tuple(contract.version_probe.command),
+            network_required=False,
+            checksum_required=False,
+            pin_required=False,
+            source_url=contract.source_url,
+            pinned_version=contract.pinned_version,
+        )
+
+    if artifact_family == "nix-policy":
+        return LinuxToolProvisioningPolicy(
+            artifact_entry_id=artifact_entry_id,
+            artifact_family=artifact_family,
+            tool_id=contract.tool_id,
+            mechanism="nix-derivation",
+            executable_names=tuple(contract.executable_names),
+            version_probe=tuple(contract.version_probe.command),
+            network_required=False,
+            checksum_required=False,
+            pin_required=False,
+            source_url=contract.source_url,
+            pinned_version=contract.pinned_version,
+        )
+
+    package_names = _os_package_names(artifact_entry_id, contract.tool_id)
+    if package_names:
+        return LinuxToolProvisioningPolicy(
+            artifact_entry_id=artifact_entry_id,
+            artifact_family=artifact_family,
+            tool_id=contract.tool_id,
+            mechanism="os-package-manager",
+            executable_names=tuple(contract.executable_names),
+            version_probe=tuple(contract.version_probe.command),
+            network_required=False,
+            checksum_required=False,
+            pin_required=False,
+            package_names=package_names,
+            source_url=contract.source_url,
+            pinned_version=contract.pinned_version,
+        )
+
+    if (
+        artifact_family in {"package-manager", "docker-helper"}
+        and contract.tool_id in TOOLCHAIN_COMPONENTS
+    ):
+        return LinuxToolProvisioningPolicy(
+            artifact_entry_id=artifact_entry_id,
+            artifact_family=artifact_family,
+            tool_id=contract.tool_id,
+            mechanism="toolchain-component",
+            executable_names=tuple(contract.executable_names),
+            version_probe=tuple(contract.version_probe.command),
+            network_required=False,
+            checksum_required=False,
+            pin_required=False,
+            source_url=contract.source_url,
+            pinned_version=contract.pinned_version,
+        )
+
+    if artifact_family == "self-contained":
+        return _blocked_policy(
+            artifact_entry_id=artifact_entry_id,
+            artifact_family=artifact_family,
+            contract=contract,
+            reason=(
+                "self-contained Linux artifacts need pinned versions and "
+                "checksums before bundling this external Full-required tool"
+            ),
+        )
+
+    return _blocked_policy(
+        artifact_entry_id=artifact_entry_id,
+        artifact_family=artifact_family,
+        contract=contract,
+        reason=(
+            "Linux package metadata has no safe package-manager mapping or "
+            "pinned/checksummed artifact-managed provisioning source yet"
+        ),
+    )
+
+
+def linux_provisioning_policy_for_artifact(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> tuple[LinuxToolProvisioningPolicy, ...]:
+    """Return required-tool Linux policies for one canonical artifact."""
+    canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
+    return tuple(
+        _policy_for_contract(canonical_id, contract)
+        for contract in _required_contracts(root)
+    )
+
+
+def linux_tool_policy_matrix(
+    root: Path | None = None,
+) -> tuple[LinuxToolProvisioningPolicy, ...]:
+    """Return the complete Linux artifact x Full-required tool policy matrix."""
+    return tuple(
+        policy
+        for artifact_id in linux_artifact_ids()
+        for policy in linux_provisioning_policy_for_artifact(artifact_id, root)
+    )
+
+
+def linux_package_manager_dependency_names(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> tuple[str, ...]:
+    """Return OS package names declared by one Linux artifact policy."""
+    names: list[str] = []
+    for policy in linux_provisioning_policy_for_artifact(artifact_entry_id, root):
+        if policy.mechanism != "os-package-manager":
+            continue
+        for package_name in policy.package_names:
+            if package_name not in names:
+                names.append(package_name)
+    return tuple(names)
+
+
+def linux_artifact_tools_dir(
+    target_dir: Path,
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> Path:
+    """Return the artifact-managed Linux tools root inside *target_dir*."""
+    _linux_artifact_entry_id(artifact_entry_id, root)
+    return _safe_child(target_dir, "tools")
+
+
+def linux_artifact_manifest_path(
+    target_dir: Path,
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> Path:
+    """Return the deterministic Linux tools manifest path inside *target_dir*."""
+    _linux_artifact_entry_id(artifact_entry_id, root)
+    return _safe_child(target_dir, "manifest", LINUX_MANIFEST_FILENAME)
+
+
+def _tool_target_dir(target_dir: Path, policy: LinuxToolProvisioningPolicy) -> Path:
+    return _safe_child(
+        target_dir,
+        policy.target_subdir,
+        _validate_path_part(policy.tool_id, "tool id"),
+    )
+
+
+def _policy_to_manifest_item(
+    policy: LinuxToolProvisioningPolicy,
+    *,
+    target_dir: Path,
+    evidence_dir: Path,
+) -> dict[str, Any]:
+    data = policy._asdict()
+    data["executable_names"] = list(policy.executable_names)
+    data["version_probe"] = list(policy.version_probe)
+    data["package_names"] = list(policy.package_names)
+    data["evidence_fields_required"] = list(policy.evidence_fields_required)
+    data["target_dir"] = str(_tool_target_dir(target_dir, policy))
+    data["evidence_dir"] = str(_safe_base_dir(evidence_dir))
+    return data
+
+
+def _builder_helper_record(artifact_entry_id: str) -> dict[str, Any] | None:
+    inherited = PACKAGE_POLICY_SOURCE_BY_HELPER.get(artifact_entry_id)
+    if inherited is None:
+        return None
+    return {
+        "inherits_artifact_policy": inherited,
+        "environment_variable": "ECLI_F4_LINTER_EXTRA_ARTIFACT_IDS",
+        "records_helper_evidence": True,
+    }
+
+
+def _nix_policy_record(artifact_entry_id: str) -> dict[str, Any] | None:
+    if artifact_entry_id not in LINUX_NIX_ARTIFACT_IDS:
+        return None
+    return {
+        "declarative_only": True,
+        "imperative_package_manager": False,
+        "imperative_upstream_download": False,
+    }
+
+
+def build_linux_provisioning_manifest(
+    *,
+    artifact_entry_id: str,
+    target_dir: Path,
+    evidence_dir: Path,
+    selected_tool_ids: tuple[str, ...] | None = None,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Build a deterministic Linux F4 tools manifest."""
+    canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
+    target_base = _safe_base_dir(target_dir)
+    evidence_base = _safe_base_dir(evidence_dir)
+    policies = linux_provisioning_policy_for_artifact(canonical_id, root)
+    required_ids = tuple(policy.tool_id for policy in policies)
+    selected = required_ids if selected_tool_ids is None else selected_tool_ids
+    unknown = sorted(set(selected) - set(required_ids))
+    if unknown:
+        raise ValueError(f"unknown selected Linux Full tool id(s): {unknown}")
+
+    selected_set = set(selected)
+    selected_policies = tuple(
+        policy for policy in policies if policy.tool_id in selected_set
+    )
+    manifest_path = linux_artifact_manifest_path(target_base, canonical_id, root)
+    tools = tuple(
+        _policy_to_manifest_item(
+            policy,
+            target_dir=target_base,
+            evidence_dir=evidence_base,
+        )
+        for policy in selected_policies
+    )
+    release_blocking = any(item["release_blocking"] for item in tools)
+    manifest: dict[str, Any] = {
+        "schema_version": LINUX_MANIFEST_SCHEMA_VERSION,
+        "artifact_entry_id": canonical_id,
+        "policy_kind": "linux-f4-provisioning-policy",
+        "artifact_family": _artifact_family(canonical_id),
+        "target_dir": str(target_base),
+        "evidence_dir": str(evidence_base),
+        "manifest_path": str(manifest_path),
+        "full_required_tool_count": len(required_ids),
+        "selected_tools": list(selected),
+        "release_blocking": release_blocking,
+        "tools": list(tools),
+    }
+    builder_helper = _builder_helper_record(canonical_id)
+    if builder_helper is not None:
+        manifest["builder_helper"] = builder_helper
+    nix_policy = _nix_policy_record(canonical_id)
+    if nix_policy is not None:
+        manifest["nix_policy"] = nix_policy
+    return manifest
+
+
+def write_linux_provisioning_manifest(manifest: Mapping[str, Any]) -> Path:
+    """Write *manifest* to its validated manifest path and return that path."""
+    path_value = manifest.get("manifest_path")
+    target_value = manifest.get("target_dir")
+    if not isinstance(path_value, str) or not isinstance(target_value, str):
+        raise ValueError("Linux manifest must include manifest_path and target_dir")
+    target_base = _safe_base_dir(Path(target_value))
+    path = _safe_base_dir(Path(path_value))
+    _ensure_child(target_base, path, "Linux manifest path")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(dict(manifest), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    return path
+
+
+def _load_manifest(path_or_manifest: Path | Mapping[str, Any]) -> Mapping[str, Any]:
+    if isinstance(path_or_manifest, Path):
+        path = path_or_manifest.expanduser().resolve(strict=True)
+        if path.suffix.lower() != ".json" or not path.is_file():
+            raise ValueError(f"expected an existing Linux manifest JSON file: {path}")
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise ValueError(f"Linux manifest must contain a JSON object: {path}")
+        return data
+    return path_or_manifest
+
+
+def verify_linux_provisioning_manifest(
+    path_or_manifest: Path | Mapping[str, Any],
+    *,
+    root: Path | None = None,
+) -> list[str]:
+    """Return validation errors for a Linux F4 tools manifest."""
+    try:
+        manifest = _load_manifest(path_or_manifest)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        return [str(exc)]
+
+    errors: list[str] = []
+    artifact_id = manifest.get("artifact_entry_id")
+    if not isinstance(artifact_id, str):
+        return ["missing artifact_entry_id"]
+    try:
+        canonical_id = _linux_artifact_entry_id(artifact_id, root)
+    except (KeyError, ValueError) as exc:
+        return [str(exc)]
+
+    expected_policies = _expected_policy_by_tool_id(canonical_id, root)
+    if manifest.get("schema_version") != LINUX_MANIFEST_SCHEMA_VERSION:
+        errors.append("unsupported or missing Linux manifest schema_version")
+    if manifest.get("policy_kind") != "linux-f4-provisioning-policy":
+        errors.append("missing Linux provisioning policy kind")
+    errors.extend(_manifest_path_errors(manifest))
+    errors.extend(_manifest_summary_errors(manifest, expected_policies))
+    errors.extend(_manifest_tool_errors(manifest, canonical_id, expected_policies))
+    return errors
+
+
+def _expected_policy_by_tool_id(
+    artifact_entry_id: str,
+    root: Path | None,
+) -> dict[str, LinuxToolProvisioningPolicy]:
+    return {
+        policy.tool_id: policy
+        for policy in linux_provisioning_policy_for_artifact(artifact_entry_id, root)
+    }
+
+
+def _manifest_path_errors(manifest: Mapping[str, Any]) -> list[str]:
+    errors: list[str] = []
+    try:
+        target_dir = _safe_base_dir(Path(str(manifest["target_dir"])))
+        manifest_path = _safe_base_dir(Path(str(manifest["manifest_path"])))
+        _ensure_child(target_dir, manifest_path, "Linux manifest path")
+    except (KeyError, TypeError, ValueError) as exc:
+        errors.append(str(exc))
+    return errors
+
+
+def _manifest_summary_errors(
+    manifest: Mapping[str, Any],
+    expected_policies: Mapping[str, LinuxToolProvisioningPolicy],
+) -> list[str]:
+    errors: list[str] = []
+    expected_count = len(expected_policies)
+    if manifest.get("full_required_tool_count") != expected_count:
+        errors.append(
+            "Linux manifest full_required_tool_count does not match "
+            f"expected policy count {expected_count}"
+        )
+
+    tools = manifest.get("tools")
+    if isinstance(tools, list):
+        release_blocking = any(
+            isinstance(tool, dict) and tool.get("release_blocking") is True
+            for tool in tools
+        )
+        if manifest.get("release_blocking") is not release_blocking:
+            errors.append(
+                "Linux manifest release_blocking does not match tool policy state"
+            )
+    return errors
+
+
+def _manifest_tool_errors(
+    manifest: Mapping[str, Any],
+    artifact_entry_id: str,
+    expected_policies: Mapping[str, LinuxToolProvisioningPolicy],
+) -> list[str]:
+    tools = manifest.get("tools")
+    if not isinstance(tools, list):
+        return ["Linux manifest tools must be a list"]
+
+    selected = manifest.get("selected_tools")
+    if not isinstance(selected, list) or not all(
+        isinstance(item, str) for item in selected
+    ):
+        return ["Linux manifest selected_tools must be a string list"]
+    tool_ids = [
+        tool.get("tool_id")
+        for tool in tools
+        if isinstance(tool, dict) and isinstance(tool.get("tool_id"), str)
+    ]
+    missing = sorted(set(selected) - set(tool_ids))
+    errors = [
+        f"selected Linux tool missing from manifest: {tool_id}" for tool_id in missing
+    ]
+    errors.extend(
+        f"duplicate selected Linux tool: {tool_id}" for tool_id in _duplicates(selected)
+    )
+    errors.extend(
+        f"duplicate Linux manifest tool entry: {tool_id}"
+        for tool_id in _duplicates(tool_ids)
+    )
+    unknown = sorted(set(selected) - set(expected_policies))
+    errors.extend(f"unknown selected Linux Full tool: {tool_id}" for tool_id in unknown)
+    for item in tools:
+        if not isinstance(item, dict):
+            errors.append("Linux manifest tool entry must be an object")
+            continue
+        tool_id = item.get("tool_id")
+        expected_policy = (
+            expected_policies.get(tool_id) if isinstance(tool_id, str) else None
+        )
+        if isinstance(tool_id, str) and expected_policy is None:
+            errors.append(
+                f"{tool_id}: unexpected Linux tool for artifact {artifact_entry_id}"
+            )
+        errors.extend(_tool_item_errors(item, manifest, expected_policy))
+    return errors
+
+
+def _duplicates(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    duplicates: list[str] = []
+    for value in values:
+        if value in seen and value not in duplicates:
+            duplicates.append(value)
+        seen.add(value)
+    return duplicates
+
+
+def _tool_item_errors(
+    item: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+    expected_policy: LinuxToolProvisioningPolicy | None,
+) -> list[str]:
+    prefix = str(item.get("tool_id", "<unknown>"))
+    errors: list[str] = []
+    tool_id = item.get("tool_id")
+    if not isinstance(tool_id, str) or not tool_id:
+        errors.append(f"{prefix}: missing tool_id")
+    item_artifact_id = item.get("artifact_entry_id")
+    if item_artifact_id is not None and item_artifact_id != manifest.get(
+        "artifact_entry_id"
+    ):
+        errors.append(
+            f"{prefix}: artifact_entry_id differs from manifest artifact_entry_id"
+        )
+    mechanism = item.get("mechanism")
+    if mechanism not in LINUX_ALLOWED_MECHANISMS:
+        errors.append(f"{prefix}: invalid Linux mechanism {mechanism!r}")
+    if expected_policy is not None:
+        errors.extend(_tool_policy_mismatch_errors(prefix, item, expected_policy))
+    if (
+        not isinstance(item.get("executable_names"), list)
+        or not item["executable_names"]
+    ):
+        errors.append(f"{prefix}: missing executable_names")
+    if not isinstance(item.get("version_probe"), list) or not item["version_probe"]:
+        errors.append(f"{prefix}: missing version_probe")
+    if mechanism == "os-package-manager" and not item.get("package_names"):
+        errors.append(f"{prefix}: os-package-manager policy requires package_names")
+    if mechanism == "blocked-missing-provenance":
+        if item.get("release_blocking") is not True:
+            errors.append(f"{prefix}: blocked policy must be release_blocking")
+        reason = item.get("blocker_reason")
+        if not isinstance(reason, str) or not reason.strip():
+            errors.append(f"{prefix}: blocked policy requires blocker_reason")
+    errors.extend(_tool_path_errors(prefix, item, manifest))
+    return errors
+
+
+def _tool_policy_mismatch_errors(
+    prefix: str,
+    item: Mapping[str, Any],
+    expected_policy: LinuxToolProvisioningPolicy,
+) -> list[str]:
+    errors: list[str] = []
+    if item.get("mechanism") != expected_policy.mechanism:
+        errors.append(
+            f"{prefix}: mechanism differs from expected {expected_policy.mechanism!r}"
+        )
+    package_names = item.get("package_names")
+    if isinstance(package_names, list) and all(
+        isinstance(package_name, str) for package_name in package_names
+    ):
+        actual_package_names = tuple(package_names)
+    else:
+        actual_package_names = ()
+    if actual_package_names != expected_policy.package_names:
+        errors.append(f"{prefix}: package_names differ from expected policy")
+    if item.get("release_blocking") is not expected_policy.release_blocking:
+        errors.append(f"{prefix}: release_blocking differs from expected policy")
+    if expected_policy.mechanism == "blocked-missing-provenance":
+        reason = item.get("blocker_reason")
+        if not isinstance(reason, str) or not reason.strip():
+            errors.append(f"{prefix}: blocked policy requires blocker_reason")
+    return errors
+
+
+def _tool_path_errors(
+    prefix: str,
+    item: Mapping[str, Any],
+    manifest: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    try:
+        target_base = _safe_base_dir(Path(str(manifest["target_dir"])))
+        evidence_base = _safe_base_dir(Path(str(manifest["evidence_dir"])))
+        tool_target = _safe_base_dir(Path(str(item["target_dir"])))
+        tool_evidence = _safe_base_dir(Path(str(item["evidence_dir"])))
+        _ensure_child(target_base, tool_target, f"{prefix} target_dir")
+        _ensure_child(evidence_base, tool_evidence, f"{prefix} evidence_dir")
+    except (KeyError, TypeError, ValueError) as exc:
+        errors.append(f"{prefix}: {exc}")
+    return errors

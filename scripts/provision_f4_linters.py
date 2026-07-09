@@ -17,9 +17,9 @@
 Default execution is automation-safe: no network, no upstream downloads, and no
 package-manager calls. ``dry-run`` writes deterministic provisioning evidence
 that packaging and release tests can validate. ``verify-only`` checks existing
-executables and version probes. ``provision`` intentionally fails closed for
-missing required tools until an artifact-specific installer implementation wires
-in a concrete, provenance-aware install path.
+executables and version probes. For Linux artifacts, ``provision`` also writes
+the artifact-specific Linux tools manifest and fails closed when the policy
+contains release-blocking missing-provenance entries.
 """
 
 from __future__ import annotations
@@ -35,6 +35,13 @@ ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
+
+from f4_linter_linux_provisioning import (  # noqa: E402
+    build_linux_provisioning_manifest,
+    is_linux_artifact_id,
+    verify_linux_provisioning_manifest,
+    write_linux_provisioning_manifest,
+)
 
 from ecli.extensions.linters.core.provisioning import (  # noqa: E402
     build_component_model,
@@ -246,9 +253,76 @@ def _write_artifact_evidence(
             contracts,
         )
         paths.append(write_evidence(plan, ecli_version=version))
+        failed = failed or _write_linux_manifest_if_needed(
+            args,
+            artifact_ids,
+            artifact_id,
+            plan,
+            target_dir,
+            evidence_dir,
+        )
         output.append(evidence_to_dict(plan_to_evidence(plan, ecli_version=version)))
         failed = failed or plan_has_release_blocking_failure(plan)
     return output, paths, failed
+
+
+def _write_linux_manifest_if_needed(
+    args: argparse.Namespace,
+    artifact_ids: tuple[str, ...],
+    artifact_id: str,
+    plan: Any,
+    target_dir: Path,
+    evidence_dir: Path,
+) -> bool:
+    if not is_linux_artifact_id(artifact_id):
+        return False
+    manifest_target_dir = _linux_manifest_target_dir(
+        artifact_ids, artifact_id, target_dir
+    )
+    manifest_evidence_dir = _linux_manifest_evidence_dir(
+        artifact_ids,
+        artifact_id,
+        evidence_dir,
+    )
+    selected_tool_ids = tuple(
+        action.tool_id
+        for action in plan.actions
+        if action.required_for_full and action.selected
+    )
+    manifest = build_linux_provisioning_manifest(
+        artifact_entry_id=artifact_id,
+        target_dir=manifest_target_dir,
+        evidence_dir=manifest_evidence_dir,
+        selected_tool_ids=selected_tool_ids,
+        root=ROOT,
+    )
+    write_linux_provisioning_manifest(manifest)
+    errors = verify_linux_provisioning_manifest(manifest, root=ROOT)
+    if errors:
+        for error in errors:
+            print(f"Linux F4 manifest error: {error}", file=sys.stderr)
+        return True
+    return args.mode == "provision" and bool(manifest["release_blocking"])
+
+
+def _linux_manifest_target_dir(
+    artifact_ids: tuple[str, ...],
+    artifact_id: str,
+    target_dir: Path,
+) -> Path:
+    if len(artifact_ids) == 1:
+        return target_dir
+    return target_dir / artifact_id
+
+
+def _linux_manifest_evidence_dir(
+    artifact_ids: tuple[str, ...],
+    artifact_id: str,
+    evidence_dir: Path,
+) -> Path:
+    if len(artifact_ids) == 1:
+        return evidence_dir
+    return evidence_dir / "linux-manifests" / artifact_id
 
 
 def _build_plan_for_artifact(
