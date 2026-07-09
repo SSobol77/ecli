@@ -410,6 +410,34 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
         "release_blocking": False,
         "blocker_reason": None,
     },
+    ("deb", "clang-format"): {
+        "evidence_source": "Debian official package metadata for clang-format",
+        "evidence_source_type": "official-distro-metadata",
+        "evidence_status": "verified-official-source",
+        "evidence_note": (
+            "Verified against official Debian package metadata "
+            "https://packages.debian.org/clang-format and filelist metadata "
+            "https://packages.debian.org/sid/amd64/clang-format/filelist, with "
+            "supporting manpage metadata "
+            "https://manpages.debian.org/testing/clang-format-15/clang-format-15.1 "
+            "for the existing clang-format package/executable mapping."
+        ),
+        "official_source_name": "Debian Package Search: clang-format",
+        "official_source_url": "https://packages.debian.org/clang-format",
+        "official_source_kind": "distro-package-index",
+        "verification_scope": "package-name-and-executable",
+        "verification_note": (
+            "Verified against official Debian package metadata "
+            "https://packages.debian.org/clang-format and filelist metadata "
+            "https://packages.debian.org/sid/amd64/clang-format/filelist, with "
+            "supporting manpage metadata "
+            "https://manpages.debian.org/testing/clang-format-15/clang-format-15.1: "
+            "package name clang-format and executable clang-format."
+        ),
+        "external_verification_required_for_new_mappings": False,
+        "release_blocking": False,
+        "blocker_reason": None,
+    },
 }
 
 OS_PACKAGE_NAMES: dict[str, dict[str, tuple[str, ...]]] = {
