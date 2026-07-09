@@ -25,4 +25,13 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("cppcheck",),
     version_probe=("cppcheck", "--version"),
     delivery_notes="OS package dependency or bundled binary; bundled with ECLI Full where platform packaging allows.",
+    allowed_install_mechanisms=(
+        "os-package-manager",
+        "language-package-manager",
+        "ecli-managed-tools",
+        "bundled-binary",
+        "verified-upstream-download",
+        "nix-derivation",
+    ),
+    source_url="https://cppcheck.sourceforge.io/",
 )

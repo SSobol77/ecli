@@ -25,4 +25,11 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("pylint",),
     version_probe=("pylint", "--version"),
     delivery_notes="Optional Python package (pip); not part of the default ECLI Full bundle.",
+    allowed_install_mechanisms=(
+        "language-package-manager",
+        "os-package-manager",
+        "ecli-managed-tools",
+        "nix-derivation",
+    ),
+    source_url="https://pylint.pycqa.org/",
 )

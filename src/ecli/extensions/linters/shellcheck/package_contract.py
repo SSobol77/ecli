@@ -25,4 +25,12 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("shellcheck",),
     version_probe=("shellcheck", "--version"),
     delivery_notes="OS package dependency or bundled binary; bundled with ECLI Full where platform packaging allows.",
+    allowed_install_mechanisms=(
+        "os-package-manager",
+        "ecli-managed-tools",
+        "bundled-binary",
+        "verified-upstream-download",
+        "nix-derivation",
+    ),
+    source_url="https://www.shellcheck.net/",
 )

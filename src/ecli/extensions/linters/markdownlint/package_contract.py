@@ -25,4 +25,11 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("markdownlint-cli2",),
     version_probe=("markdownlint-cli2", "--version"),
     delivery_notes="npm package; bundled with ECLI Full where platform packaging allows.",
+    allowed_install_mechanisms=(
+        "language-package-manager",
+        "ecli-managed-tools",
+        "bundled-binary",
+        "nix-derivation",
+    ),
+    source_url="https://github.com/DavidAnson/markdownlint-cli2",
 )

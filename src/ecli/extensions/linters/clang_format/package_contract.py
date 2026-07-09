@@ -25,4 +25,11 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("clang-format",),
     version_probe=("clang-format", "--version"),
     delivery_notes="OS package dependency (LLVM tooling) or bundled binary; dry-run/--Werror check mode only, never rewrites files during F4 diagnostics (design doc section 11.3).",
+    allowed_install_mechanisms=(
+        "os-package-manager",
+        "ecli-managed-tools",
+        "bundled-binary",
+        "nix-derivation",
+    ),
+    source_url="https://clang.llvm.org/docs/ClangFormat.html",
 )

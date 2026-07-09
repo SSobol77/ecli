@@ -95,7 +95,10 @@ def read_project_version(root: Path) -> str:
         with pyproject.open("rb") as handle:
             version = tomllib.load(handle)["project"]["version"]
     except (KeyError, OSError, TypeError, tomllib.TOMLDecodeError) as exc:
-        print(f"ERROR: cannot read project version from {pyproject}: {exc}", file=sys.stderr)
+        print(
+            f"ERROR: cannot read project version from {pyproject}: {exc}",
+            file=sys.stderr,
+        )
         raise SystemExit(EXIT_INVALID) from exc
     if not isinstance(version, str) or not version.strip():
         print(f"ERROR: invalid project version in {pyproject}", file=sys.stderr)
@@ -202,7 +205,9 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     root = Path.cwd()
     version = args.version or read_project_version(root)
-    return verify_release_assets(release_dir_for(root, version, args.release_dir), version)
+    return verify_release_assets(
+        release_dir_for(root, version, args.release_dir), version
+    )
 
 
 if __name__ == "__main__":

@@ -25,4 +25,10 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("stylelint",),
     version_probe=("stylelint", "--version"),
     delivery_notes="Optional npm package; not part of the default ECLI Full bundle.",
+    allowed_install_mechanisms=(
+        "language-package-manager",
+        "ecli-managed-tools",
+        "nix-derivation",
+    ),
+    source_url="https://stylelint.io/",
 )

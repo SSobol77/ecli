@@ -102,9 +102,7 @@ def stage_pkgbuild(root: Path, build_dir: Path, version: str) -> Path:
     source tree is never used as a makepkg working directory.
     """
     source = (root / "packaging" / "arch" / "PKGBUILD").read_text(encoding="utf-8")
-    rewritten = re.sub(
-        r"(?m)^pkgver=.*$", f"pkgver={version}", source, count=1
-    )
+    rewritten = re.sub(r"(?m)^pkgver=.*$", f"pkgver={version}", source, count=1)
     target = build_dir / "PKGBUILD"
     target.write_text(rewritten, encoding="utf-8")
     return target

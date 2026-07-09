@@ -25,4 +25,13 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("taplo",),
     version_probe=("taplo", "--version"),
     delivery_notes="Rust crate (cargo install) or standalone binary; bundled with ECLI Full where platform packaging allows.",
+    allowed_install_mechanisms=(
+        "language-package-manager",
+        "os-package-manager",
+        "ecli-managed-tools",
+        "bundled-binary",
+        "verified-upstream-download",
+        "nix-derivation",
+    ),
+    source_url="https://taplo.tamasfe.dev/",
 )

@@ -25,4 +25,12 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("oxlint",),
     version_probe=("oxlint", "--version"),
     delivery_notes="Optional npm package; not part of the default ECLI Full bundle.",
+    allowed_install_mechanisms=(
+        "language-package-manager",
+        "ecli-managed-tools",
+        "bundled-binary",
+        "verified-upstream-download",
+        "nix-derivation",
+    ),
+    source_url="https://oxc.rs/docs/guide/usage/linter.html",
 )

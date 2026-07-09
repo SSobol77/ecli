@@ -34,6 +34,10 @@ required tools before provisioning, installation or bundling of missing required
 linters/toolchains, executable checks, version probes, and provenance/checksum
 evidence for bundled or GitHub/upstream downloaded binaries, JARs, and
 tarballs. A missing required linter after ECLI Full install is a release blocker.
+The provider-neutral entrypoints are `scripts/provision_f4_linters.py` and
+`scripts/verify_f4_linter_provisioning.py`; they write and verify
+`f4-linter-provisioning-<artifact-entry-id>.json` release evidence without
+changing F4 runtime behavior.
 
 Authoritative files:
 - `artifact-contract.md`

@@ -25,4 +25,11 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("cargo",),
     version_probe=("cargo", "clippy", "--version"),
     delivery_notes="Rust toolchain component (`rustup component add clippy`); bundled with ECLI Full where feasible.",
+    allowed_install_mechanisms=(
+        "toolchain-component",
+        "os-package-manager",
+        "ecli-managed-tools",
+        "nix-derivation",
+    ),
+    source_url="https://doc.rust-lang.org/clippy/",
 )

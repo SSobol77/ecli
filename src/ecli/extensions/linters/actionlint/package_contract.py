@@ -25,4 +25,12 @@ PACKAGE_CONTRACT = PackageContract(
     binary_names=("actionlint",),
     version_probe=("actionlint", "-version"),
     delivery_notes="Standalone Go binary; bundled with ECLI Full where platform packaging allows.",
+    allowed_install_mechanisms=(
+        "os-package-manager",
+        "ecli-managed-tools",
+        "bundled-binary",
+        "verified-upstream-download",
+        "nix-derivation",
+    ),
+    source_url="https://github.com/rhysd/actionlint",
 )

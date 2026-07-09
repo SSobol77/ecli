@@ -99,6 +99,17 @@ blocker and a packaging defect, not normal user workflow. Manual linter
 installation documentation is only for developer checkouts, PyPI/source/minimal
 installs, damaged-install repair, and advanced administration.
 
+The provider-neutral release evidence entrypoints are
+`scripts/provision_f4_linters.py` and
+`scripts/verify_f4_linter_provisioning.py`. The provisioner builds the
+artifact-specific component model and writes
+`f4-linter-provisioning-<artifact-entry-id>.json` evidence. It is safe by
+default: no network, no upstream downloads, no package-manager execution, and
+no unverified binary execution. The verifier enforces the required Full tool
+set for Full-capable entries, validates all 21 evidence files for release-level
+checks, and ignores GitHub-generated source archives because they are outside
+the canonical 21 artifact contract entries.
+
 The PyPI wheel and source distribution entries are constrained by Python
 packaging metadata: they cannot reliably provision Node, Rust, Go, Zig, Java,
 or system binaries. Their release contract must document that limitation
@@ -408,6 +419,8 @@ scripts and release contract tests.
 | `scripts/verify_artifact.py` | Structural SHA256 sidecar verifier; exit-code contract `0`-`5` preserved |
 | `scripts/verify_release_assets.py` | Read-only exact 21 ECLI-owned GitHub Release asset verifier; ignores `.checksums/` only when it is a directory |
 | `scripts/verify_runtime.py` | Cross-artifact launcher validation; exit codes (`0`/`2`/`3`/`4`/`5`/`6`) preserved |
+| `scripts/provision_f4_linters.py` | Provider-neutral F4 linter provisioning planner/evidence writer; dry-run by default, no network/upstream downloads unless explicitly allowed |
+| `scripts/verify_f4_linter_provisioning.py` | Read-only F4 linter provisioning evidence verifier for one artifact or all 21 canonical artifact entries |
 | `scripts/build_pyinstaller_linux.py` | Linux PyInstaller build; prefers `packaging/pyinstaller/ecli.spec` |
 | `scripts/build_and_package_deb.py` | `ecli_<version>_linux_<arch>.deb` via FPM; dependency set preserved |
 | `scripts/build_and_package_rpm.py` | `ecli_<version>_<platform>_<arch>.rpm`; `RPM_PLATFORM_LABEL`/`RPM_DEPENDS` env preserved |

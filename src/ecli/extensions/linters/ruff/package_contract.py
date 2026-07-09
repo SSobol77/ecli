@@ -28,4 +28,13 @@ PACKAGE_CONTRACT = PackageContract(
         "Bundled internally with ECLI (provider_kind=internal); not an "
         "external package dependency for any release artifact."
     ),
+    allowed_install_mechanisms=("bundled-internal",),
+    provenance_requirements=(
+        "artifact-entry-id",
+        "ecli-version",
+        "version-probe",
+        "deterministic-install-log",
+    ),
+    source_url="https://docs.astral.sh/ruff/",
+    checksum_required_for_downloads=False,
 )
