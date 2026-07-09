@@ -106,6 +106,19 @@ LinuxDistroEvidenceStatus = Literal[
     "blocked-evidence-drift",
 ]
 
+LinuxDistroOfficialSourceKind = Literal[
+    "distro-package-index",
+    "distro-package-recipe",
+    "upstream-install-doc",
+    "upstream-release-page",
+]
+
+LinuxDistroVerificationScope = Literal[
+    "package-name-only",
+    "package-name-and-executable",
+    "package-name-executable-and-license",
+]
+
 
 LINUX_MANIFEST_SCHEMA_VERSION = 1
 LINUX_MANIFEST_FILENAME = "f4-linux-tools.json"
@@ -239,6 +252,30 @@ LINUX_ALLOWED_DISTRO_EVIDENCE_STATUSES = frozenset(
         "verified-official-source",
         "blocked-missing-evidence",
         "blocked-evidence-drift",
+    }
+)
+
+LINUX_OFFICIAL_DISTRO_EVIDENCE_SOURCE_TYPES = frozenset(
+    {
+        "official-distro-metadata",
+        "upstream-project-docs",
+    }
+)
+
+LINUX_ALLOWED_OFFICIAL_SOURCE_KINDS = frozenset(
+    {
+        "distro-package-index",
+        "distro-package-recipe",
+        "upstream-install-doc",
+        "upstream-release-page",
+    }
+)
+
+LINUX_ALLOWED_VERIFICATION_SCOPES = frozenset(
+    {
+        "package-name-only",
+        "package-name-and-executable",
+        "package-name-executable-and-license",
     }
 )
 
@@ -388,6 +425,43 @@ DISTRO_EVIDENCE_MANIFEST_FIELDS: tuple[str, ...] = (
     "external_verification_required_for_new_mappings",
     "release_blocking",
     "blocker_reason",
+    "official_source_name",
+    "official_source_url",
+    "official_source_kind",
+    "verification_scope",
+    "verified_package_names",
+    "verified_executable_names",
+    "verification_note",
+)
+
+DISTRO_EVIDENCE_CANONICAL_FIELDS: tuple[str, ...] = (
+    "artifact_entry_id",
+    "source_policy_artifact_entry_id",
+    "distro_family",
+    "tool_id",
+    "package_names",
+    "executable_names",
+    "evidence_record_id",
+)
+
+DISTRO_EVIDENCE_BASELINE_FIELDS: tuple[str, ...] = (
+    "evidence_source",
+    "evidence_source_type",
+    "evidence_status",
+    "evidence_note",
+    "external_verification_required_for_new_mappings",
+    "release_blocking",
+    "blocker_reason",
+)
+
+DISTRO_EVIDENCE_PROMOTION_FIELDS: tuple[str, ...] = (
+    "official_source_name",
+    "official_source_url",
+    "official_source_kind",
+    "verification_scope",
+    "verified_package_names",
+    "verified_executable_names",
+    "verification_note",
 )
 
 
@@ -449,6 +523,13 @@ class LinuxDistroMappingEvidenceRecord(NamedTuple):
     external_verification_required_for_new_mappings: bool
     release_blocking: bool
     blocker_reason: str | None = None
+    official_source_name: str | None = None
+    official_source_url: str | None = None
+    official_source_kind: LinuxDistroOfficialSourceKind | None = None
+    verification_scope: LinuxDistroVerificationScope | None = None
+    verified_package_names: tuple[str, ...] = ()
+    verified_executable_names: tuple[str, ...] = ()
+    verification_note: str | None = None
 
 
 class LinuxToolProvenanceRecord(NamedTuple):
@@ -1041,6 +1122,112 @@ def linux_distro_mapping_evidence_summary_for_artifact(
     }
 
 
+def linux_distro_evidence_promotion_requirements() -> dict[str, tuple[str, ...]]:
+    """Return the official-source fields required to promote distro evidence."""
+    return {
+        "required_fields": DISTRO_EVIDENCE_PROMOTION_FIELDS,
+        "official_source_types": (
+            "official-distro-metadata",
+            "upstream-project-docs",
+        ),
+        "official_source_kinds": (
+            "distro-package-index",
+            "distro-package-recipe",
+            "upstream-install-doc",
+            "upstream-release-page",
+        ),
+        "verification_scopes": (
+            "package-name-only",
+            "package-name-and-executable",
+            "package-name-executable-and-license",
+        ),
+    }
+
+
+def linux_distro_mapping_evidence_promotion_errors(record: Any) -> list[str]:
+    """Return why one distro evidence record cannot be promoted."""
+    data = _distro_evidence_record_mapping(record)
+    if data is None:
+        return ["distro evidence promotion record must be an object"]
+    if data.get("evidence_status") != "verified-official-source":
+        return ["evidence_status must be verified-official-source"]
+    return _verified_official_source_evidence_errors("distro evidence", data)
+
+
+def linux_distro_mapping_evidence_can_promote(record: Any) -> bool:
+    """Return whether one distro evidence record satisfies promotion policy."""
+    return not linux_distro_mapping_evidence_promotion_errors(record)
+
+
+def linux_distro_mapping_evidence_promotion_matrix(
+    root: Path | None = None,
+) -> tuple[dict[str, Any], ...]:
+    """Return promotion-gate state for every generated distro evidence record."""
+    return tuple(
+        _distro_evidence_promotion_matrix_row(record)
+        for record in linux_distro_mapping_evidence_matrix(root)
+    )
+
+
+def linux_distro_mapping_evidence_promotion_summary_for_artifact(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Return promotion-gate counts for one Linux artifact."""
+    canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
+    rows = tuple(
+        _distro_evidence_promotion_matrix_row(record)
+        for record in linux_distro_mapping_evidence_catalog_for_artifact(
+            canonical_id,
+            root,
+        )
+    )
+    return {
+        "artifact_entry_id": canonical_id,
+        "evidence_record_count": len(rows),
+        "promotable_count": sum(1 for row in rows if row["can_promote"]),
+        "baseline_not_promoted_count": sum(
+            1 for row in rows if row["promotion_state"] == "baseline-not-promoted"
+        ),
+        "verified_official_source_count": sum(
+            1 for row in rows if row["evidence_status"] == "verified-official-source"
+        ),
+        "promotion_state_counts": _record_counts(
+            row["promotion_state"] for row in rows
+        ),
+    }
+
+
+def _distro_evidence_promotion_matrix_row(
+    record: LinuxDistroMappingEvidenceRecord,
+) -> dict[str, Any]:
+    errors = linux_distro_mapping_evidence_promotion_errors(record)
+    return {
+        "artifact_entry_id": record.artifact_entry_id,
+        "source_policy_artifact_entry_id": record.source_policy_artifact_entry_id,
+        "tool_id": record.tool_id,
+        "evidence_record_id": record.evidence_record_id,
+        "evidence_source_type": record.evidence_source_type,
+        "evidence_status": record.evidence_status,
+        "can_promote": not errors,
+        "promotion_error_count": len(errors),
+        "promotion_state": _distro_evidence_promotion_state(record, errors),
+    }
+
+
+def _distro_evidence_promotion_state(
+    record: LinuxDistroMappingEvidenceRecord,
+    promotion_errors: list[str],
+) -> str:
+    if record.evidence_status == "current-policy-baseline":
+        return "baseline-not-promoted"
+    if record.evidence_status == "verified-official-source" and not promotion_errors:
+        return "verified-official-source"
+    if record.evidence_status in {"blocked-missing-evidence", "blocked-evidence-drift"}:
+        return "blocked-promotion"
+    return "invalid-promotion"
+
+
 def _approved_distro_mapping_record(
     policy: LinuxToolProvisioningPolicy,
 ) -> LinuxDistroMappingRecord:
@@ -1329,6 +1516,8 @@ def _distro_mapping_evidence_record_to_manifest_fields(
     data = record._asdict()
     data["package_names"] = list(record.package_names)
     data["executable_names"] = list(record.executable_names)
+    data["verified_package_names"] = list(record.verified_package_names)
+    data["verified_executable_names"] = list(record.verified_executable_names)
     return data
 
 
@@ -1543,7 +1732,10 @@ def _distro_mapping_evidence_value_mismatch_errors(
     expected: Mapping[str, Any],
 ) -> list[str]:
     errors: list[str] = []
-    for field in DISTRO_EVIDENCE_MANIFEST_FIELDS:
+    fields = DISTRO_EVIDENCE_CANONICAL_FIELDS
+    if record.get("evidence_status") == "current-policy-baseline":
+        fields = (*fields, *DISTRO_EVIDENCE_BASELINE_FIELDS)
+    for field in fields:
         actual_value = _normalized_distro_evidence_value(field, record.get(field))
         expected_value = _normalized_distro_evidence_value(field, expected.get(field))
         if actual_value != expected_value:
@@ -1554,7 +1746,12 @@ def _distro_mapping_evidence_value_mismatch_errors(
 
 
 def _normalized_distro_evidence_value(field: str, value: Any) -> Any:
-    if field in {"package_names", "executable_names"}:
+    if field in {
+        "package_names",
+        "executable_names",
+        "verified_package_names",
+        "verified_executable_names",
+    }:
         if isinstance(value, list) and all(isinstance(item, str) for item in value):
             return tuple(value)
         if isinstance(value, tuple) and all(isinstance(item, str) for item in value):
@@ -1597,7 +1794,178 @@ def _distro_mapping_evidence_semantic_errors(
     )
     if expected_package_names != expected_policy.package_names:
         errors.append(f"{prefix}: distro_mapping evidence has no OS_PACKAGE_NAMES base")
+    errors.extend(_distro_mapping_evidence_promotion_state_errors(prefix, record))
     return errors
+
+
+def _distro_evidence_record_mapping(record: Any) -> Mapping[str, Any] | None:
+    if isinstance(record, Mapping):
+        return record
+    asdict = getattr(record, "_asdict", None)
+    if callable(asdict):
+        data = asdict()
+        if isinstance(data, Mapping):
+            return data
+    return None
+
+
+def _distro_mapping_evidence_promotion_state_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    status = record.get("evidence_status")
+    if status == "verified-official-source":
+        return _verified_official_source_evidence_errors(
+            f"{prefix}: distro_mapping evidence",
+            record,
+        )
+    if status == "current-policy-baseline":
+        return _current_policy_baseline_evidence_errors(
+            f"{prefix}: distro_mapping evidence",
+            record,
+        )
+    if status in {"blocked-missing-evidence", "blocked-evidence-drift"}:
+        return _blocked_official_evidence_errors(
+            f"{prefix}: distro_mapping evidence",
+            record,
+        )
+    return []
+
+
+def _verified_official_source_evidence_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    source_type = record.get("evidence_source_type")
+    if source_type == "repository-local-policy":
+        errors.append(
+            f"{prefix}: verified-official-source evidence cannot use repository-local-policy"
+        )
+    elif source_type not in LINUX_OFFICIAL_DISTRO_EVIDENCE_SOURCE_TYPES:
+        errors.append(
+            f"{prefix}: verified-official-source evidence requires official source type"
+        )
+    errors.extend(_required_text_field_errors(prefix, record))
+    kind = record.get("official_source_kind")
+    if kind not in LINUX_ALLOWED_OFFICIAL_SOURCE_KINDS:
+        errors.append(f"{prefix}: unknown official_source_kind {kind!r}")
+    scope = record.get("verification_scope")
+    if scope not in LINUX_ALLOWED_VERIFICATION_SCOPES:
+        errors.append(f"{prefix}: unknown verification_scope {scope!r}")
+    errors.extend(_verified_name_field_errors(prefix, record))
+    if record.get("external_verification_required_for_new_mappings") is not False:
+        errors.append(
+            f"{prefix}: verified-official-source evidence must not require external verification for new mappings"
+        )
+    if errors and record.get("release_blocking") is False:
+        errors.append(
+            f"{prefix}: release_blocking false requires complete official-source promotion evidence"
+        )
+    elif not errors and record.get("release_blocking") is not False:
+        errors.append(
+            f"{prefix}: verified-official-source evidence must not be release_blocking"
+        )
+    return errors
+
+
+def _required_text_field_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    for field in ("official_source_name", "official_source_url", "verification_note"):
+        if not _has_text(record.get(field)):
+            errors.append(f"{prefix}: missing {field}")
+    return errors
+
+
+def _verified_name_field_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    verified_packages = _normalized_distro_evidence_value(
+        "verified_package_names",
+        record.get("verified_package_names"),
+    )
+    package_names = _normalized_distro_evidence_value(
+        "package_names",
+        record.get("package_names"),
+    )
+    if not verified_packages:
+        errors.append(f"{prefix}: missing verified_package_names")
+    elif verified_packages != package_names:
+        errors.append(f"{prefix}: verified_package_names differ from package_names")
+
+    verified_executables = _normalized_distro_evidence_value(
+        "verified_executable_names",
+        record.get("verified_executable_names"),
+    )
+    executable_names = _normalized_distro_evidence_value(
+        "executable_names",
+        record.get("executable_names"),
+    )
+    if not verified_executables:
+        errors.append(f"{prefix}: missing verified_executable_names")
+    elif verified_executables != executable_names:
+        errors.append(
+            f"{prefix}: verified_executable_names differ from executable_names"
+        )
+    return errors
+
+
+def _current_policy_baseline_evidence_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    if record.get("evidence_source_type") != "repository-local-policy":
+        errors.append(
+            f"{prefix}: current-policy-baseline evidence must use repository-local-policy"
+        )
+    if record.get("external_verification_required_for_new_mappings") is not True:
+        errors.append(
+            f"{prefix}: current-policy-baseline evidence must require external verification for new mappings"
+        )
+    for field in ("official_source_name", "official_source_url", "verification_note"):
+        if _has_text(record.get(field)):
+            errors.append(
+                f"{prefix}: current-policy-baseline evidence must not claim {field}"
+            )
+    for field in ("official_source_kind", "verification_scope"):
+        value = record.get(field)
+        if value not in (None, ""):
+            errors.append(
+                f"{prefix}: current-policy-baseline evidence must not claim {field}"
+            )
+    for field in ("verified_package_names", "verified_executable_names"):
+        if _normalized_distro_evidence_value(field, record.get(field)):
+            errors.append(
+                f"{prefix}: current-policy-baseline evidence must not claim {field}"
+            )
+    return errors
+
+
+def _blocked_official_evidence_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    if record.get("release_blocking") is not True:
+        errors.append(
+            f"{prefix}: blocked/missing official evidence must be release_blocking"
+        )
+    reason = record.get("blocker_reason")
+    if not _has_text(reason):
+        errors.append(
+            f"{prefix}: blocked/missing official evidence requires blocker_reason"
+        )
+    return errors
+
+
+def _has_text(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
 
 
 def _unexpected_distro_mapping_error(
