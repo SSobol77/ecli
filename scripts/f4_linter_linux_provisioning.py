@@ -76,6 +76,23 @@ LinuxTrustBoundary = Literal[
     "unresolved",
 ]
 
+LinuxDistroFamily = Literal[
+    "debian",
+    "rpm-generic",
+    "opensuse",
+    "arch",
+    "slackware",
+]
+
+LinuxDistroMappingStatus = Literal[
+    "approved-existing-policy",
+    "approved-with-evidence",
+    "blocked-missing-distro-mapping",
+    "blocked-ambiguous-package-name",
+    "blocked-package-not-available",
+    "blocked-unverified",
+]
+
 
 LINUX_MANIFEST_SCHEMA_VERSION = 1
 LINUX_MANIFEST_FILENAME = "f4-linux-tools.json"
@@ -105,6 +122,10 @@ LINUX_ARTIFACT_IDS: tuple[str, ...] = (
     *LINUX_PACKAGE_MANAGER_ARTIFACT_IDS,
     *LINUX_DOCKER_HELPER_ARTIFACT_IDS,
     *LINUX_NIX_ARTIFACT_IDS,
+)
+LINUX_DISTRO_MAPPING_ARTIFACT_IDS: tuple[str, ...] = (
+    *LINUX_PACKAGE_MANAGER_ARTIFACT_IDS,
+    *LINUX_DOCKER_HELPER_ARTIFACT_IDS,
 )
 
 LINUX_ALLOWED_MECHANISMS = frozenset(
@@ -160,6 +181,46 @@ LINUX_ALLOWED_TRUST_BOUNDARIES = frozenset(
         "unresolved",
     }
 )
+
+LINUX_ALLOWED_DISTRO_FAMILIES = frozenset(
+    {
+        "debian",
+        "rpm-generic",
+        "opensuse",
+        "arch",
+        "slackware",
+    }
+)
+
+LINUX_ALLOWED_DISTRO_MAPPING_STATUSES = frozenset(
+    {
+        "approved-existing-policy",
+        "approved-with-evidence",
+        "blocked-missing-distro-mapping",
+        "blocked-ambiguous-package-name",
+        "blocked-package-not-available",
+        "blocked-unverified",
+    }
+)
+
+LINUX_BLOCKED_DISTRO_MAPPING_STATUSES = frozenset(
+    {
+        "blocked-missing-distro-mapping",
+        "blocked-ambiguous-package-name",
+        "blocked-package-not-available",
+        "blocked-unverified",
+    }
+)
+
+DISTRO_FAMILY_BY_ARTIFACT: dict[str, LinuxDistroFamily] = {
+    "deb": "debian",
+    "rpm": "rpm-generic",
+    "opensuse-rpm": "opensuse",
+    "arch-pkgbuild": "arch",
+    "slackware-txz": "slackware",
+    "docker-deb-helper": "debian",
+    "docker-rpm-helper": "rpm-generic",
+}
 
 TRUST_BOUNDARY_BY_PROVENANCE_STATUS: dict[str, LinuxTrustBoundary] = {
     "internal-bundled": "ecli-source-tree",
@@ -264,6 +325,23 @@ PROVENANCE_MANIFEST_FIELDS: tuple[str, ...] = (
     "evidence_fields_required",
 )
 
+DISTRO_MAPPING_MANIFEST_FIELDS: tuple[str, ...] = (
+    "artifact_entry_id",
+    "distro_family",
+    "tool_id",
+    "package_names",
+    "executable_names",
+    "provenance_status",
+    "trust_boundary",
+    "mapping_status",
+    "evidence_source",
+    "evidence_url",
+    "evidence_note",
+    "release_blocking",
+    "blocker_reason",
+    "source_policy_artifact_entry_id",
+)
+
 
 class LinuxToolProvisioningPolicy(NamedTuple):
     """Linux provisioning policy for one required tool and artifact."""
@@ -284,6 +362,25 @@ class LinuxToolProvisioningPolicy(NamedTuple):
     pinned_version: str | None = None
     release_blocking: bool = False
     blocker_reason: str | None = None
+
+
+class LinuxDistroMappingRecord(NamedTuple):
+    """Auditable distro/package-manager mapping state for one Linux tool."""
+
+    artifact_entry_id: str
+    distro_family: LinuxDistroFamily
+    tool_id: str
+    package_names: tuple[str, ...]
+    executable_names: tuple[str, ...]
+    provenance_status: LinuxProvenanceStatus
+    trust_boundary: LinuxTrustBoundary
+    mapping_status: LinuxDistroMappingStatus
+    evidence_note: str
+    release_blocking: bool
+    evidence_source: str | None = None
+    evidence_url: str | None = None
+    blocker_reason: str | None = None
+    source_policy_artifact_entry_id: str | None = None
 
 
 class LinuxToolProvenanceRecord(NamedTuple):
@@ -678,6 +775,10 @@ def linux_provenance_summary_for_artifact(
         "trust_boundary_counts": _record_counts(
             record.trust_boundary for record in records
         ),
+        "distro_mapping_status_counts": linux_distro_mapping_summary_for_artifact(
+            canonical_id,
+            root,
+        )["mapping_status_counts"],
     }
 
 
@@ -686,6 +787,144 @@ def _record_counts(values: tuple[str, ...] | Any) -> dict[str, int]:
     for value in values:
         counts[value] = counts.get(value, 0) + 1
     return counts
+
+
+def linux_distro_mapping_for_policy(
+    policy: LinuxToolProvisioningPolicy,
+) -> LinuxDistroMappingRecord | None:
+    """Return distro/package-manager mapping evidence for one Linux policy."""
+    if policy.artifact_entry_id not in LINUX_DISTRO_MAPPING_ARTIFACT_IDS:
+        return None
+    if policy.mechanism == "os-package-manager":
+        return _approved_distro_mapping_record(policy)
+    if _provenance_status_for_policy(policy) == "blocked-missing-distro-mapping":
+        return _blocked_distro_mapping_record(policy)
+    return None
+
+
+def linux_distro_mapping_catalog_for_artifact(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> tuple[LinuxDistroMappingRecord, ...]:
+    """Return distro mapping records for one Linux package-manager artifact."""
+    canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
+    if canonical_id not in LINUX_DISTRO_MAPPING_ARTIFACT_IDS:
+        return ()
+    records: list[LinuxDistroMappingRecord] = []
+    for policy in linux_provisioning_policy_for_artifact(canonical_id, root):
+        record = linux_distro_mapping_for_policy(policy)
+        if record is not None:
+            records.append(record)
+    return tuple(records)
+
+
+def linux_distro_mapping_matrix(
+    root: Path | None = None,
+) -> tuple[LinuxDistroMappingRecord, ...]:
+    """Return the complete Linux package-manager distro mapping matrix."""
+    required_contracts = _required_contracts(root)
+    records: list[LinuxDistroMappingRecord] = []
+    for artifact_id in LINUX_DISTRO_MAPPING_ARTIFACT_IDS:
+        policies = _linux_policies_for_required_contracts(
+            _linux_artifact_entry_id(artifact_id, root),
+            required_contracts,
+        )
+        for policy in policies:
+            record = linux_distro_mapping_for_policy(policy)
+            if record is not None:
+                records.append(record)
+    return tuple(records)
+
+
+def linux_distro_mapping_summary_for_artifact(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> dict[str, Any]:
+    """Return deterministic distro mapping counts for one Linux artifact."""
+    canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
+    records = linux_distro_mapping_catalog_for_artifact(canonical_id, root)
+    blocked = tuple(record for record in records if record.release_blocking)
+    approved = tuple(record for record in records if not record.release_blocking)
+    return {
+        "artifact_entry_id": canonical_id,
+        "distro_mapping_count": len(records),
+        "approved_count": len(approved),
+        "blocked_count": len(blocked),
+        "mapping_status_counts": _record_counts(
+            record.mapping_status for record in records
+        ),
+        "distro_family_counts": _record_counts(
+            record.distro_family for record in records
+        ),
+    }
+
+
+def linux_unmapped_package_manager_tools(
+    artifact_entry_id: str,
+    root: Path | None = None,
+) -> tuple[LinuxDistroMappingRecord, ...]:
+    """Return package-manager tools blocked by missing distro mapping evidence."""
+    return tuple(
+        record
+        for record in linux_distro_mapping_catalog_for_artifact(
+            artifact_entry_id,
+            root,
+        )
+        if record.mapping_status in LINUX_BLOCKED_DISTRO_MAPPING_STATUSES
+    )
+
+
+def _approved_distro_mapping_record(
+    policy: LinuxToolProvisioningPolicy,
+) -> LinuxDistroMappingRecord:
+    source_artifact_id = _package_policy_artifact_id(policy.artifact_entry_id)
+    return LinuxDistroMappingRecord(
+        artifact_entry_id=policy.artifact_entry_id,
+        distro_family=DISTRO_FAMILY_BY_ARTIFACT[policy.artifact_entry_id],
+        tool_id=policy.tool_id,
+        package_names=policy.package_names,
+        executable_names=policy.executable_names,
+        provenance_status="distro-signed-package",
+        trust_boundary="distro-package-manager",
+        mapping_status="approved-existing-policy",
+        evidence_source="OS_PACKAGE_NAMES",
+        evidence_url=None,
+        evidence_note=(
+            "Repository-local OS_PACKAGE_NAMES policy intentionally maps this "
+            f"Full-required tool to {source_artifact_id} package metadata."
+        ),
+        release_blocking=False,
+        blocker_reason=None,
+        source_policy_artifact_entry_id=source_artifact_id,
+    )
+
+
+def _blocked_distro_mapping_record(
+    policy: LinuxToolProvisioningPolicy,
+) -> LinuxDistroMappingRecord:
+    source_artifact_id = _package_policy_artifact_id(policy.artifact_entry_id)
+    return LinuxDistroMappingRecord(
+        artifact_entry_id=policy.artifact_entry_id,
+        distro_family=DISTRO_FAMILY_BY_ARTIFACT[policy.artifact_entry_id],
+        tool_id=policy.tool_id,
+        package_names=(),
+        executable_names=policy.executable_names,
+        provenance_status="blocked-missing-distro-mapping",
+        trust_boundary="unresolved",
+        mapping_status="blocked-missing-distro-mapping",
+        evidence_source="OS_PACKAGE_NAMES",
+        evidence_url=None,
+        evidence_note=(
+            "No repository-local OS_PACKAGE_NAMES entry exists for this "
+            f"Full-required tool in the {source_artifact_id} policy."
+        ),
+        release_blocking=True,
+        blocker_reason=_provenance_blocker_reason(
+            "blocked-missing-distro-mapping",
+            policy,
+        ),
+        source_policy_artifact_entry_id=source_artifact_id,
+    )
 
 
 def _provenance_status_for_policy(
@@ -856,6 +1095,15 @@ def _policy_to_manifest_item(
     data["version_probe"] = list(policy.version_probe)
     data["target_dir"] = str(_tool_target_dir(target_dir, policy))
     data["evidence_dir"] = str(_safe_base_dir(evidence_dir))
+    mapping_record = linux_distro_mapping_for_policy(policy)
+    if mapping_record is not None:
+        data["distro_mapping"] = _distro_mapping_record_to_manifest_fields(
+            mapping_record
+        )
+        evidence_fields = list(data["evidence_fields_required"])
+        if "distro_mapping" not in evidence_fields:
+            evidence_fields.append("distro_mapping")
+        data["evidence_fields_required"] = evidence_fields
     return data
 
 
@@ -865,6 +1113,15 @@ def _provenance_record_to_manifest_fields(
     data = record._asdict()
     data["package_names"] = list(record.package_names)
     data["evidence_fields_required"] = list(record.evidence_fields_required)
+    return data
+
+
+def _distro_mapping_record_to_manifest_fields(
+    record: LinuxDistroMappingRecord,
+) -> dict[str, Any]:
+    data = record._asdict()
+    data["package_names"] = list(record.package_names)
+    data["executable_names"] = list(record.executable_names)
     return data
 
 
@@ -984,9 +1241,116 @@ def verify_linux_provenance_record(
     prefix = str(record.get("tool_id", expected_policy.tool_id))
     expected_record = linux_provenance_record_for_policy(expected_policy)
     expected = _provenance_record_to_manifest_fields(expected_record)
+    if linux_distro_mapping_for_policy(expected_policy) is not None:
+        expected["evidence_fields_required"].append("distro_mapping")
     errors = _provenance_required_field_errors(prefix, record)
     errors.extend(_provenance_value_mismatch_errors(prefix, record, expected))
     errors.extend(_provenance_semantic_errors(prefix, record, expected_policy))
+    return errors
+
+
+def verify_linux_distro_mapping_record(
+    record: Any,
+    expected_policy: LinuxToolProvisioningPolicy,
+) -> list[str]:
+    """Return validation errors for one distro mapping record."""
+    prefix = expected_policy.tool_id
+    expected_record = linux_distro_mapping_for_policy(expected_policy)
+    if record is None:
+        if expected_record is not None:
+            return [f"{prefix}: missing distro_mapping"]
+        return []
+    if not isinstance(record, Mapping):
+        return [f"{prefix}: distro_mapping must be an object"]
+    if expected_record is None:
+        return [_unexpected_distro_mapping_error(prefix, expected_policy)]
+
+    expected = _distro_mapping_record_to_manifest_fields(expected_record)
+    errors = _distro_mapping_required_field_errors(prefix, record)
+    errors.extend(_distro_mapping_value_mismatch_errors(prefix, record, expected))
+    errors.extend(_distro_mapping_semantic_errors(prefix, record, expected_policy))
+    return errors
+
+
+def _unexpected_distro_mapping_error(
+    prefix: str,
+    expected_policy: LinuxToolProvisioningPolicy,
+) -> str:
+    if expected_policy.artifact_family == "self-contained":
+        return f"{prefix}: self-contained artifact must not declare distro_mapping"
+    if expected_policy.artifact_family == "nix-policy":
+        return f"{prefix}: Nix artifact must not declare distro_mapping"
+    return (
+        f"{prefix}: unexpected distro_mapping for mechanism {expected_policy.mechanism}"
+    )
+
+
+def _distro_mapping_required_field_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    distro_family = record.get("distro_family")
+    mapping_status = record.get("mapping_status")
+    if distro_family not in LINUX_ALLOWED_DISTRO_FAMILIES:
+        errors.append(f"{prefix}: unknown distro_family {distro_family!r}")
+    if mapping_status not in LINUX_ALLOWED_DISTRO_MAPPING_STATUSES:
+        errors.append(f"{prefix}: unknown mapping_status {mapping_status!r}")
+    return errors
+
+
+def _distro_mapping_value_mismatch_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+    expected: Mapping[str, Any],
+) -> list[str]:
+    errors: list[str] = []
+    for field in DISTRO_MAPPING_MANIFEST_FIELDS:
+        actual_value = _normalized_distro_mapping_value(field, record.get(field))
+        expected_value = _normalized_distro_mapping_value(field, expected.get(field))
+        if actual_value != expected_value:
+            errors.append(
+                f"{prefix}: distro_mapping {field} differs from canonical mapping"
+            )
+    return errors
+
+
+def _normalized_distro_mapping_value(field: str, value: Any) -> Any:
+    if field in {"package_names", "executable_names"}:
+        if isinstance(value, list) and all(isinstance(item, str) for item in value):
+            return tuple(value)
+        if isinstance(value, tuple) and all(isinstance(item, str) for item in value):
+            return value
+        return ()
+    return value
+
+
+def _distro_mapping_semantic_errors(
+    prefix: str,
+    record: Mapping[str, Any],
+    expected_policy: LinuxToolProvisioningPolicy,
+) -> list[str]:
+    errors: list[str] = []
+    if record.get("artifact_entry_id") != expected_policy.artifact_entry_id:
+        errors.append(f"{prefix}: distro_mapping artifact_entry_id mismatch")
+    if expected_policy.artifact_entry_id in PACKAGE_POLICY_SOURCE_BY_HELPER:
+        expected_source = PACKAGE_POLICY_SOURCE_BY_HELPER[
+            expected_policy.artifact_entry_id
+        ]
+        if record.get("source_policy_artifact_entry_id") != expected_source:
+            errors.append(
+                f"{prefix}: docker helper distro_mapping must inherit {expected_source}"
+            )
+    status = record.get("mapping_status")
+    if status in {"approved-existing-policy", "approved-with-evidence"}:
+        if not record.get("package_names"):
+            errors.append(f"{prefix}: approved distro_mapping requires package_names")
+    if status in LINUX_BLOCKED_DISTRO_MAPPING_STATUSES:
+        if record.get("release_blocking") is not True:
+            errors.append(f"{prefix}: blocked distro_mapping must be release_blocking")
+        reason = record.get("blocker_reason")
+        if not isinstance(reason, str) or not reason.strip():
+            errors.append(f"{prefix}: blocked distro_mapping requires blocker_reason")
     return errors
 
 
@@ -1323,6 +1687,12 @@ def _tool_item_errors(
     if expected_policy is not None:
         errors.extend(_tool_policy_mismatch_errors(prefix, item, expected_policy))
         errors.extend(verify_linux_provenance_record(item, expected_policy))
+        errors.extend(
+            verify_linux_distro_mapping_record(
+                item.get("distro_mapping"),
+                expected_policy,
+            )
+        )
     if (
         not isinstance(item.get("executable_names"), list)
         or not item["executable_names"]
