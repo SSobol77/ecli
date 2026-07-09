@@ -102,6 +102,35 @@ def _evidence_record(records: tuple[Any, ...], tool_id: str) -> Any:
     raise AssertionError(f"missing distro evidence record: {tool_id}")
 
 
+def _manifest_distro_evidence(
+    manifest: dict[str, Any],
+    tool_id: str = "yamllint",
+) -> dict[str, Any]:
+    return _manifest_tool(manifest, tool_id)["distro_mapping"]["evidence"]
+
+
+def _complete_verified_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
+    promoted = dict(evidence)
+    promoted.update(
+        {
+            "evidence_source": "synthetic-official-source",
+            "evidence_source_type": "official-distro-metadata",
+            "evidence_status": "verified-official-source",
+            "official_source_name": "synthetic distro package index",
+            "official_source_url": "synthetic-official-source",
+            "official_source_kind": "distro-package-index",
+            "verification_scope": "package-name-and-executable",
+            "verified_package_names": list(evidence["package_names"]),
+            "verified_executable_names": list(evidence["executable_names"]),
+            "verification_note": "Synthetic promotion record for gate validation.",
+            "external_verification_required_for_new_mappings": False,
+            "release_blocking": False,
+            "blocker_reason": None,
+        }
+    )
+    return promoted
+
+
 def test_linux_artifact_scope_is_exactly_active_linux_surfaces(
     linux_helper: ModuleType,
 ) -> None:
@@ -259,6 +288,105 @@ def test_existing_os_package_policy_has_approved_distro_mapping_evidence(
     assert yamllint_evidence.evidence_source_type == "repository-local-policy"
     assert yamllint_evidence.evidence_status == "current-policy-baseline"
     assert yamllint_evidence.package_names == yamllint.package_names
+
+
+def test_generated_distro_evidence_preserves_repository_local_baseline(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_distro_evidence(manifest)
+
+    assert evidence["evidence_source"] == "OS_PACKAGE_NAMES"
+    assert evidence["evidence_source_type"] == "repository-local-policy"
+    assert evidence["evidence_status"] == "current-policy-baseline"
+    assert evidence["external_verification_required_for_new_mappings"] is True
+    assert evidence["release_blocking"] is False
+    for field in (
+        "official_source_name",
+        "official_source_url",
+        "official_source_kind",
+        "verification_scope",
+        "verification_note",
+    ):
+        assert evidence.get(field) in (None, "")
+    assert evidence.get("verified_package_names") in (None, [])
+    assert evidence.get("verified_executable_names") in (None, [])
+    assert linux_helper.verify_linux_provisioning_manifest(manifest) == []
+
+
+def test_all_generated_linux_manifests_still_verify_with_baseline_evidence(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    for artifact_id in LINUX_ARTIFACT_IDS:
+        manifest = _build_manifest(linux_helper, tmp_path, artifact_id)
+
+        assert linux_helper.verify_linux_provisioning_manifest(manifest) == []
+
+
+def test_distro_evidence_promotion_requirements_are_explicit(
+    linux_helper: ModuleType,
+) -> None:
+    requirements = linux_helper.linux_distro_evidence_promotion_requirements()
+
+    assert set(requirements["required_fields"]) == {
+        "official_source_name",
+        "official_source_url",
+        "official_source_kind",
+        "verification_scope",
+        "verified_package_names",
+        "verified_executable_names",
+        "verification_note",
+    }
+    assert set(requirements["official_source_types"]) == {
+        "official-distro-metadata",
+        "upstream-project-docs",
+    }
+    assert set(requirements["official_source_kinds"]) == {
+        "distro-package-index",
+        "distro-package-recipe",
+        "upstream-install-doc",
+        "upstream-release-page",
+    }
+    assert set(requirements["verification_scopes"]) == {
+        "package-name-only",
+        "package-name-and-executable",
+        "package-name-executable-and-license",
+    }
+
+
+def test_generated_baseline_evidence_records_are_not_promotable(
+    linux_helper: ModuleType,
+) -> None:
+    matrix = linux_helper.linux_distro_mapping_evidence_matrix()
+    promotion_matrix = linux_helper.linux_distro_mapping_evidence_promotion_matrix()
+
+    assert matrix
+    assert len(promotion_matrix) == len(matrix)
+    assert all(record.evidence_status == "current-policy-baseline" for record in matrix)
+    assert all(
+        not linux_helper.linux_distro_mapping_evidence_can_promote(record)
+        for record in matrix
+    )
+    assert all(
+        row["promotion_state"] == "baseline-not-promoted" for row in promotion_matrix
+    )
+    assert all(row["can_promote"] is False for row in promotion_matrix)
+
+
+def test_complete_synthetic_verified_official_evidence_is_promotable(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+
+    assert linux_helper.linux_distro_mapping_evidence_promotion_errors(evidence) == []
+    assert linux_helper.linux_distro_mapping_evidence_can_promote(evidence) is True
+
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
+    assert linux_helper.verify_linux_provisioning_manifest(manifest) == []
 
 
 def test_repository_local_evidence_exactly_mirrors_os_package_names(
@@ -623,18 +751,221 @@ def test_manifest_verifier_rejects_missing_evidence_on_approved_distro_mapping(
     )
 
 
-def test_manifest_verifier_rejects_tampered_distro_evidence_status(
+def test_manifest_verifier_rejects_verified_evidence_without_official_source_name(
     linux_helper: ModuleType,
     tmp_path: Path,
 ) -> None:
     manifest = _build_manifest(linux_helper, tmp_path, "deb")
-    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
-    evidence["evidence_status"] = "verified-official-source"
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+    evidence["official_source_name"] = ""
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
 
     errors = linux_helper.verify_linux_provisioning_manifest(manifest)
 
     assert any(
-        "yamllint: distro_mapping evidence evidence_status differs" in error
+        "yamllint: distro_mapping evidence: missing official_source_name" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_verified_evidence_without_official_source_url(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+    evidence["official_source_url"] = None
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: missing official_source_url" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_verified_evidence_with_repository_local_source_type(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+    evidence["evidence_source_type"] = "repository-local-policy"
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: verified-official-source evidence cannot use repository-local-policy"
+        in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_verified_evidence_with_unknown_source_kind(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+    evidence["official_source_kind"] = "fabricated-kind"
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: unknown official_source_kind 'fabricated-kind'"
+        in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_verified_evidence_with_unknown_verification_scope(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+    evidence["verification_scope"] = "fabricated-scope"
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: unknown verification_scope 'fabricated-scope'"
+        in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_verified_evidence_with_mismatched_package_names(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+    evidence["verified_package_names"] = ["wrong-package"]
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: verified_package_names differ from package_names"
+        in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_verified_evidence_with_mismatched_executable_names(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+    evidence["verified_executable_names"] = ["wrong-executable"]
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: verified_executable_names differ from executable_names"
+        in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_verified_evidence_without_verification_note(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+    evidence["verification_note"] = " "
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: missing verification_note" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_verified_evidence_requiring_external_verification(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+    evidence["external_verification_required_for_new_mappings"] = True
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: verified-official-source evidence must not require external verification"
+        in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_current_baseline_without_external_verification(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    _manifest_distro_evidence(manifest)[
+        "external_verification_required_for_new_mappings"
+    ] = False
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: current-policy-baseline evidence must require external verification"
+        in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_current_baseline_with_official_source_claims(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_distro_evidence(manifest)
+    evidence["official_source_name"] = "synthetic distro package index"
+    evidence["official_source_url"] = "synthetic-official-source"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: current-policy-baseline evidence must not claim official_source_name"
+        in error
+        for error in errors
+    )
+    assert any(
+        "yamllint: distro_mapping evidence: current-policy-baseline evidence must not claim official_source_url"
+        in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_blocked_missing_official_evidence_not_blocking(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _complete_verified_evidence(_manifest_distro_evidence(manifest))
+    evidence["evidence_status"] = "blocked-missing-evidence"
+    evidence["release_blocking"] = False
+    _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"] = evidence
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping evidence: blocked/missing official evidence must be release_blocking"
+        in error
         for error in errors
     )
 
@@ -644,7 +975,7 @@ def test_manifest_verifier_rejects_unknown_distro_evidence_status(
     tmp_path: Path,
 ) -> None:
     manifest = _build_manifest(linux_helper, tmp_path, "deb")
-    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence = _manifest_distro_evidence(manifest)
     evidence["evidence_status"] = "fabricated"
 
     errors = linux_helper.verify_linux_provisioning_manifest(manifest)
@@ -654,28 +985,12 @@ def test_manifest_verifier_rejects_unknown_distro_evidence_status(
     )
 
 
-def test_manifest_verifier_rejects_tampered_distro_evidence_source_type(
-    linux_helper: ModuleType,
-    tmp_path: Path,
-) -> None:
-    manifest = _build_manifest(linux_helper, tmp_path, "deb")
-    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
-    evidence["evidence_source_type"] = "official-distro-metadata"
-
-    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
-
-    assert any(
-        "yamllint: distro_mapping evidence evidence_source_type differs" in error
-        for error in errors
-    )
-
-
 def test_manifest_verifier_rejects_unknown_distro_evidence_source_type(
     linux_helper: ModuleType,
     tmp_path: Path,
 ) -> None:
     manifest = _build_manifest(linux_helper, tmp_path, "deb")
-    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence = _manifest_distro_evidence(manifest)
     evidence["evidence_source_type"] = "fabricated"
 
     errors = linux_helper.verify_linux_provisioning_manifest(manifest)
@@ -691,7 +1006,7 @@ def test_manifest_verifier_rejects_tampered_distro_evidence_packages(
     tmp_path: Path,
 ) -> None:
     manifest = _build_manifest(linux_helper, tmp_path, "deb")
-    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence = _manifest_distro_evidence(manifest)
     evidence["package_names"] = ["wrong-package"]
 
     errors = linux_helper.verify_linux_provisioning_manifest(manifest)
@@ -707,7 +1022,7 @@ def test_manifest_verifier_rejects_distro_evidence_artifact_mismatch(
     tmp_path: Path,
 ) -> None:
     manifest = _build_manifest(linux_helper, tmp_path, "deb")
-    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence = _manifest_distro_evidence(manifest)
     evidence["artifact_entry_id"] = "rpm"
 
     errors = linux_helper.verify_linux_provisioning_manifest(manifest)
@@ -723,7 +1038,7 @@ def test_manifest_verifier_rejects_distro_evidence_source_policy_mismatch(
     tmp_path: Path,
 ) -> None:
     manifest = _build_manifest(linux_helper, tmp_path, "deb")
-    evidence = _manifest_tool(manifest, "yamllint")["distro_mapping"]["evidence"]
+    evidence = _manifest_distro_evidence(manifest)
     evidence["source_policy_artifact_entry_id"] = "rpm"
 
     errors = linux_helper.verify_linux_provisioning_manifest(manifest)
@@ -1148,6 +1463,9 @@ def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
     evidence_summary = linux_helper.linux_distro_mapping_evidence_summary_for_artifact(
         "deb"
     )
+    promotion_summary = (
+        linux_helper.linux_distro_mapping_evidence_promotion_summary_for_artifact("deb")
+    )
     docker_summary = linux_helper.linux_distro_mapping_summary_for_artifact(
         "docker-deb-helper"
     )
@@ -1156,8 +1474,18 @@ def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
             "docker-deb-helper"
         )
     )
+    docker_promotion_summary = (
+        linux_helper.linux_distro_mapping_evidence_promotion_summary_for_artifact(
+            "docker-deb-helper"
+        )
+    )
     tarball_evidence_summary = (
         linux_helper.linux_distro_mapping_evidence_summary_for_artifact("linux-tarball")
+    )
+    tarball_promotion_summary = (
+        linux_helper.linux_distro_mapping_evidence_promotion_summary_for_artifact(
+            "linux-tarball"
+        )
     )
 
     assert tarball_blockers
@@ -1197,6 +1525,19 @@ def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
         == (evidence_summary["evidence_status_counts"])
     )
     assert (
+        promotion_summary["evidence_record_count"]
+        == evidence_summary["evidence_record_count"]
+    )
+    assert promotion_summary["promotable_count"] == 0
+    assert (
+        promotion_summary["baseline_not_promoted_count"]
+        == (evidence_summary["evidence_record_count"])
+    )
+    assert promotion_summary["verified_official_source_count"] == 0
+    assert promotion_summary["promotion_state_counts"] == {
+        "baseline-not-promoted": evidence_summary["evidence_record_count"]
+    }
+    assert (
         docker_summary["mapping_status_counts"]
         == (mapping_summary["mapping_status_counts"])
     )
@@ -1204,7 +1545,12 @@ def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
         docker_evidence_summary["evidence_status_counts"]
         == (evidence_summary["evidence_status_counts"])
     )
+    assert (
+        docker_promotion_summary["promotion_state_counts"]
+        == (promotion_summary["promotion_state_counts"])
+    )
     assert tarball_evidence_summary["evidence_record_count"] == 0
+    assert tarball_promotion_summary["evidence_record_count"] == 0
 
 
 def test_linux_provision_mode_writes_manifest_and_fails_on_blockers(
