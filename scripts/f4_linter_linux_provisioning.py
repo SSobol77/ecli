@@ -382,6 +382,34 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
         "release_blocking": False,
         "blocker_reason": None,
     },
+    ("deb", "cppcheck"): {
+        "evidence_source": "Debian official package metadata for cppcheck",
+        "evidence_source_type": "official-distro-metadata",
+        "evidence_status": "verified-official-source",
+        "evidence_note": (
+            "Verified against official Debian package metadata "
+            "https://packages.debian.org/cppcheck, filelist metadata "
+            "https://packages.debian.org/sid/amd64/cppcheck/filelist, and "
+            "manpage metadata "
+            "https://manpages.debian.org/unstable/cppcheck/cppcheck.1.en.html "
+            "for the existing cppcheck package/executable mapping."
+        ),
+        "official_source_name": "Debian Package Search: cppcheck",
+        "official_source_url": "https://packages.debian.org/cppcheck",
+        "official_source_kind": "distro-package-index",
+        "verification_scope": "package-name-and-executable",
+        "verification_note": (
+            "Verified against official Debian package metadata "
+            "https://packages.debian.org/cppcheck, filelist metadata "
+            "https://packages.debian.org/sid/amd64/cppcheck/filelist, and "
+            "manpage metadata "
+            "https://manpages.debian.org/unstable/cppcheck/cppcheck.1.en.html: "
+            "package name cppcheck and executable cppcheck."
+        ),
+        "external_verification_required_for_new_mappings": False,
+        "release_blocking": False,
+        "blocker_reason": None,
+    },
 }
 
 OS_PACKAGE_NAMES: dict[str, dict[str, tuple[str, ...]]] = {
