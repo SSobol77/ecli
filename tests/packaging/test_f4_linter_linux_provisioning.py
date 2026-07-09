@@ -81,6 +81,13 @@ def _manifest_tool(manifest: dict[str, Any], tool_id: str) -> dict[str, Any]:
     raise AssertionError(f"missing manifest tool: {tool_id}")
 
 
+def _provenance_record(records: tuple[Any, ...], tool_id: str) -> Any:
+    for record in records:
+        if record.tool_id == tool_id:
+            return record
+    raise AssertionError(f"missing provenance record: {tool_id}")
+
+
 def test_linux_artifact_scope_is_exactly_active_linux_surfaces(
     linux_helper: ModuleType,
 ) -> None:
@@ -92,6 +99,9 @@ def test_linux_artifact_scope_is_exactly_active_linux_surfaces(
     assert linux_ids == LINUX_ARTIFACT_IDS
     assert linux_helper.linux_full_artifact_ids() == LINUX_ARTIFACT_IDS
     assert not (set(linux_ids) & non_linux_ids)
+    assert {
+        record.artifact_entry_id for record in linux_helper.linux_provenance_matrix()
+    } == set(LINUX_ARTIFACT_IDS)
 
 
 def test_every_full_required_tool_has_linux_policy_for_every_linux_artifact(
@@ -108,6 +118,50 @@ def test_every_full_required_tool_has_linux_policy_for_every_linux_artifact(
             if policy.mechanism == "blocked-missing-provenance":
                 assert policy.release_blocking is True
                 assert policy.blocker_reason
+
+
+def test_every_full_required_tool_has_linux_provenance_for_every_linux_artifact(
+    linux_helper: ModuleType,
+) -> None:
+    required = set(required_full_tool_ids(load_linter_tool_contracts()))
+    matrix = linux_helper.linux_provenance_matrix()
+
+    assert len(matrix) == len(LINUX_ARTIFACT_IDS) * len(required)
+    for artifact_id in LINUX_ARTIFACT_IDS:
+        records = linux_helper.linux_provenance_catalog_for_artifact(artifact_id)
+
+        assert {record.tool_id for record in records} == required
+        assert {record.artifact_entry_id for record in records} == {artifact_id}
+
+
+def test_linux_provenance_statuses_match_current_policy_taxonomy(
+    linux_helper: ModuleType,
+) -> None:
+    deb = linux_helper.linux_provenance_catalog_for_artifact("deb")
+    nix = linux_helper.linux_provenance_catalog_for_artifact("nix-flake")
+    tarball = linux_helper.linux_provenance_catalog_for_artifact("linux-tarball")
+
+    ruff = _provenance_record(deb, "ruff")
+    yamllint = _provenance_record(deb, "yamllint")
+    cargo_clippy = _provenance_record(deb, "cargo-clippy")
+    unmapped = _provenance_record(deb, "biome")
+
+    assert ruff.provenance_status == "internal-bundled"
+    assert ruff.trust_boundary == "ecli-source-tree"
+    assert yamllint.provenance_status == "distro-signed-package"
+    assert yamllint.trust_boundary == "distro-package-manager"
+    assert yamllint.package_names == ("yamllint",)
+    assert cargo_clippy.provenance_status == "toolchain-component"
+    assert cargo_clippy.trust_boundary == "rust-toolchain"
+    assert unmapped.provenance_status == "blocked-missing-distro-mapping"
+    assert unmapped.release_blocking is True
+    assert "distro package" in str(unmapped.blocker_reason)
+    assert {record.provenance_status for record in nix if record.tool_id != "ruff"} == {
+        "nix-derivation"
+    }
+    assert {
+        record.provenance_status for record in tarball if record.tool_id != "ruff"
+    } == {"blocked-missing-version-pin"}
 
 
 def test_manifest_generation_is_deterministic_and_paths_are_contained(
@@ -138,6 +192,8 @@ def test_manifest_generation_is_deterministic_and_paths_are_contained(
     evidence_dir = Path(first["evidence_dir"])
     assert Path(first["manifest_path"]).relative_to(target_dir)
     for tool in first["tools"]:
+        assert isinstance(tool["provenance_status"], str)
+        assert isinstance(tool["trust_boundary"], str)
         assert Path(tool["target_dir"]).relative_to(target_dir)
         assert Path(tool["evidence_dir"]).relative_to(evidence_dir)
 
@@ -230,6 +286,116 @@ def test_manifest_verifier_rejects_tampered_os_package_names(
     errors = linux_helper.verify_linux_provisioning_manifest(manifest)
 
     assert any("yamllint: package_names differ" in error for error in errors)
+
+
+def test_manifest_verifier_rejects_tampered_provenance_status(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    _manifest_tool(manifest, "yamllint")["provenance_status"] = "internal-bundled"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any("yamllint: provenance_status differs" in error for error in errors)
+    assert any(
+        "yamllint: provenance_status is inconsistent with mechanism" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_tampered_trust_boundary(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    _manifest_tool(manifest, "yamllint")["trust_boundary"] = "nix-store"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any("yamllint: trust_boundary differs" in error for error in errors)
+    assert any(
+        "yamllint: trust_boundary is inconsistent with provenance_status" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_distro_provenance_without_packages(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    _manifest_tool(manifest, "yamllint")["package_names"] = []
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro-signed-package provenance requires package_names" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_pinned_upstream_without_checksum(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    tool = _manifest_tool(manifest, "yamllint")
+    tool["provenance_status"] = "pinned-upstream-artifact"
+    tool["trust_boundary"] = "upstream-release"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: pinned-upstream-artifact requires checksum" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_blocked_provenance_without_release_blocking(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "linux-tarball")
+    _manifest_tool(manifest, "biome")["release_blocking"] = False
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "biome: blocked provenance must be release_blocking" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_blocked_provenance_without_reason(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "linux-tarball")
+    _manifest_tool(manifest, "biome")["blocker_reason"] = None
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "biome: blocked provenance requires blocker_reason" in error for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_fabricated_provenance_material(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    tool = _manifest_tool(manifest, "yamllint")
+    tool["source_url"] = "https://example.invalid/yamllint"
+    tool["pinned_version"] = "999.0"
+    tool["checksum"] = "00" * 32
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any("yamllint: source_url differs" in error for error in errors)
+    assert any("yamllint: pinned_version differs" in error for error in errors)
+    assert any("yamllint: checksum differs" in error for error in errors)
 
 
 def test_manifest_verifier_rejects_tampered_release_blocking_summary(
@@ -412,6 +578,31 @@ def test_nix_artifacts_are_declarative_only(
         assert manifest["nix_policy"]["imperative_upstream_download"] is False
 
 
+def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
+    linux_helper: ModuleType,
+) -> None:
+    tarball_blockers = linux_helper.linux_release_blocking_provenance_items(
+        "linux-tarball"
+    )
+    nix_blockers = linux_helper.linux_release_blocking_provenance_items("nix-flake")
+    deb_blockers = linux_helper.linux_release_blocking_provenance_items("deb")
+    deb_summary = linux_helper.linux_provenance_summary_for_artifact("deb")
+
+    assert tarball_blockers
+    assert {record.tool_id for record in tarball_blockers} == (
+        set(required_full_tool_ids(load_linter_tool_contracts())) - {"ruff"}
+    )
+    assert nix_blockers == ()
+    assert "biome" in {record.tool_id for record in deb_blockers}
+    assert "yamllint" not in {record.tool_id for record in deb_blockers}
+    assert "cargo-clippy" not in {record.tool_id for record in deb_blockers}
+    assert deb_summary["artifact_entry_id"] == "deb"
+    assert deb_summary["release_blocking_count"] == len(deb_blockers)
+    assert deb_summary["tool_count"] == len(
+        required_full_tool_ids(load_linter_tool_contracts())
+    )
+
+
 def test_linux_provision_mode_writes_manifest_and_fails_on_blockers(
     provision_script: ModuleType,
     linux_helper: ModuleType,
@@ -450,6 +641,9 @@ def test_linux_provision_mode_writes_manifest_and_fails_on_blockers(
     assert any(
         tool["mechanism"] == "blocked-missing-provenance" for tool in manifest["tools"]
     )
+    assert any(
+        tool["provenance_status"].startswith("blocked-") for tool in manifest["tools"]
+    )
     assert linux_helper.verify_linux_provisioning_manifest(manifest_path) == []
 
 
@@ -478,8 +672,12 @@ def test_linux_dry_run_still_writes_verifiable_evidence_and_manifest(
     )
 
     manifest_path = linux_helper.linux_artifact_manifest_path(target_dir, "deb")
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+
     assert rc == provision_script.EXIT_OK
     assert (evidence_dir / "f4-linter-provisioning-deb.json").is_file()
+    assert all("provenance_status" in tool for tool in manifest["tools"])
+    assert all("trust_boundary" in tool for tool in manifest["tools"])
     assert linux_helper.verify_linux_provisioning_manifest(manifest_path) == []
 
 
