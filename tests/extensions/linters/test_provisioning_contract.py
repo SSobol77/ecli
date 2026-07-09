@@ -15,13 +15,21 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from ecli.extensions.linters.core.provisioning import (
     build_component_model,
     build_provisioning_plan,
+    evidence_filename,
     evidence_to_dict,
     plan_has_release_blocking_failure,
     plan_to_evidence,
+    verify_evidence_dir,
     verify_evidence_payload,
+)
+from ecli.extensions.linters.core.provisioning_contract import (
+    LinterToolContract,
+    VersionProbe,
 )
 from ecli.extensions.linters.core.provisioning_registry import (
     ARTIFACT_CONTRACT_ENTRIES,
@@ -178,3 +186,72 @@ def test_pypi_full_evidence_records_documented_minimal_constraint(
 def test_verifier_ignores_github_generated_source_archives() -> None:
     assert verify_evidence_payload({"artifact_entry_id": "Source code (zip)"}) == []
     assert verify_evidence_payload({"artifact_entry_id": "Source code (tar.gz)"}) == []
+
+
+def test_evidence_filename_rejects_pathlike_artifact_ids() -> None:
+    for artifact_id in ("../deb", "/tmp/deb", "deb/../rpm", r"C:\tmp\deb"):
+        with pytest.raises(ValueError):
+            evidence_filename(artifact_id)
+
+
+def test_evidence_filename_rejects_unknown_artifact_ids() -> None:
+    with pytest.raises(KeyError):
+        evidence_filename("not-a-canonical-artifact")
+
+
+def test_build_plan_rejects_pathlike_artifact_id_before_path_construction(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError):
+        build_provisioning_plan(
+            artifact_entry_id="../deb",
+            target_dir=tmp_path / "target",
+            evidence_dir=tmp_path / "evidence",
+            mode="dry-run",
+            profile="full",
+        )
+
+
+def test_verify_evidence_dir_rejects_absolute_artifact_id_before_path_construction(
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError):
+        verify_evidence_dir(
+            tmp_path / "evidence",
+            artifact_entry_id="/tmp/deb",
+        )
+
+
+def test_planned_target_path_rejects_escape_executable_name(
+    tmp_path: Path,
+) -> None:
+    bad_contract = LinterToolContract(
+        tool_id="bad-tool",
+        display_name="Bad Tool",
+        languages=("text",),
+        install_group="test",
+        tier="required",
+        provider_kind="external",
+        required_for_full=True,
+        bundled_with_full_install=False,
+        selected_by_default=True,
+        executable_names=("../escape",),
+        version_probe=VersionProbe(command=("bad-tool", "--version")),
+        allowed_install_mechanisms=("os-package-manager",),
+        provenance_requirements=("package-manager-metadata",),
+        source_url="https://example.invalid/bad-tool",
+        pinned_version=None,
+        checksum_required_for_downloads=False,
+        artifact_entry_ids=CANONICAL_ARTIFACT_ENTRY_IDS,
+        delivery_notes="test-only contract",
+    )
+
+    with pytest.raises(ValueError):
+        build_provisioning_plan(
+            artifact_entry_id="deb",
+            target_dir=tmp_path / "target",
+            evidence_dir=tmp_path / "evidence",
+            mode="dry-run",
+            profile="full",
+            contracts=(bad_contract,),
+        )

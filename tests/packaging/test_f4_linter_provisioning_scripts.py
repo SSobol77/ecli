@@ -159,3 +159,45 @@ def test_verify_fails_when_required_artifact_evidence_is_missing(
         )
         == 2
     )
+
+
+def test_provision_script_rejects_path_traversal_artifact_id(
+    tmp_path: Path,
+    provision_script: ModuleType,
+) -> None:
+    rc = provision_script.main(
+        [
+            "--artifact",
+            "../deb",
+            "--target-dir",
+            str(tmp_path / "target"),
+            "--evidence-dir",
+            str(tmp_path / "evidence"),
+            "--mode",
+            "dry-run",
+            "--json",
+        ]
+    )
+
+    assert rc == 1
+
+
+def test_provision_script_rejects_absolute_artifact_id(
+    tmp_path: Path,
+    provision_script: ModuleType,
+) -> None:
+    rc = provision_script.main(
+        [
+            "--artifact",
+            "/tmp/deb",
+            "--target-dir",
+            str(tmp_path / "target"),
+            "--evidence-dir",
+            str(tmp_path / "evidence"),
+            "--mode",
+            "dry-run",
+            "--json",
+        ]
+    )
+
+    assert rc == 1

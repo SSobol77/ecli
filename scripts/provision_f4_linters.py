@@ -39,6 +39,7 @@ if str(SRC) not in sys.path:
 from ecli.extensions.linters.core.provisioning import (  # noqa: E402
     build_component_model,
     build_provisioning_plan,
+    canonical_artifact_entry_id,
     component_model_to_dict,
     evidence_to_dict,
     plan_has_release_blocking_failure,
@@ -140,7 +141,7 @@ def build_parser() -> argparse.ArgumentParser:
 def _artifact_ids(args: argparse.Namespace) -> tuple[str, ...]:
     if args.all_artifacts:
         return tuple(entry.artifact_entry_id for entry in ARTIFACT_CONTRACT_ENTRIES)
-    return (args.artifact,)
+    return (canonical_artifact_entry_id(args.artifact),)
 
 
 def _print_human(paths: list[Path], failed: bool) -> None:
@@ -151,7 +152,16 @@ def _print_human(paths: list[Path], failed: bool) -> None:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        return _run(args)
+    except (KeyError, ValueError, OSError) as exc:
+        print(f"{parser.prog}: error: {exc}", file=sys.stderr)
+        return EXIT_INVALID
+
+
+def _run(args: argparse.Namespace) -> int:
     contracts = load_linter_tool_contracts()
     target_dir = Path(args.target_dir)
     evidence_dir = Path(args.evidence_dir)
@@ -159,58 +169,121 @@ def main(argv: list[str] | None = None) -> int:
     artifact_ids = _artifact_ids(args)
 
     if args.list_selection_options:
-        models: list[dict[str, Any]] = []
-        for artifact_id in artifact_ids:
-            artifact = get_artifact_entry(artifact_id)
-            models.append(
-                component_model_to_dict(
-                    build_component_model(
-                        artifact,
-                        args.profile,
-                        contracts,
-                    )
-                )
-            )
-        if args.json:
-            print(json.dumps({"artifacts": models}, indent=2, sort_keys=True))
-        else:
-            for model in models:
-                print(f"{model['artifact_entry_id']}: {model['full_label']}")
-                for option in model["options"]:
-                    mark = "x" if option["selected_by_default"] else " "
-                    required = (
-                        "required" if option["required_for_full"] else option["tier"]
-                    )
-                    print(f"  [{mark}] {option['tool_id']} ({required})")
+        _emit_selection_options(args, artifact_ids, contracts)
         return EXIT_OK
 
     version = read_project_version(ROOT)
+    output, paths, failed = _write_artifact_evidence(
+        args,
+        artifact_ids,
+        contracts,
+        target_dir,
+        evidence_dir,
+        selection_path,
+        version,
+    )
+    _emit_provisioning_output(args, output, paths, failed)
+    return EXIT_PROVISIONING_FAILED if failed else EXIT_OK
+
+
+def _selection_models(
+    artifact_ids: tuple[str, ...],
+    profile: str,
+    contracts: tuple[Any, ...],
+) -> list[dict[str, Any]]:
+    return [
+        component_model_to_dict(
+            build_component_model(
+                get_artifact_entry(artifact_id),
+                profile,
+                contracts,
+            )
+        )
+        for artifact_id in artifact_ids
+    ]
+
+
+def _emit_selection_options(
+    args: argparse.Namespace,
+    artifact_ids: tuple[str, ...],
+    contracts: tuple[Any, ...],
+) -> None:
+    models = _selection_models(artifact_ids, args.profile, contracts)
+    if args.json:
+        print(json.dumps({"artifacts": models}, indent=2, sort_keys=True))
+        return
+    for model in models:
+        _print_selection_model(model)
+
+
+def _print_selection_model(model: dict[str, Any]) -> None:
+    print(f"{model['artifact_entry_id']}: {model['full_label']}")
+    for option in model["options"]:
+        mark = "x" if option["selected_by_default"] else " "
+        required = "required" if option["required_for_full"] else option["tier"]
+        print(f"  [{mark}] {option['tool_id']} ({required})")
+
+
+def _write_artifact_evidence(
+    args: argparse.Namespace,
+    artifact_ids: tuple[str, ...],
+    contracts: tuple[Any, ...],
+    target_dir: Path,
+    evidence_dir: Path,
+    selection_path: Path | None,
+    version: str,
+) -> tuple[list[dict[str, Any]], list[Path], bool]:
     output: list[dict[str, Any]] = []
     paths: list[Path] = []
     failed = False
     for artifact_id in artifact_ids:
-        plan = build_provisioning_plan(
-            artifact_entry_id=artifact_id,
-            target_dir=target_dir,
-            evidence_dir=evidence_dir,
-            mode=args.mode,
-            profile=args.profile,
-            include_tools=args.include_tool,
-            exclude_tools=args.exclude_tool,
-            selection_json=selection_path,
-            allow_network=args.allow_network,
-            allow_upstream_downloads=args.allow_upstream_downloads,
-            contracts=contracts,
+        plan = _build_plan_for_artifact(
+            args,
+            artifact_id,
+            target_dir,
+            evidence_dir,
+            selection_path,
+            contracts,
         )
         paths.append(write_evidence(plan, ecli_version=version))
         output.append(evidence_to_dict(plan_to_evidence(plan, ecli_version=version)))
         failed = failed or plan_has_release_blocking_failure(plan)
+    return output, paths, failed
 
+
+def _build_plan_for_artifact(
+    args: argparse.Namespace,
+    artifact_id: str,
+    target_dir: Path,
+    evidence_dir: Path,
+    selection_path: Path | None,
+    contracts: tuple[Any, ...],
+) -> Any:
+    return build_provisioning_plan(
+        artifact_entry_id=artifact_id,
+        target_dir=target_dir,
+        evidence_dir=evidence_dir,
+        mode=args.mode,
+        profile=args.profile,
+        include_tools=args.include_tool,
+        exclude_tools=args.exclude_tool,
+        selection_json=selection_path,
+        allow_network=args.allow_network,
+        allow_upstream_downloads=args.allow_upstream_downloads,
+        contracts=contracts,
+    )
+
+
+def _emit_provisioning_output(
+    args: argparse.Namespace,
+    output: list[dict[str, Any]],
+    paths: list[Path],
+    failed: bool,
+) -> None:
     if args.json:
         print(json.dumps({"artifacts": output}, indent=2, sort_keys=True))
     else:
         _print_human(paths, failed)
-    return EXIT_PROVISIONING_FAILED if failed else EXIT_OK
 
 
 if __name__ == "__main__":
