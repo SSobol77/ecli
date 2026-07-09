@@ -18,6 +18,7 @@
 FROM almalinux:9
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
+    ECLI_F4_LINTER_EXTRA_ARTIFACT_IDS=docker-rpm-helper \
     PYTHONUNBUFFERED=1
 
 # Toolchain + Python 3.11 + Ruby/fpm + RPM build tooling

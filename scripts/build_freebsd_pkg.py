@@ -40,6 +40,7 @@ import tomllib
 from datetime import datetime
 from pathlib import Path
 
+from f4_linter_packaging import run_or_record_f4_linter_provisioning
 from packaging_common import (
     filename_arch,
     gzip_file,
@@ -548,6 +549,10 @@ def main(argv: list[str] | None = None) -> int:
     print(f"Package: {pkg_path}")
     if (Path(f"{pkg_path}.sha256")).is_file():
         print(f"Checksum: {pkg_path}.sha256")
+    print("==> Recording F4 linter provisioning evidence")
+    f4_rc = run_or_record_f4_linter_provisioning(root, "freebsd-pkg")
+    if f4_rc != EXIT_OK:
+        return EXIT_ERROR
     return EXIT_OK
 
 

@@ -1011,6 +1011,7 @@ def verify_evidence_payload(
     tools = _tool_by_id(payload)
     errors.extend(_payload_required_field_errors(payload))
     errors.extend(_payload_full_profile_errors(payload, artifact))
+    errors.extend(_payload_constrained_profile_errors(payload, artifact))
     for contract in required:
         errors.extend(
             _required_tool_errors(
@@ -1059,6 +1060,27 @@ def _payload_full_profile_errors(
             f"{artifact.artifact_entry_id}: Full provisioning evidence is incomplete"
         ]
     return []
+
+
+def _payload_constrained_profile_errors(
+    payload: Mapping[str, Any],
+    artifact: ArtifactContractEntry,
+) -> list[str]:
+    if artifact.full_provisioning_supported:
+        return []
+    errors: list[str] = []
+    if payload.get("full_profile_complete") is not False:
+        errors.append(
+            f"{artifact.artifact_entry_id}: constrained artifact evidence must "
+            "record full_profile_complete=false"
+        )
+    reason = payload.get("custom_profile_reason")
+    if not isinstance(reason, str) or not reason.strip():
+        errors.append(
+            f"{artifact.artifact_entry_id}: constrained artifact evidence must "
+            "record custom_profile_reason"
+        )
+    return errors
 
 
 def _required_tool_errors(

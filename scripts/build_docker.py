@@ -38,6 +38,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from f4_linter_packaging import run_or_record_f4_linter_provisioning
+
 
 EXIT_OK = 0
 EXIT_ERROR = 1
@@ -177,6 +179,10 @@ def main(argv: list[str] | None = None) -> int:
             print(f"  {deb}")
     else:
         print("No .deb files found in releases directory")
+    print("Recording F4 linter provisioning evidence for Docker DEB helper")
+    f4_rc = run_or_record_f4_linter_provisioning(root, "docker-deb-helper")
+    if f4_rc != EXIT_OK:
+        return EXIT_ERROR
     return EXIT_OK
 
 

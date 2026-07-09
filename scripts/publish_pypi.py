@@ -46,6 +46,8 @@ import sys
 import tomllib
 from pathlib import Path
 
+from f4_linter_packaging import artifact_provisioning_policy
+
 
 EXIT_OK = 0
 EXIT_BLOCKED = 1
@@ -98,6 +100,9 @@ def _dry_run(root: Path) -> int:
         print(
             f"dry-run: no built distributions yet (expected under releases/{version}/)"
         )
+    for artifact_id in ("pypi-wheel", "pypi-sdist"):
+        policy = artifact_provisioning_policy(artifact_id, root)
+        print(f"dry-run: F4 provisioning {artifact_id} policy {policy.kind}")
 
     print("dry-run: OK (no build, sign, or upload performed)")
     return EXIT_OK

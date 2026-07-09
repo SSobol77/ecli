@@ -22,8 +22,8 @@ The canonical Windows packager emits two unsigned artifacts:
   releases\<version>\ecli_<version>_win_x86_64_setup.exe
 
 Both artifacts receive coreutils-format SHA256 sidecars with ASCII-compatible
-bytes and an explicit LF terminator. The portable executable is built first and
-then bundled into the NSIS installer.
+bytes and an explicit LF terminator. The portable executable is built before
+the NSIS installer packaging step.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -45,6 +45,62 @@ function Write-Sha256Sidecar($ArtifactPath) {
   $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $ArtifactPath).Hash.ToLowerInvariant()
   $basename = Split-Path $ArtifactPath -Leaf
   Write-AsciiLfFile -Path "$ArtifactPath.sha256" -Content ("{0}  {1}`n" -f $hash, $basename)
+}
+
+function Split-F4ToolList($Value) {
+  if ([string]::IsNullOrWhiteSpace($Value)) {
+    return @()
+  }
+  return ($Value -split '[,;\s]+' | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
+}
+
+function Invoke-F4LinterEvidenceHook($ArtifactId) {
+  $mode = if ([string]::IsNullOrWhiteSpace($env:ECLI_F4_LINTER_PROVISIONING_MODE)) {
+    "dry-run"
+  } else {
+    $env:ECLI_F4_LINTER_PROVISIONING_MODE
+  }
+  $f4Profile = if ([string]::IsNullOrWhiteSpace($env:ECLI_F4_LINTER_PROFILE)) {
+    "full"
+  } else {
+    $env:ECLI_F4_LINTER_PROFILE
+  }
+  $targetDir = Join-Path $projectRoot "build\f4-linter-provisioning\$ArtifactId\target"
+  $evidenceDir = Join-Path $projectRoot "build\f4-linter-provisioning\$ArtifactId\evidence"
+  New-Item -ItemType Directory -Force -Path $targetDir | Out-Null
+  New-Item -ItemType Directory -Force -Path $evidenceDir | Out-Null
+
+  $provisionArgs = @(
+    "scripts/provision_f4_linters.py",
+    "--artifact", $ArtifactId,
+    "--target-dir", $targetDir,
+    "--evidence-dir", $evidenceDir,
+    "--mode", $mode,
+    "--profile", $f4Profile,
+    "--json"
+  )
+  foreach ($tool in Split-F4ToolList $env:ECLI_F4_LINTER_INCLUDE_TOOLS) {
+    $provisionArgs += @("--include-tool", $tool)
+  }
+  foreach ($tool in Split-F4ToolList $env:ECLI_F4_LINTER_EXCLUDE_TOOLS) {
+    $provisionArgs += @("--exclude-tool", $tool)
+  }
+  if (-not [string]::IsNullOrWhiteSpace($env:ECLI_F4_LINTER_SELECTION_JSON)) {
+    $provisionArgs += @("--selection-json", $env:ECLI_F4_LINTER_SELECTION_JSON)
+  }
+
+  Write-Info "Running F4 provisioning evidence gate for $ArtifactId..."
+  python @provisionArgs
+  if ($LASTEXITCODE -ne 0) {
+    Write-Err "F4 linter evidence generation failed for $ArtifactId"
+    exit $LASTEXITCODE
+  }
+
+  python scripts/verify_f4_linter_provisioning.py --artifact $ArtifactId --evidence-dir $evidenceDir
+  if ($LASTEXITCODE -ne 0) {
+    Write-Err "F4 linter evidence verification failed for $ArtifactId"
+    exit $LASTEXITCODE
+  }
 }
 
 function Resolve-MakeNsis {
@@ -187,6 +243,9 @@ Write-Ok "Installer: $installerPath"
 
 Write-Info "Writing installer SHA256..."
 Write-Sha256Sidecar -ArtifactPath $installerPath
+
+Invoke-F4LinterEvidenceHook "windows-portable-exe"
+Invoke-F4LinterEvidenceHook "windows-nsis-installer"
 
 $envPath = Join-Path $releaseDir ".win.env"
 Write-AsciiLfFile -Path $envPath -Content (

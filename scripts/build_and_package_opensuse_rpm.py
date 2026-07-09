@@ -46,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
     child_env = {**os.environ}
     child_env.setdefault("RPM_PLATFORM_LABEL", "opensuse")
     child_env.setdefault("RPM_DEPENDS", "libncurses6;libyaml-0-2")
+    child_env.setdefault("ECLI_F4_LINTER_ARTIFACT_ID", "opensuse-rpm")
 
     return subprocess.run(
         [sys.executable, str(root / "scripts" / "build_and_package_rpm.py")],

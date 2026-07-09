@@ -55,6 +55,10 @@ import tomllib
 from datetime import datetime
 from pathlib import Path
 
+from f4_linter_packaging import (
+    artifact_ids_from_env,
+    run_or_record_f4_linter_provisioning_for_artifacts,
+)
 from packaging_common import (
     filename_arch,
     gzip_file,
@@ -430,6 +434,14 @@ def main(argv: list[str] | None = None) -> int:
     if shutil.which("rpm"):
         print("==> RPM metadata (quick peek):")
         subprocess.run(["rpm", "-qpi", str(actual_rpm)], cwd=root, check=False)
+
+    print("==> Recording F4 linter provisioning evidence")
+    f4_rc = run_or_record_f4_linter_provisioning_for_artifacts(
+        root,
+        artifact_ids_from_env(("rpm",), root=root),
+    )
+    if f4_rc != EXIT_OK:
+        return EXIT_ERROR
 
     return EXIT_OK
 
