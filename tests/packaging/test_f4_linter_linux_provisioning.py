@@ -88,6 +88,13 @@ def _provenance_record(records: tuple[Any, ...], tool_id: str) -> Any:
     raise AssertionError(f"missing provenance record: {tool_id}")
 
 
+def _mapping_record(records: tuple[Any, ...], tool_id: str) -> Any:
+    for record in records:
+        if record.tool_id == tool_id:
+            return record
+    raise AssertionError(f"missing distro mapping record: {tool_id}")
+
+
 def test_linux_artifact_scope_is_exactly_active_linux_surfaces(
     linux_helper: ModuleType,
 ) -> None:
@@ -102,6 +109,33 @@ def test_linux_artifact_scope_is_exactly_active_linux_surfaces(
     assert {
         record.artifact_entry_id for record in linux_helper.linux_provenance_matrix()
     } == set(LINUX_ARTIFACT_IDS)
+
+
+def test_distro_mapping_scope_is_package_manager_and_docker_only(
+    linux_helper: ModuleType,
+) -> None:
+    mapping_artifacts = {
+        "deb",
+        "rpm",
+        "opensuse-rpm",
+        "arch-pkgbuild",
+        "slackware-txz",
+        "docker-deb-helper",
+        "docker-rpm-helper",
+    }
+    matrix = linux_helper.linux_distro_mapping_matrix()
+
+    assert {record.artifact_entry_id for record in matrix} == mapping_artifacts
+    for artifact_id in mapping_artifacts:
+        assert linux_helper.linux_distro_mapping_catalog_for_artifact(artifact_id)
+    for artifact_id in (
+        "linux-pyinstaller",
+        "linux-tarball",
+        "appimage",
+        "nix-flake",
+        "nixos-package",
+    ):
+        assert linux_helper.linux_distro_mapping_catalog_for_artifact(artifact_id) == ()
 
 
 def test_every_full_required_tool_has_linux_policy_for_every_linux_artifact(
@@ -164,6 +198,60 @@ def test_linux_provenance_statuses_match_current_policy_taxonomy(
     } == {"blocked-missing-version-pin"}
 
 
+def test_existing_os_package_policy_has_approved_distro_mapping_evidence(
+    linux_helper: ModuleType,
+) -> None:
+    deb = linux_helper.linux_distro_mapping_catalog_for_artifact("deb")
+    yamllint = _mapping_record(deb, "yamllint")
+
+    assert yamllint.mapping_status == "approved-existing-policy"
+    assert yamllint.provenance_status == "distro-signed-package"
+    assert yamllint.trust_boundary == "distro-package-manager"
+    assert yamllint.package_names == ("yamllint",)
+    assert yamllint.evidence_source == "OS_PACKAGE_NAMES"
+    assert "OS_PACKAGE_NAMES policy" in yamllint.evidence_note
+    assert yamllint.release_blocking is False
+
+
+def test_docker_helper_distro_mappings_inherit_deb_and_rpm_policy(
+    linux_helper: ModuleType,
+) -> None:
+    docker_deb = linux_helper.linux_distro_mapping_catalog_for_artifact(
+        "docker-deb-helper"
+    )
+    docker_rpm = linux_helper.linux_distro_mapping_catalog_for_artifact(
+        "docker-rpm-helper"
+    )
+    deb_yamllint = _mapping_record(docker_deb, "yamllint")
+    rpm_yamllint = _mapping_record(docker_rpm, "yamllint")
+
+    assert deb_yamllint.distro_family == "debian"
+    assert deb_yamllint.package_names == ("yamllint",)
+    assert deb_yamllint.source_policy_artifact_entry_id == "deb"
+    assert rpm_yamllint.distro_family == "rpm-generic"
+    assert rpm_yamllint.package_names == ("python3-yamllint",)
+    assert rpm_yamllint.source_policy_artifact_entry_id == "rpm"
+
+
+def test_package_manager_unmapped_tools_remain_explicit_mapping_blockers(
+    linux_helper: ModuleType,
+) -> None:
+    required = set(required_full_tool_ids(load_linter_tool_contracts()))
+    deb_records = linux_helper.linux_distro_mapping_catalog_for_artifact("deb")
+    deb_tool_ids = {record.tool_id for record in deb_records}
+    unmapped = linux_helper.linux_unmapped_package_manager_tools("deb")
+    unmapped_ids = {record.tool_id for record in unmapped}
+
+    assert deb_tool_ids == required - {"ruff", "cargo-clippy"}
+    assert "biome" in unmapped_ids
+    assert "yamllint" not in unmapped_ids
+    assert {record.mapping_status for record in unmapped} == {
+        "blocked-missing-distro-mapping"
+    }
+    assert all(record.release_blocking is True for record in unmapped)
+    assert all(record.blocker_reason for record in unmapped)
+
+
 def test_manifest_generation_is_deterministic_and_paths_are_contained(
     linux_helper: ModuleType,
     tmp_path: Path,
@@ -213,6 +301,28 @@ def test_manifest_writer_round_trips_verified_json(
     assert path.name == "f4-linux-tools.json"
     assert json.loads(path.read_text(encoding="utf-8")) == manifest
     assert linux_helper.verify_linux_provisioning_manifest(path) == []
+
+
+def test_manifest_records_distro_mapping_for_package_manager_tools(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    yamllint = _manifest_tool(manifest, "yamllint")
+    biome = _manifest_tool(manifest, "biome")
+    cargo_clippy = _manifest_tool(manifest, "cargo-clippy")
+    ruff = _manifest_tool(manifest, "ruff")
+
+    assert yamllint["distro_mapping"]["mapping_status"] == "approved-existing-policy"
+    assert yamllint["distro_mapping"]["package_names"] == ["yamllint"]
+    assert biome["distro_mapping"]["mapping_status"] == (
+        "blocked-missing-distro-mapping"
+    )
+    assert biome["distro_mapping"]["release_blocking"] is True
+    assert "distro_mapping" in biome["evidence_fields_required"]
+    assert "distro_mapping" not in cargo_clippy
+    assert "distro_mapping" not in ruff
+    assert linux_helper.verify_linux_provisioning_manifest(manifest) == []
 
 
 def test_linux_manifest_rejects_invalid_or_non_linux_artifact_ids(
@@ -331,6 +441,130 @@ def test_manifest_verifier_rejects_distro_provenance_without_packages(
 
     assert any(
         "yamllint: distro-signed-package provenance requires package_names" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_tampered_distro_mapping_status(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    mapping = _manifest_tool(manifest, "yamllint")["distro_mapping"]
+    mapping["mapping_status"] = "blocked-unverified"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping mapping_status differs" in error for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_tampered_distro_family(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    mapping = _manifest_tool(manifest, "yamllint")["distro_mapping"]
+    mapping["distro_family"] = "arch"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping distro_family differs" in error for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_tampered_distro_mapping_packages(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    mapping = _manifest_tool(manifest, "yamllint")["distro_mapping"]
+    mapping["package_names"] = ["wrong-package"]
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: distro_mapping package_names differs" in error for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_missing_distro_mapping_on_os_package_tool(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    del _manifest_tool(manifest, "yamllint")["distro_mapping"]
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any("yamllint: missing distro_mapping" in error for error in errors)
+
+
+def test_manifest_verifier_rejects_blocked_distro_mapping_without_reason(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    _manifest_tool(manifest, "biome")["distro_mapping"]["blocker_reason"] = None
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "biome: blocked distro_mapping requires blocker_reason" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_self_contained_distro_mapping(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    deb_manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    manifest = _build_manifest(linux_helper, tmp_path, "linux-tarball")
+    _manifest_tool(manifest, "biome")["distro_mapping"] = dict(
+        _manifest_tool(deb_manifest, "yamllint")["distro_mapping"]
+    )
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "biome: self-contained artifact must not declare distro_mapping" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_nix_distro_mapping(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    deb_manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    manifest = _build_manifest(linux_helper, tmp_path, "nix-flake")
+    _manifest_tool(manifest, "yamllint")["distro_mapping"] = dict(
+        _manifest_tool(deb_manifest, "yamllint")["distro_mapping"]
+    )
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: Nix artifact must not declare distro_mapping" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_wrong_docker_mapping_inheritance(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "docker-deb-helper")
+    mapping = _manifest_tool(manifest, "yamllint")["distro_mapping"]
+    mapping["source_policy_artifact_entry_id"] = "rpm"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "yamllint: docker helper distro_mapping must inherit deb" in error
         for error in errors
     )
 
@@ -530,6 +764,7 @@ def test_self_contained_artifacts_define_tools_layout_without_binaries(
         assert {
             mechanism for tool_id, mechanism in mechanisms.items() if tool_id != "ruff"
         } == {"blocked-missing-provenance"}
+        assert all("distro_mapping" not in tool for tool in manifest["tools"])
         assert linux_helper.verify_linux_provisioning_manifest(manifest) == []
 
 
@@ -576,6 +811,7 @@ def test_nix_artifacts_are_declarative_only(
         assert manifest["nix_policy"]["declarative_only"] is True
         assert manifest["nix_policy"]["imperative_package_manager"] is False
         assert manifest["nix_policy"]["imperative_upstream_download"] is False
+        assert all("distro_mapping" not in tool for tool in manifest["tools"])
 
 
 def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
@@ -587,6 +823,10 @@ def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
     nix_blockers = linux_helper.linux_release_blocking_provenance_items("nix-flake")
     deb_blockers = linux_helper.linux_release_blocking_provenance_items("deb")
     deb_summary = linux_helper.linux_provenance_summary_for_artifact("deb")
+    mapping_summary = linux_helper.linux_distro_mapping_summary_for_artifact("deb")
+    docker_summary = linux_helper.linux_distro_mapping_summary_for_artifact(
+        "docker-deb-helper"
+    )
 
     assert tarball_blockers
     assert {record.tool_id for record in tarball_blockers} == (
@@ -600,6 +840,20 @@ def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
     assert deb_summary["release_blocking_count"] == len(deb_blockers)
     assert deb_summary["tool_count"] == len(
         required_full_tool_ids(load_linter_tool_contracts())
+    )
+    assert (
+        deb_summary["distro_mapping_status_counts"]
+        == (mapping_summary["mapping_status_counts"])
+    )
+    assert mapping_summary["approved_count"] > 0
+    assert mapping_summary["blocked_count"] > 0
+    assert mapping_summary["mapping_status_counts"]["approved-existing-policy"] > 0
+    assert (
+        mapping_summary["mapping_status_counts"]["blocked-missing-distro-mapping"] > 0
+    )
+    assert (
+        docker_summary["mapping_status_counts"]
+        == (mapping_summary["mapping_status_counts"])
     )
 
 
@@ -678,6 +932,7 @@ def test_linux_dry_run_still_writes_verifiable_evidence_and_manifest(
     assert (evidence_dir / "f4-linter-provisioning-deb.json").is_file()
     assert all("provenance_status" in tool for tool in manifest["tools"])
     assert all("trust_boundary" in tool for tool in manifest["tools"])
+    assert any("distro_mapping" in tool for tool in manifest["tools"])
     assert linux_helper.verify_linux_provisioning_manifest(manifest_path) == []
 
 
