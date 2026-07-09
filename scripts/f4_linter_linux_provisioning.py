@@ -354,6 +354,34 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
         "release_blocking": False,
         "blocker_reason": None,
     },
+    ("deb", "clang-tidy"): {
+        "evidence_source": "Debian official package metadata for clang-tidy",
+        "evidence_source_type": "official-distro-metadata",
+        "evidence_status": "verified-official-source",
+        "evidence_note": (
+            "Verified against official Debian package metadata "
+            "https://packages.debian.org/clang-tidy, versioned filelist "
+            "metadata https://packages.debian.org/sid/i386/clang-tidy-19/filelist, "
+            "and manpage metadata "
+            "https://manpages.debian.org/trixie/clang-tidy/clang-tidy.1.en.html "
+            "for the existing clang-tidy package/executable mapping."
+        ),
+        "official_source_name": "Debian Package Search: clang-tidy",
+        "official_source_url": "https://packages.debian.org/clang-tidy",
+        "official_source_kind": "distro-package-index",
+        "verification_scope": "package-name-and-executable",
+        "verification_note": (
+            "Verified against official Debian package metadata "
+            "https://packages.debian.org/clang-tidy, versioned filelist "
+            "metadata https://packages.debian.org/sid/i386/clang-tidy-19/filelist, "
+            "and manpage metadata "
+            "https://manpages.debian.org/trixie/clang-tidy/clang-tidy.1.en.html: "
+            "package name clang-tidy and executable clang-tidy."
+        ),
+        "external_verification_required_for_new_mappings": False,
+        "release_blocking": False,
+        "blocker_reason": None,
+    },
 }
 
 OS_PACKAGE_NAMES: dict[str, dict[str, tuple[str, ...]]] = {

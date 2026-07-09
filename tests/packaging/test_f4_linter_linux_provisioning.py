@@ -131,6 +131,41 @@ def _complete_verified_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
     return promoted
 
 
+def _assert_approved_deb_mapping(
+    mapping: Any,
+    evidence: Any,
+    package_name: str,
+) -> None:
+    assert mapping.mapping_status == "approved-existing-policy"
+    assert mapping.provenance_status == "distro-signed-package"
+    assert mapping.trust_boundary == "distro-package-manager"
+    assert mapping.package_names == (package_name,)
+    assert mapping.evidence_record_id == evidence.evidence_record_id
+    assert mapping.evidence_source == "OS_PACKAGE_NAMES"
+    assert "OS_PACKAGE_NAMES policy" in mapping.evidence_note
+    assert mapping.release_blocking is False
+    assert evidence.package_names == mapping.package_names
+
+
+def _assert_official_deb_evidence(
+    mapping: Any,
+    evidence: Any,
+    expected: dict[str, str],
+) -> None:
+    tool_id = expected["tool_id"]
+    assert evidence.evidence_record_id == f"official-distro-metadata:deb:{tool_id}"
+    assert evidence.evidence_source == expected["evidence_source"]
+    assert evidence.evidence_source_type == "official-distro-metadata"
+    assert evidence.evidence_status == "verified-official-source"
+    assert evidence.official_source_name == expected["official_source_name"]
+    assert evidence.official_source_url == expected["official_source_url"]
+    assert evidence.official_source_kind == "distro-package-index"
+    assert evidence.verification_scope == "package-name-and-executable"
+    assert evidence.verified_package_names == mapping.package_names
+    assert evidence.verified_executable_names == mapping.executable_names
+    assert evidence.external_verification_required_for_new_mappings is False
+
+
 def test_linux_artifact_scope_is_exactly_active_linux_surfaces(
     linux_helper: ModuleType,
 ) -> None:
@@ -197,6 +232,7 @@ def test_distro_evidence_scope_is_approved_package_mappings_only(
     assert [(record.artifact_entry_id, record.tool_id) for record in promoted] == [
         ("deb", "yamllint"),
         ("deb", "shellcheck"),
+        ("deb", "clang-tidy"),
     ]
     assert all(
         record.evidence_source_type == "official-distro-metadata" for record in promoted
@@ -295,59 +331,44 @@ def test_existing_os_package_policy_has_approved_distro_mapping_evidence(
     yamllint_evidence = _evidence_record(deb_evidence, "yamllint")
     shellcheck = _mapping_record(deb, "shellcheck")
     shellcheck_evidence = _evidence_record(deb_evidence, "shellcheck")
+    clang_tidy = _mapping_record(deb, "clang-tidy")
+    clang_tidy_evidence = _evidence_record(deb_evidence, "clang-tidy")
 
-    assert yamllint.mapping_status == "approved-existing-policy"
-    assert yamllint.provenance_status == "distro-signed-package"
-    assert yamllint.trust_boundary == "distro-package-manager"
-    assert yamllint.package_names == ("yamllint",)
-    assert yamllint.evidence_record_id == yamllint_evidence.evidence_record_id
-    assert yamllint_evidence.evidence_record_id == (
-        "official-distro-metadata:deb:yamllint"
+    _assert_approved_deb_mapping(yamllint, yamllint_evidence, "yamllint")
+    _assert_official_deb_evidence(
+        yamllint,
+        yamllint_evidence,
+        {
+            "tool_id": "yamllint",
+            "evidence_source": "Debian official package metadata for yamllint",
+            "official_source_name": "Debian Package Search: yamllint",
+            "official_source_url": "https://packages.debian.org/yamllint",
+        },
     )
-    assert yamllint.evidence_source == "OS_PACKAGE_NAMES"
-    assert "OS_PACKAGE_NAMES policy" in yamllint.evidence_note
-    assert yamllint.release_blocking is False
-    assert yamllint_evidence.evidence_source == (
-        "Debian official package metadata for yamllint"
+    _assert_approved_deb_mapping(shellcheck, shellcheck_evidence, "shellcheck")
+    _assert_official_deb_evidence(
+        shellcheck,
+        shellcheck_evidence,
+        {
+            "tool_id": "shellcheck",
+            "evidence_source": "Debian official package metadata for shellcheck",
+            "official_source_name": "Debian Package Filelist: shellcheck",
+            "official_source_url": (
+                "https://packages.debian.org/sid/amd64/shellcheck/filelist"
+            ),
+        },
     )
-    assert yamllint_evidence.evidence_source_type == "official-distro-metadata"
-    assert yamllint_evidence.evidence_status == "verified-official-source"
-    assert yamllint_evidence.package_names == yamllint.package_names
-    assert yamllint_evidence.official_source_name == "Debian Package Search: yamllint"
-    assert (
-        yamllint_evidence.official_source_url == "https://packages.debian.org/yamllint"
+    _assert_approved_deb_mapping(clang_tidy, clang_tidy_evidence, "clang-tidy")
+    _assert_official_deb_evidence(
+        clang_tidy,
+        clang_tidy_evidence,
+        {
+            "tool_id": "clang-tidy",
+            "evidence_source": "Debian official package metadata for clang-tidy",
+            "official_source_name": "Debian Package Search: clang-tidy",
+            "official_source_url": "https://packages.debian.org/clang-tidy",
+        },
     )
-    assert yamllint_evidence.official_source_kind == "distro-package-index"
-    assert yamllint_evidence.verification_scope == "package-name-and-executable"
-    assert yamllint_evidence.verified_package_names == yamllint.package_names
-    assert yamllint_evidence.verified_executable_names == yamllint.executable_names
-    assert yamllint_evidence.external_verification_required_for_new_mappings is False
-    assert shellcheck.mapping_status == "approved-existing-policy"
-    assert shellcheck.provenance_status == "distro-signed-package"
-    assert shellcheck.trust_boundary == "distro-package-manager"
-    assert shellcheck.package_names == ("shellcheck",)
-    assert shellcheck.evidence_record_id == shellcheck_evidence.evidence_record_id
-    assert shellcheck_evidence.evidence_record_id == (
-        "official-distro-metadata:deb:shellcheck"
-    )
-    assert shellcheck_evidence.evidence_source == (
-        "Debian official package metadata for shellcheck"
-    )
-    assert shellcheck_evidence.evidence_source_type == "official-distro-metadata"
-    assert shellcheck_evidence.evidence_status == "verified-official-source"
-    assert shellcheck_evidence.package_names == shellcheck.package_names
-    assert (
-        shellcheck_evidence.official_source_name
-        == "Debian Package Filelist: shellcheck"
-    )
-    assert shellcheck_evidence.official_source_url == (
-        "https://packages.debian.org/sid/amd64/shellcheck/filelist"
-    )
-    assert shellcheck_evidence.official_source_kind == "distro-package-index"
-    assert shellcheck_evidence.verification_scope == "package-name-and-executable"
-    assert shellcheck_evidence.verified_package_names == shellcheck.package_names
-    assert shellcheck_evidence.verified_executable_names == shellcheck.executable_names
-    assert shellcheck_evidence.external_verification_required_for_new_mappings is False
 
 
 def test_generated_distro_evidence_preserves_repository_local_baseline(
@@ -355,7 +376,7 @@ def test_generated_distro_evidence_preserves_repository_local_baseline(
     tmp_path: Path,
 ) -> None:
     manifest = _build_manifest(linux_helper, tmp_path, "deb")
-    evidence = _manifest_distro_evidence(manifest, "clang-tidy")
+    evidence = _manifest_distro_evidence(manifest, "cppcheck")
 
     assert evidence["evidence_source"] == "OS_PACKAGE_NAMES"
     assert evidence["evidence_source_type"] == "repository-local-policy"
@@ -432,18 +453,19 @@ def test_generated_baseline_evidence_records_are_not_promotable(
     assert [(record.artifact_entry_id, record.tool_id) for record in promoted] == [
         ("deb", "yamllint"),
         ("deb", "shellcheck"),
+        ("deb", "clang-tidy"),
     ]
     assert all(
         linux_helper.linux_distro_mapping_evidence_can_promote(record)
         is (record in promoted)
         for record in matrix
     )
-    assert sum(row["can_promote"] is True for row in promotion_matrix) == 2
+    assert sum(row["can_promote"] is True for row in promotion_matrix) == 3
     assert all(
         row["promotion_state"] == "baseline-not-promoted"
         for row in promotion_matrix
         if (row["artifact_entry_id"], row["tool_id"])
-        not in {("deb", "yamllint"), ("deb", "shellcheck")}
+        not in {("deb", "yamllint"), ("deb", "shellcheck"), ("deb", "clang-tidy")}
     )
 
 
@@ -453,13 +475,13 @@ def test_complete_synthetic_verified_official_evidence_is_promotable(
 ) -> None:
     manifest = _build_manifest(linux_helper, tmp_path, "deb")
     evidence = _complete_verified_evidence(
-        _manifest_distro_evidence(manifest, "clang-tidy")
+        _manifest_distro_evidence(manifest, "cppcheck")
     )
 
     assert linux_helper.linux_distro_mapping_evidence_promotion_errors(evidence) == []
     assert linux_helper.linux_distro_mapping_evidence_can_promote(evidence) is True
 
-    _manifest_tool(manifest, "clang-tidy")["distro_mapping"]["evidence"] = evidence
+    _manifest_tool(manifest, "cppcheck")["distro_mapping"]["evidence"] = evidence
     assert linux_helper.verify_linux_provisioning_manifest(manifest) == []
 
 
@@ -512,9 +534,11 @@ def test_docker_helper_distro_mappings_inherit_deb_and_rpm_policy(
     )
     deb_yamllint = _mapping_record(docker_deb, "yamllint")
     deb_shellcheck = _mapping_record(docker_deb, "shellcheck")
+    deb_clang_tidy = _mapping_record(docker_deb, "clang-tidy")
     rpm_yamllint = _mapping_record(docker_rpm, "yamllint")
     deb_yamllint_evidence = _evidence_record(docker_deb_evidence, "yamllint")
     deb_shellcheck_evidence = _evidence_record(docker_deb_evidence, "shellcheck")
+    deb_clang_tidy_evidence = _evidence_record(docker_deb_evidence, "clang-tidy")
     rpm_yamllint_evidence = _evidence_record(docker_rpm_evidence, "yamllint")
 
     assert deb_yamllint.distro_family == "debian"
@@ -539,6 +563,18 @@ def test_docker_helper_distro_mappings_inherit_deb_and_rpm_policy(
     )
     assert deb_shellcheck_evidence.evidence_status == "current-policy-baseline"
     assert deb_shellcheck_evidence.evidence_source_type == "repository-local-policy"
+    assert deb_clang_tidy.distro_family == "debian"
+    assert deb_clang_tidy.package_names == ("clang-tidy",)
+    assert deb_clang_tidy.source_policy_artifact_entry_id == "deb"
+    assert deb_clang_tidy_evidence.source_policy_artifact_entry_id == "deb"
+    assert deb_clang_tidy_evidence.evidence_record_id == (
+        deb_clang_tidy.evidence_record_id
+    )
+    assert deb_clang_tidy_evidence.evidence_record_id == (
+        "repository-local-policy:deb:clang-tidy"
+    )
+    assert deb_clang_tidy_evidence.evidence_status == "current-policy-baseline"
+    assert deb_clang_tidy_evidence.evidence_source_type == "repository-local-policy"
     assert rpm_yamllint.distro_family == "rpm-generic"
     assert rpm_yamllint.package_names == ("python3-yamllint",)
     assert rpm_yamllint.source_policy_artifact_entry_id == "rpm"
@@ -626,6 +662,7 @@ def test_manifest_records_distro_mapping_for_package_manager_tools(
     yamllint = _manifest_tool(manifest, "yamllint")
     shellcheck = _manifest_tool(manifest, "shellcheck")
     clang_tidy = _manifest_tool(manifest, "clang-tidy")
+    cppcheck = _manifest_tool(manifest, "cppcheck")
     biome = _manifest_tool(manifest, "biome")
     cargo_clippy = _manifest_tool(manifest, "cargo-clippy")
     ruff = _manifest_tool(manifest, "ruff")
@@ -681,10 +718,40 @@ def test_manifest_records_distro_mapping_for_package_manager_tools(
     assert shellcheck["distro_mapping"]["evidence"]["verified_executable_names"] == [
         "shellcheck"
     ]
-    assert clang_tidy["distro_mapping"]["evidence"]["evidence_status"] == (
-        "current-policy-baseline"
+    assert clang_tidy["distro_mapping"]["mapping_status"] == "approved-existing-policy"
+    assert clang_tidy["distro_mapping"]["package_names"] == ["clang-tidy"]
+    assert (
+        clang_tidy["distro_mapping"]["evidence_record_id"]
+        == (clang_tidy["distro_mapping"]["evidence"]["evidence_record_id"])
+    )
+    assert clang_tidy["distro_mapping"]["evidence"]["evidence_record_id"] == (
+        "official-distro-metadata:deb:clang-tidy"
+    )
+    assert clang_tidy["distro_mapping"]["evidence"]["evidence_source"] == (
+        "Debian official package metadata for clang-tidy"
     )
     assert clang_tidy["distro_mapping"]["evidence"]["evidence_source_type"] == (
+        "official-distro-metadata"
+    )
+    assert clang_tidy["distro_mapping"]["evidence"]["evidence_status"] == (
+        "verified-official-source"
+    )
+    assert clang_tidy["distro_mapping"]["evidence"]["official_source_url"] == (
+        "https://packages.debian.org/clang-tidy"
+    )
+    assert clang_tidy["distro_mapping"]["evidence"]["verification_scope"] == (
+        "package-name-and-executable"
+    )
+    assert clang_tidy["distro_mapping"]["evidence"]["verified_package_names"] == [
+        "clang-tidy"
+    ]
+    assert clang_tidy["distro_mapping"]["evidence"]["verified_executable_names"] == [
+        "clang-tidy"
+    ]
+    assert cppcheck["distro_mapping"]["evidence"]["evidence_status"] == (
+        "current-policy-baseline"
+    )
+    assert cppcheck["distro_mapping"]["evidence"]["evidence_source_type"] == (
         "repository-local-policy"
     )
     assert biome["distro_mapping"]["mapping_status"] == (
@@ -1004,6 +1071,71 @@ def test_manifest_verifier_rejects_deb_shellcheck_without_verification_note(
     )
 
 
+@pytest.mark.parametrize(
+    ("field", "tampered_value", "expected_error"),
+    (
+        (
+            "official_source_url",
+            "https://packages.debian.org/sid/clang-tidy",
+            "clang-tidy: distro_mapping evidence official_source_url differs",
+        ),
+        (
+            "official_source_kind",
+            "upstream-release-page",
+            "clang-tidy: distro_mapping evidence official_source_kind differs",
+        ),
+        (
+            "verification_scope",
+            "package-name-only",
+            "clang-tidy: distro_mapping evidence verification_scope differs",
+        ),
+        (
+            "verified_package_names",
+            ["wrong-package"],
+            "clang-tidy: distro_mapping evidence verified_package_names differs",
+        ),
+        (
+            "verified_executable_names",
+            ["wrong-executable"],
+            "clang-tidy: distro_mapping evidence verified_executable_names differs",
+        ),
+        (
+            "evidence_source_type",
+            "repository-local-policy",
+            "clang-tidy: distro_mapping evidence: verified-official-source evidence cannot use repository-local-policy",
+        ),
+    ),
+)
+def test_manifest_verifier_rejects_tampered_deb_clang_tidy_official_evidence(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+    field: str,
+    tampered_value: Any,
+    expected_error: str,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    _manifest_distro_evidence(manifest, "clang-tidy")[field] = tampered_value
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(expected_error in error for error in errors)
+
+
+def test_manifest_verifier_rejects_deb_clang_tidy_without_verification_note(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    del _manifest_distro_evidence(manifest, "clang-tidy")["verification_note"]
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "clang-tidy: distro_mapping evidence: missing verification_note" in error
+        for error in errors
+    )
+
+
 def test_manifest_verifier_rejects_verified_evidence_with_repository_local_source_type(
     linux_helper: ModuleType,
     tmp_path: Path,
@@ -1127,14 +1259,14 @@ def test_manifest_verifier_rejects_current_baseline_without_external_verificatio
     tmp_path: Path,
 ) -> None:
     manifest = _build_manifest(linux_helper, tmp_path, "deb")
-    _manifest_distro_evidence(manifest, "clang-tidy")[
+    _manifest_distro_evidence(manifest, "cppcheck")[
         "external_verification_required_for_new_mappings"
     ] = False
 
     errors = linux_helper.verify_linux_provisioning_manifest(manifest)
 
     assert any(
-        "clang-tidy: distro_mapping evidence: current-policy-baseline evidence must require external verification"
+        "cppcheck: distro_mapping evidence: current-policy-baseline evidence must require external verification"
         in error
         for error in errors
     )
@@ -1145,19 +1277,19 @@ def test_manifest_verifier_rejects_current_baseline_with_official_source_claims(
     tmp_path: Path,
 ) -> None:
     manifest = _build_manifest(linux_helper, tmp_path, "deb")
-    evidence = _manifest_distro_evidence(manifest, "clang-tidy")
+    evidence = _manifest_distro_evidence(manifest, "cppcheck")
     evidence["official_source_name"] = "synthetic distro package index"
     evidence["official_source_url"] = "synthetic-official-source"
 
     errors = linux_helper.verify_linux_provisioning_manifest(manifest)
 
     assert any(
-        "clang-tidy: distro_mapping evidence: current-policy-baseline evidence must not claim official_source_name"
+        "cppcheck: distro_mapping evidence: current-policy-baseline evidence must not claim official_source_name"
         in error
         for error in errors
     )
     assert any(
-        "clang-tidy: distro_mapping evidence: current-policy-baseline evidence must not claim official_source_url"
+        "cppcheck: distro_mapping evidence: current-policy-baseline evidence must not claim official_source_url"
         in error
         for error in errors
     )
@@ -1289,6 +1421,22 @@ def test_manifest_verifier_rejects_tampered_deb_shellcheck_evidence_record_id(
 
     assert any(
         "shellcheck: distro_mapping evidence evidence_record_id differs" in error
+        for error in errors
+    )
+
+
+def test_manifest_verifier_rejects_tampered_deb_clang_tidy_evidence_record_id(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    manifest = _build_manifest(linux_helper, tmp_path, "deb")
+    evidence = _manifest_tool(manifest, "clang-tidy")["distro_mapping"]["evidence"]
+    evidence["evidence_record_id"] = "repository-local-policy:deb:clang-tidy"
+
+    errors = linux_helper.verify_linux_provisioning_manifest(manifest)
+
+    assert any(
+        "clang-tidy: distro_mapping evidence evidence_record_id differs" in error
         for error in errors
     )
 
@@ -1742,12 +1890,12 @@ def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
         evidence_summary["evidence_record_count"] == mapping_summary["approved_count"]
     )
     assert evidence_summary["evidence_status_counts"] == {
-        "current-policy-baseline": evidence_summary["evidence_record_count"] - 2,
-        "verified-official-source": 2,
+        "current-policy-baseline": evidence_summary["evidence_record_count"] - 3,
+        "verified-official-source": 3,
     }
     assert evidence_summary["evidence_source_type_counts"] == {
-        "official-distro-metadata": 2,
-        "repository-local-policy": evidence_summary["evidence_record_count"] - 2,
+        "official-distro-metadata": 3,
+        "repository-local-policy": evidence_summary["evidence_record_count"] - 3,
     }
     assert (
         mapping_summary["evidence_status_counts"]
@@ -1757,14 +1905,14 @@ def test_release_blocking_provenance_summary_tracks_current_linux_gaps(
         promotion_summary["evidence_record_count"]
         == evidence_summary["evidence_record_count"]
     )
-    assert promotion_summary["promotable_count"] == 2
+    assert promotion_summary["promotable_count"] == 3
     assert promotion_summary["baseline_not_promoted_count"] == (
-        evidence_summary["evidence_record_count"] - 2
+        evidence_summary["evidence_record_count"] - 3
     )
-    assert promotion_summary["verified_official_source_count"] == 2
+    assert promotion_summary["verified_official_source_count"] == 3
     assert promotion_summary["promotion_state_counts"] == {
-        "baseline-not-promoted": evidence_summary["evidence_record_count"] - 2,
-        "verified-official-source": 2,
+        "baseline-not-promoted": evidence_summary["evidence_record_count"] - 3,
+        "verified-official-source": 3,
     }
     assert (
         docker_summary["mapping_status_counts"]
