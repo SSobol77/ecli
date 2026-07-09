@@ -331,7 +331,29 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
         "external_verification_required_for_new_mappings": False,
         "release_blocking": False,
         "blocker_reason": None,
-    }
+    },
+    ("deb", "shellcheck"): {
+        "evidence_source": "Debian official package metadata for shellcheck",
+        "evidence_source_type": "official-distro-metadata",
+        "evidence_status": "verified-official-source",
+        "evidence_note": (
+            "Verified against official Debian package, filelist, and manpage "
+            "metadata for the existing shellcheck package/executable mapping."
+        ),
+        "official_source_name": "Debian Package Filelist: shellcheck",
+        "official_source_url": (
+            "https://packages.debian.org/sid/amd64/shellcheck/filelist"
+        ),
+        "official_source_kind": "distro-package-index",
+        "verification_scope": "package-name-and-executable",
+        "verification_note": (
+            "Verified against official Debian package, filelist, and manpage "
+            "metadata: package name shellcheck and executable shellcheck."
+        ),
+        "external_verification_required_for_new_mappings": False,
+        "release_blocking": False,
+        "blocker_reason": None,
+    },
 }
 
 OS_PACKAGE_NAMES: dict[str, dict[str, tuple[str, ...]]] = {
