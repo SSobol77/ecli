@@ -172,6 +172,42 @@ def test_linux_manifest_rejects_invalid_or_non_linux_artifact_ids(
             )
 
 
+def test_linux_full_artifact_ids_reports_missing_registry_entry(
+    linux_helper: ModuleType,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_registry = linux_helper._registry_module()
+
+    class MissingDebRegistry:
+        ARTIFACT_CONTRACT_ENTRIES = tuple(
+            entry
+            for entry in real_registry.ARTIFACT_CONTRACT_ENTRIES
+            if entry.artifact_entry_id != "deb"
+        )
+
+    monkeypatch.setattr(
+        linux_helper,
+        "_registry_module",
+        lambda _root=None: MissingDebRegistry,
+    )
+
+    with pytest.raises(ValueError, match="deb"):
+        linux_helper.linux_full_artifact_ids()
+
+
+def test_manifest_builder_rejects_duplicate_selected_tool_ids(
+    linux_helper: ModuleType,
+    tmp_path: Path,
+) -> None:
+    with pytest.raises(ValueError, match="duplicate selected Linux Full tool"):
+        linux_helper.build_linux_provisioning_manifest(
+            artifact_entry_id="deb",
+            target_dir=tmp_path / "target",
+            evidence_dir=tmp_path / "evidence",
+            selected_tool_ids=("ruff", "ruff"),
+        )
+
+
 def test_manifest_verifier_rejects_tampered_tool_mechanism(
     linux_helper: ModuleType,
     tmp_path: Path,

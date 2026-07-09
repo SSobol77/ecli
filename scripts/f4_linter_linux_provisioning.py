@@ -259,6 +259,9 @@ def linux_full_artifact_ids(root: Path | None = None) -> tuple[str, ...]:
     entries = {
         entry.artifact_entry_id: entry for entry in registry.ARTIFACT_CONTRACT_ENTRIES
     }
+    missing = sorted(set(LINUX_ARTIFACT_IDS) - set(entries))
+    if missing:
+        raise ValueError(f"Linux artifact IDs missing from registry: {missing}")
     return tuple(
         artifact_id
         for artifact_id in LINUX_ARTIFACT_IDS
@@ -431,15 +434,23 @@ def _policy_for_contract(
     )
 
 
+def _linux_policies_for_required_contracts(
+    artifact_entry_id: str,
+    contracts: tuple[Any, ...],
+) -> tuple[LinuxToolProvisioningPolicy, ...]:
+    return tuple(
+        _policy_for_contract(artifact_entry_id, contract) for contract in contracts
+    )
+
+
 def linux_provisioning_policy_for_artifact(
     artifact_entry_id: str,
     root: Path | None = None,
 ) -> tuple[LinuxToolProvisioningPolicy, ...]:
     """Return required-tool Linux policies for one canonical artifact."""
     canonical_id = _linux_artifact_entry_id(artifact_entry_id, root)
-    return tuple(
-        _policy_for_contract(canonical_id, contract)
-        for contract in _required_contracts(root)
+    return _linux_policies_for_required_contracts(
+        canonical_id, _required_contracts(root)
     )
 
 
@@ -447,10 +458,14 @@ def linux_tool_policy_matrix(
     root: Path | None = None,
 ) -> tuple[LinuxToolProvisioningPolicy, ...]:
     """Return the complete Linux artifact x Full-required tool policy matrix."""
+    required_contracts = _required_contracts(root)
     return tuple(
         policy
         for artifact_id in linux_artifact_ids()
-        for policy in linux_provisioning_policy_for_artifact(artifact_id, root)
+        for policy in _linux_policies_for_required_contracts(
+            _linux_artifact_entry_id(artifact_id, root),
+            required_contracts,
+        )
     )
 
 
@@ -552,6 +567,9 @@ def build_linux_provisioning_manifest(
     unknown = sorted(set(selected) - set(required_ids))
     if unknown:
         raise ValueError(f"unknown selected Linux Full tool id(s): {unknown}")
+    duplicates = _duplicates(list(selected))
+    if duplicates:
+        raise ValueError(f"duplicate selected Linux Full tool id(s): {duplicates}")
 
     selected_set = set(selected)
     selected_policies = tuple(
