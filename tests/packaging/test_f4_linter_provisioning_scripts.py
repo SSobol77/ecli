@@ -189,7 +189,7 @@ def test_provision_script_rejects_absolute_artifact_id(
     rc = provision_script.main(
         [
             "--artifact",
-            "/tmp/deb",
+            str(tmp_path.resolve() / "deb"),
             "--target-dir",
             str(tmp_path / "target"),
             "--evidence-dir",

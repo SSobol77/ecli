@@ -188,8 +188,9 @@ def test_verifier_ignores_github_generated_source_archives() -> None:
     assert verify_evidence_payload({"artifact_entry_id": "Source code (tar.gz)"}) == []
 
 
-def test_evidence_filename_rejects_pathlike_artifact_ids() -> None:
-    for artifact_id in ("../deb", "/tmp/deb", "deb/../rpm", r"C:\tmp\deb"):
+def test_evidence_filename_rejects_pathlike_artifact_ids(tmp_path: Path) -> None:
+    absolute_artifact_id = str(tmp_path.resolve() / "deb")
+    for artifact_id in ("../deb", absolute_artifact_id, "deb/../rpm", r"C:\escape\deb"):
         with pytest.raises(ValueError):
             evidence_filename(artifact_id)
 
@@ -218,7 +219,7 @@ def test_verify_evidence_dir_rejects_absolute_artifact_id_before_path_constructi
     with pytest.raises(ValueError):
         verify_evidence_dir(
             tmp_path / "evidence",
-            artifact_entry_id="/tmp/deb",
+            artifact_entry_id=str(tmp_path.resolve() / "deb"),
         )
 
 
