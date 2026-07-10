@@ -74,11 +74,50 @@ define verify_sha256
 	@$(PYTHON) scripts/verify_artifact.py "$(1)"
 endef
 
-define validate_if_present
-	@if [ -f "$(1)" ] || [ -f "$(1).sha256" ]; then \
+PYPI_ARTIFACT_VALIDATION_TARGET ?= validate-pypi-contract
+
+define validate_artifact_if_requested
+	@if [ -f "$(1)" ] && [ -f "$(1).sha256" ]; then \
 		$(MAKE) $(2); \
+	elif [ -f "$(1)" ]; then \
+		echo "Missing checksum sidecar for $(3): $(1).sha256"; \
+		exit 3; \
+	elif [ -f "$(1).sha256" ]; then \
+		echo "Orphan checksum sidecar for $(3): $(1).sha256"; \
+		echo "Missing artifact for $(3): $(1)"; \
+		exit 2; \
 	else \
 		echo "SKIP: $(3) artifact not built: $(1)"; \
+	fi
+endef
+
+define validate_pypi_artifacts_if_requested
+	@present=0; \
+	for required in "$(PYPI_WHEEL_FILE)" "$(PYPI_WHEEL_FILE).sha256" "$(PYPI_SDIST_FILE)" "$(PYPI_SDIST_FILE).sha256"; do \
+		if [ -f "$$required" ]; then \
+			present=$$((present + 1)); \
+		fi; \
+	done; \
+	if [ "$$present" -eq 0 ]; then \
+		echo "SKIP: PyPI artifacts not built under $(PYPI_PKG_DIR)"; \
+	elif [ "$$present" -eq 4 ]; then \
+		$(MAKE) $(PYPI_ARTIFACT_VALIDATION_TARGET); \
+	else \
+		echo "ERROR: incomplete PyPI artifact set under $(PYPI_PKG_DIR)"; \
+		for required in "$(PYPI_WHEEL_FILE)" "$(PYPI_WHEEL_FILE).sha256" "$(PYPI_SDIST_FILE)" "$(PYPI_SDIST_FILE).sha256"; do \
+			if [ ! -f "$$required" ]; then \
+				echo "Missing $$required"; \
+			fi; \
+		done; \
+		exit 3; \
+	fi
+endef
+
+define validate_release_assets_if_present
+	@if [ -d "$(RELEASE_DIR)" ]; then \
+		$(MAKE) validate-release-assets; \
+	else \
+		echo "SKIP: release asset set not assembled under $(RELEASE_DIR)"; \
 	fi
 endef
 
@@ -1172,6 +1211,11 @@ validate-official-evidence-drift:
 	@$(UV) run python scripts/f4_linter_linux_provisioning.py --check-official-evidence-drift
 	@echo "--> OK: Linux official distro evidence drift gate"
 
+.PHONY: validate-pypi-source-contract
+validate-pypi-source-contract:
+	@$(PYTHON) scripts/publish_pypi.py --dry-run
+	@echo "--> OK: PyPI source contract"
+
 .PHONY: validate-pypi-contract
 validate-pypi-contract:
 	@test -f "$(PYPI_WHEEL_FILE)" || (echo "Missing $(PYPI_WHEEL_FILE)"; exit 2)
@@ -1215,21 +1259,21 @@ validate-windows-contract: package-windows-assert
 	@echo "--> OK: Windows contract"
 
 .PHONY: validate-gate2
-validate-gate2: validate-version-consistency validate-runtime-imports validate-official-evidence-drift
-	@if [ -f "$(PYPI_WHEEL_FILE)" ] || [ -f "$(PYPI_WHEEL_FILE).sha256" ] || [ -f "$(PYPI_SDIST_FILE)" ] || [ -f "$(PYPI_SDIST_FILE).sha256" ]; then \
-		$(MAKE) validate-pypi-contract; \
-	else \
-		echo "SKIP: PyPI artifacts not built under $(PYPI_PKG_DIR)"; \
-	fi
-	$(call validate_if_present,$(DEB_PKG_FILE),validate-deb-contract,DEB)
-	$(call validate_if_present,$(RPM_PKG_FILE),validate-rpm-contract,RPM)
-	$(call validate_if_present,$(APPIMAGE_FILE),validate-appimage-contract,AppImage)
-	$(call validate_if_present,$(TAR_LINUX_FILE),validate-tar-linux-contract,Linux tar)
-	$(call validate_if_present,$(FREEBSD_PKG_FILE),validate-freebsd-contract,FreeBSD)
-	$(call validate_if_present,$(MACOS_PKG_FILE),validate-macos-contract,macOS)
-	$(call validate_if_present,$(WIN_PKG_FILE),validate-windows-contract,Windows)
-	$(MAKE) validate-release-assets
-	@echo "--> OK: Gate 2 validation completed for built artifacts"
+validate-gate2: validate-version-consistency validate-runtime-imports validate-official-evidence-drift validate-pypi-source-contract
+	@echo "--> OK: Gate 2 source and structural contract validation completed"
+
+.PHONY: validate-built-artifacts
+validate-built-artifacts:
+	$(call validate_pypi_artifacts_if_requested)
+	$(call validate_artifact_if_requested,$(DEB_PKG_FILE),validate-deb-contract,DEB)
+	$(call validate_artifact_if_requested,$(RPM_PKG_FILE),validate-rpm-contract,RPM)
+	$(call validate_artifact_if_requested,$(APPIMAGE_FILE),validate-appimage-contract,AppImage)
+	$(call validate_artifact_if_requested,$(TAR_LINUX_FILE),validate-tar-linux-contract,Linux tar)
+	$(call validate_artifact_if_requested,$(FREEBSD_PKG_FILE),validate-freebsd-contract,FreeBSD)
+	$(call validate_artifact_if_requested,$(MACOS_PKG_FILE),validate-macos-contract,macOS)
+	$(call validate_artifact_if_requested,$(WIN_PKG_FILE),validate-windows-contract,Windows)
+	$(call validate_release_assets_if_present)
+	@echo "--> OK: built artifact validation completed"
 
 
 # =============================================================================

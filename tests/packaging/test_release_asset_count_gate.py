@@ -22,6 +22,7 @@ uploaded by the release workflow.
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 from types import ModuleType
 
@@ -45,6 +46,27 @@ def _write_assets(directory: Path, names: tuple[str, ...]) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     for name in names:
         (directory / name).write_text(f"{name}\n", encoding="utf-8")
+
+
+def _run_probe_make(
+    repo_root: Path,
+    tmp_path: Path,
+    body: str,
+    target: str,
+    *overrides: str,
+) -> subprocess.CompletedProcess[str]:
+    probe = tmp_path / "Probe.mk"
+    probe.write_text(
+        f"include {repo_root / 'Makefile'}\n\n{body}",
+        encoding="utf-8",
+    )
+    return subprocess.run(
+        ["make", "-f", str(probe), target, f"MAKE=make -f {probe}", *overrides],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -362,6 +384,268 @@ def test_makefile_and_release_workflow_call_exact_asset_verifier(
         release_workflow
     )
     assert "fail_on_unmatched_files: true" in release_workflow
+
+
+def test_validate_gate2_separates_source_and_built_artifact_checks(
+    read_repo_text: RepoReader,
+) -> None:
+    makefile = read_repo_text("Makefile")
+    source_target = makefile[
+        makefile.index(".PHONY: validate-pypi-source-contract") : makefile.index(
+            ".PHONY: validate-pypi-contract"
+        )
+    ]
+    built_target = makefile[
+        makefile.index(".PHONY: validate-pypi-contract") : makefile.index(
+            ".PHONY: validate-tar-linux-contract"
+        )
+    ]
+    gate2 = makefile[
+        makefile.index(".PHONY: validate-gate2") : makefile.index(
+            ".PHONY: validate-built-artifacts",
+            makefile.index(".PHONY: validate-gate2"),
+        )
+    ]
+    built_artifacts = makefile[
+        makefile.index(".PHONY: validate-built-artifacts") : makefile.index(
+            "# =============================================================================",
+            makefile.index(".PHONY: validate-built-artifacts"),
+        )
+    ]
+
+    assert "scripts/publish_pypi.py --dry-run" in source_target
+    assert "$(PYTHON) -m twine check --strict" not in source_target
+    assert "$(PYTHON) -m twine check --strict" in built_target
+    assert "$(call verify_sha256,$(PYPI_WHEEL_FILE))" in built_target
+
+    assert "validate-pypi-source-contract" in gate2
+    assert "$(call validate_pypi_artifacts_if_requested)" not in gate2
+    assert "$(call validate_artifact_if_requested" not in gate2
+    assert "$(call validate_release_assets_if_present)" not in gate2
+
+    assert "$(call validate_pypi_artifacts_if_requested)" in built_artifacts
+    assert "$(call validate_artifact_if_requested" in built_artifacts
+    assert "$(call validate_release_assets_if_present)" in built_artifacts
+
+
+def test_validate_gate2_requires_complete_artifact_sidecar_pairs(
+    read_repo_text: RepoReader,
+) -> None:
+    makefile = read_repo_text("Makefile")
+    generic_helper = makefile[
+        makefile.index("define validate_artifact_if_requested") : makefile.index(
+            "define validate_pypi_artifacts_if_requested"
+        )
+    ]
+    pypi_helper = makefile[
+        makefile.index("define validate_pypi_artifacts_if_requested") : makefile.index(
+            "define validate_release_assets_if_present"
+        )
+    ]
+
+    assert '[ -f "$(1)" ] && [ -f "$(1).sha256" ]' in generic_helper
+    assert "Missing checksum sidecar for $(3): $(1).sha256" in generic_helper
+    assert "Orphan checksum sidecar for $(3): $(1).sha256" in generic_helper
+    assert "ERROR: incomplete PyPI artifact set" in pypi_helper
+    assert 'echo "Missing $$required"' in pypi_helper
+
+
+def test_single_artifact_helper_skips_when_absent(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    artifact = tmp_path / "artifact.bin"
+    result = _run_probe_make(
+        repo_root,
+        tmp_path,
+        (
+            ".PHONY: probe fake-validator\n"
+            "probe:\n"
+            f"\t$(call validate_artifact_if_requested,{artifact},fake-validator,Probe)\n"
+            "fake-validator:\n"
+            "\t@echo SINGLE_VALIDATOR_INVOKED\n"
+        ),
+        "probe",
+    )
+
+    assert result.returncode == 0
+    assert "SKIP: Probe artifact not built" in result.stdout
+    assert "SINGLE_VALIDATOR_INVOKED" not in result.stdout
+
+
+def test_single_artifact_helper_invokes_validator_when_complete(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    artifact = tmp_path / "artifact.bin"
+    artifact.write_text("artifact\n", encoding="utf-8")
+    artifact.with_name(f"{artifact.name}.sha256").write_text(
+        "checksum\n", encoding="utf-8"
+    )
+
+    result = _run_probe_make(
+        repo_root,
+        tmp_path,
+        (
+            ".PHONY: probe fake-validator\n"
+            "probe:\n"
+            f"\t$(call validate_artifact_if_requested,{artifact},fake-validator,Probe)\n"
+            "fake-validator:\n"
+            "\t@echo SINGLE_VALIDATOR_INVOKED\n"
+        ),
+        "probe",
+    )
+
+    assert result.returncode == 0
+    assert "SINGLE_VALIDATOR_INVOKED" in result.stdout
+
+
+def test_single_artifact_helper_fails_when_sidecar_missing(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    artifact = tmp_path / "artifact.bin"
+    artifact.write_text("artifact\n", encoding="utf-8")
+
+    result = _run_probe_make(
+        repo_root,
+        tmp_path,
+        (
+            ".PHONY: probe fake-validator\n"
+            "probe:\n"
+            f"\t$(call validate_artifact_if_requested,{artifact},fake-validator,Probe)\n"
+            "fake-validator:\n"
+            "\t@echo SINGLE_VALIDATOR_INVOKED\n"
+        ),
+        "probe",
+    )
+
+    assert result.returncode != 0
+    assert f"Missing checksum sidecar for Probe: {artifact}.sha256" in result.stdout
+    assert "SINGLE_VALIDATOR_INVOKED" not in result.stdout
+
+
+def test_single_artifact_helper_fails_when_sidecar_is_orphaned(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    artifact = tmp_path / "artifact.bin"
+    artifact.with_name(f"{artifact.name}.sha256").write_text(
+        "checksum\n", encoding="utf-8"
+    )
+
+    result = _run_probe_make(
+        repo_root,
+        tmp_path,
+        (
+            ".PHONY: probe fake-validator\n"
+            "probe:\n"
+            f"\t$(call validate_artifact_if_requested,{artifact},fake-validator,Probe)\n"
+            "fake-validator:\n"
+            "\t@echo SINGLE_VALIDATOR_INVOKED\n"
+        ),
+        "probe",
+    )
+
+    assert result.returncode != 0
+    assert f"Orphan checksum sidecar for Probe: {artifact}.sha256" in result.stdout
+    assert f"Missing artifact for Probe: {artifact}" in result.stdout
+    assert "SINGLE_VALIDATOR_INVOKED" not in result.stdout
+
+
+def _pypi_probe_paths(tmp_path: Path) -> dict[str, Path]:
+    return {
+        "wheel": tmp_path / "ecli_editor-1.2.3-py3-none-any.whl",
+        "wheel_sha": tmp_path / "ecli_editor-1.2.3-py3-none-any.whl.sha256",
+        "sdist": tmp_path / "ecli_editor-1.2.3.tar.gz",
+        "sdist_sha": tmp_path / "ecli_editor-1.2.3.tar.gz.sha256",
+    }
+
+
+def _run_pypi_probe(
+    repo_root: Path,
+    tmp_path: Path,
+) -> subprocess.CompletedProcess[str]:
+    paths = _pypi_probe_paths(tmp_path)
+    return _run_probe_make(
+        repo_root,
+        tmp_path,
+        (
+            ".PHONY: probe fake-pypi-validator\n"
+            "probe:\n"
+            "\t$(call validate_pypi_artifacts_if_requested)\n"
+            "fake-pypi-validator:\n"
+            "\t@echo PYPI_VALIDATOR_INVOKED\n"
+        ),
+        "probe",
+        f"PYPI_PKG_DIR={tmp_path}",
+        f"PYPI_WHEEL_FILE={paths['wheel']}",
+        f"PYPI_SDIST_FILE={paths['sdist']}",
+        "PYPI_ARTIFACT_VALIDATION_TARGET=fake-pypi-validator",
+    )
+
+
+def test_pypi_helper_skips_when_no_distribution_files(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    result = _run_pypi_probe(repo_root, tmp_path)
+
+    assert result.returncode == 0
+    assert "SKIP: PyPI artifacts not built under" in result.stdout
+    assert "PYPI_VALIDATOR_INVOKED" not in result.stdout
+
+
+def test_pypi_helper_invokes_validator_for_complete_distribution_set(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    for path in _pypi_probe_paths(tmp_path).values():
+        path.write_text("x\n", encoding="utf-8")
+
+    result = _run_pypi_probe(repo_root, tmp_path)
+
+    assert result.returncode == 0
+    assert "PYPI_VALIDATOR_INVOKED" in result.stdout
+
+
+_PYPI_PARTIAL_CASES: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("wheel-only", ("wheel",)),
+    ("wheel-and-wheel-sidecar", ("wheel", "wheel_sha")),
+    ("orphan-wheel-sidecar", ("wheel_sha",)),
+    ("sdist-only", ("sdist",)),
+    ("orphan-sdist-sidecar", ("sdist_sha",)),
+    ("wheel-and-sdist", ("wheel", "sdist")),
+    ("wheel-and-orphan-sdist-sidecar", ("wheel", "sdist_sha")),
+    ("wheel-sidecar-and-sdist", ("wheel_sha", "sdist")),
+    ("wheel-sidecar-and-sdist-sidecar", ("wheel_sha", "sdist_sha")),
+    ("sdist-pair-only", ("sdist", "sdist_sha")),
+    ("missing-sdist-sidecar", ("wheel", "wheel_sha", "sdist")),
+    ("missing-sdist", ("wheel", "wheel_sha", "sdist_sha")),
+    ("missing-wheel-sidecar", ("wheel", "sdist", "sdist_sha")),
+    ("missing-wheel", ("wheel_sha", "sdist", "sdist_sha")),
+)
+
+
+@pytest.mark.parametrize(("case_name", "present_keys"), _PYPI_PARTIAL_CASES)
+def test_pypi_helper_fails_closed_for_partial_distribution_sets(
+    repo_root: Path,
+    tmp_path: Path,
+    case_name: str,
+    present_keys: tuple[str, ...],
+) -> None:
+    paths = _pypi_probe_paths(tmp_path)
+    for key in present_keys:
+        paths[key].write_text(f"{case_name}\n", encoding="utf-8")
+
+    result = _run_pypi_probe(repo_root, tmp_path)
+
+    assert result.returncode != 0
+    assert "ERROR: incomplete PyPI artifact set under" in result.stdout
+    assert "PYPI_VALIDATOR_INVOKED" not in result.stdout
+    for key, path in paths.items():
+        if key not in present_keys:
+            assert f"Missing {path}" in result.stdout
 
 
 def test_release_workflow_does_not_upload_prefixed_asset_names(
