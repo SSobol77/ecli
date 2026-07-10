@@ -14,6 +14,8 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import sys
 from pathlib import Path
 from types import ModuleType
 from typing import Any
@@ -116,6 +118,23 @@ def _manifest_distro_evidence(
     tool_id: str = "yamllint",
 ) -> dict[str, Any]:
     return _manifest_tool(manifest, tool_id)["distro_mapping"]["evidence"]
+
+
+def _run_linux_provisioning_script(
+    repo_root: Path,
+    *args: str,
+) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        [
+            sys.executable,
+            str(repo_root / "scripts/f4_linter_linux_provisioning.py"),
+            *args,
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
 
 
 def _complete_verified_evidence(evidence: dict[str, Any]) -> dict[str, Any]:
@@ -365,6 +384,48 @@ def test_official_distro_evidence_drift_errors_are_empty(
     linux_helper: ModuleType,
 ) -> None:
     assert linux_helper.linux_official_distro_evidence_drift_errors() == []
+
+
+def test_official_distro_evidence_audit_report_is_clean(
+    linux_helper: ModuleType,
+) -> None:
+    report = linux_helper.linux_official_distro_evidence_audit_report()
+
+    assert report["ok"] is True
+    assert report["drift_errors"] == []
+    assert report["summary"]["official_override_count"] == 6
+    assert len(report["matrix"]) == 6
+    assert [(row["artifact_entry_id"], row["tool_id"]) for row in report["matrix"]] == (
+        list(DEBIAN_OFFICIAL_EVIDENCE_KEYS)
+    )
+
+
+def test_official_distro_evidence_audit_cli_prints_json_report(
+    repo_root: Path,
+) -> None:
+    result = _run_linux_provisioning_script(repo_root, "--official-evidence-audit")
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    report = json.loads(result.stdout)
+    assert report["ok"] is True
+    assert report["drift_errors"] == []
+    assert report["summary"]["official_override_count"] == 6
+    assert report["summary"]["non_debian_override_count"] == 0
+    assert len(report["matrix"]) == 6
+
+
+def test_official_distro_evidence_drift_check_cli_passes(
+    repo_root: Path,
+) -> None:
+    result = _run_linux_provisioning_script(
+        repo_root,
+        "--check-official-evidence-drift",
+    )
+
+    assert result.returncode == 0
+    assert result.stderr == ""
+    assert result.stdout == "PASS: Linux official distro evidence drift audit clean\n"
 
 
 def test_official_distro_evidence_drift_comparison_rejects_mismatched_url(
