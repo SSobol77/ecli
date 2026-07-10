@@ -90,23 +90,33 @@ contract drift.
 | `.github/workflows/windows-installer.yml` | Windows portable EXE and NSIS installer package path. |
 | `.github/workflows/windows-validate.yml` | Windows package validation. |
 
-## Release Tooling Prerequisites
+## Validation Tooling Prerequisites
 
-Install release tooling before running Gate 2 validation from a clean
-maintainer environment:
+Gate 2 is source and structural validation. It must run from a clean source
+checkout without built release artifacts and without final release-only tooling
+such as `twine`:
+
+```sh
+make validate-gate2
+```
+
+The `validate-gate2` target runs source and structural contract validation
+without inspecting pre-existing local release artifacts. It covers version
+consistency, runtime imports, Linux official evidence drift, and the PyPI source
+contract dry-run.
+
+Install release tooling before running explicit final built-artifact validation:
 
 ```sh
 python3 -m pip install -e ".[release]"
 ```
 
-The `validate-gate2` target runs source and structural contract validation
-without inspecting pre-existing local release artifacts. Use
-`make validate-built-artifacts` for explicit final artifact verification; that
+Use `make validate-built-artifacts` for physical artifact verification; that
 target validates complete artifact/sidecar pairs and fails closed on partial
-artifact sets. When a complete wheel/sdist set and adjacent sidecars are present,
-it delegates to `validate-pypi-contract`, which requires `twine` for strict PyPI
-wheel/sdist metadata validation. `twine` is declared only in release/development
-tooling dependencies, not in ECLI runtime dependencies.
+artifact sets. When a complete wheel/sdist set and adjacent sidecars are
+present, it delegates to `validate-pypi-contract`, which requires `twine` for
+strict PyPI wheel/sdist metadata validation. `twine` is declared only in
+release/development tooling dependencies, not in ECLI runtime dependencies.
 
 The canonical `Release` workflow runs `make validate-built-artifacts` in the
 `validate-built-artifacts` job after downloading all build outputs, assembling

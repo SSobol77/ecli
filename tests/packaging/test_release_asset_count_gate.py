@@ -430,6 +430,33 @@ def test_validate_gate2_separates_source_and_built_artifact_checks(
     assert 'if [ -d "$(RELEASE_DIR)" ]' in makefile
 
 
+def test_make_help_distinguishes_release_validation_layers(repo_root: Path) -> None:
+    canonical_lines = (
+        "make validate-gate2           Source and structural contract gate",
+        "make validate-built-artifacts Validate available built artifacts fail-closed",
+        "make validate-release-assets  Verify exact final GitHub Release asset set",
+    )
+    descriptions = (
+        "Source and structural contract gate",
+        "Validate available built artifacts fail-closed",
+        "Verify exact final GitHub Release asset set",
+    )
+    assert len(set(descriptions)) == len(descriptions)
+
+    for target in ("help", "help-full"):
+        result = subprocess.run(
+            ["make", target],
+            cwd=repo_root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+        assert result.returncode == 0
+        for entry in canonical_lines:
+            assert result.stdout.count(entry) == 1
+
+
 def test_validate_gate2_requires_complete_artifact_sidecar_pairs(
     read_repo_text: RepoReader,
 ) -> None:
