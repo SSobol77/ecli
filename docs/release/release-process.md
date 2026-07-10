@@ -95,9 +95,14 @@ maintainer environment:
 python3 -m pip install -e ".[release]"
 ```
 
-The `validate-gate2` target requires `twine` for strict PyPI wheel/sdist
-metadata validation. `twine` is declared only in release/development tooling
-dependencies, not in ECLI runtime dependencies.
+The `validate-gate2` target runs source and structural contract validation
+without inspecting pre-existing local release artifacts. Use
+`make validate-built-artifacts` for explicit final artifact verification; that
+target validates complete artifact/sidecar pairs and fails closed on partial
+artifact sets. When a complete wheel/sdist set and adjacent sidecars are present,
+it delegates to `validate-pypi-contract`, which requires `twine` for strict PyPI
+wheel/sdist metadata validation. `twine` is declared only in release/development
+tooling dependencies, not in ECLI runtime dependencies.
 
 ## PyPI Namespace Pre-Reservation
 
