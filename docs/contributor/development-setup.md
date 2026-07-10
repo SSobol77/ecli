@@ -32,7 +32,7 @@ See the LICENSE file in the project root for full license text.
 | `task` | Optional | developer convenience wrapper over Makefile targets | all platforms |
 | `pipx` | Optional | convenient tool installation | all platforms |
 | `ruff` / `pytest` toolchain | Role-dependent | local validation | maintainer-focused |
-| `twine` | Release-only | PyPI artifact validation in `make validate-gate2` | install via `.[release]`, `.[dev]`, or `requirements-dev.txt` |
+| `twine` | Release-only | Final PyPI built-artifact validation through `make validate-built-artifacts` / `make validate-pypi-contract` | install via `.[release]`, `.[dev]`, or `requirements-dev.txt` |
 | `makensis` | Optional by role | Windows packaging | Windows packaging maintainers |
 | `hdiutil` | Optional by role | macOS DMG packaging | macOS only |
 | FreeBSD pkg toolchain | Optional by role | FreeBSD package build | FreeBSD environment only |
@@ -60,6 +60,20 @@ such as `task help`, `task validate`, and `task validate-packaging`; it must
 delegate to existing Makefile targets and must not define Taskfile-only release
 or packaging behavior. CI and release gates continue to rely on the existing
 canonical command surfaces.
+
+The release validation layers are intentionally separate:
+
+- `make validate-gate2` is source and structural contract validation only. It
+  checks version consistency, runtime imports, Linux official evidence drift,
+  and the PyPI source contract dry-run; it does not require built release
+  artifacts or `twine`.
+- `make validate-built-artifacts` is explicit release-oriented physical artifact
+  validation. Complete artifact/sidecar pairs are validated, partial sets fail
+  closed, absent optional pairs are skipped, and a complete PyPI wheel/sdist set
+  invokes the final PyPI validator.
+- `make validate-release-assets` verifies the exact final GitHub Release asset
+  set: 21 uploaded ECLI-owned assets, with checksum sidecars kept as
+  non-uploaded `.checksums/` evidence.
 
 ## Optional Setup by Role
 
