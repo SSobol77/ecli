@@ -309,56 +309,55 @@ PACKAGE_POLICY_SOURCE_BY_HELPER = {
     "docker-rpm-helper": "rpm",
 }
 
-OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
-    ("deb", "yamllint"): {
-        "evidence_source": "Debian official package metadata for yamllint",
-        "evidence_source_type": "official-distro-metadata",
-        "evidence_status": "verified-official-source",
-        "evidence_note": (
+
+class DebianOfficialEvidenceSpec(NamedTuple):
+    """Canonical official Debian evidence fields that vary by tool."""
+
+    tool_id: str
+    evidence_source: str
+    evidence_note: str
+    official_source_name: str
+    official_source_url: str
+    verification_note: str
+
+
+DEBIAN_OFFICIAL_EVIDENCE_SPECS: tuple[DebianOfficialEvidenceSpec, ...] = (
+    DebianOfficialEvidenceSpec(
+        tool_id="yamllint",
+        evidence_source="Debian official package metadata for yamllint",
+        evidence_note=(
             "Verified against official Debian package index, package tracker, "
             "source package, and manpage metadata for the existing yamllint "
             "package/executable mapping."
         ),
-        "official_source_name": "Debian Package Search: yamllint",
-        "official_source_url": "https://packages.debian.org/yamllint",
-        "official_source_kind": "distro-package-index",
-        "verification_scope": "package-name-and-executable",
-        "verification_note": (
+        official_source_name="Debian Package Search: yamllint",
+        official_source_url="https://packages.debian.org/yamllint",
+        verification_note=(
             "Verified against official Debian package, package-tracker, source "
             "package, and manpage metadata: package name yamllint and "
             "executable yamllint."
         ),
-        "external_verification_required_for_new_mappings": False,
-        "release_blocking": False,
-        "blocker_reason": None,
-    },
-    ("deb", "shellcheck"): {
-        "evidence_source": "Debian official package metadata for shellcheck",
-        "evidence_source_type": "official-distro-metadata",
-        "evidence_status": "verified-official-source",
-        "evidence_note": (
+    ),
+    DebianOfficialEvidenceSpec(
+        tool_id="shellcheck",
+        evidence_source="Debian official package metadata for shellcheck",
+        evidence_note=(
             "Verified against official Debian package, filelist, and manpage "
             "metadata for the existing shellcheck package/executable mapping."
         ),
-        "official_source_name": "Debian Package Filelist: shellcheck",
-        "official_source_url": (
+        official_source_name="Debian Package Filelist: shellcheck",
+        official_source_url=(
             "https://packages.debian.org/sid/amd64/shellcheck/filelist"
         ),
-        "official_source_kind": "distro-package-index",
-        "verification_scope": "package-name-and-executable",
-        "verification_note": (
+        verification_note=(
             "Verified against official Debian package, filelist, and manpage "
             "metadata: package name shellcheck and executable shellcheck."
         ),
-        "external_verification_required_for_new_mappings": False,
-        "release_blocking": False,
-        "blocker_reason": None,
-    },
-    ("deb", "clang-tidy"): {
-        "evidence_source": "Debian official package metadata for clang-tidy",
-        "evidence_source_type": "official-distro-metadata",
-        "evidence_status": "verified-official-source",
-        "evidence_note": (
+    ),
+    DebianOfficialEvidenceSpec(
+        tool_id="clang-tidy",
+        evidence_source="Debian official package metadata for clang-tidy",
+        evidence_note=(
             "Verified against official Debian package metadata "
             "https://packages.debian.org/clang-tidy, versioned filelist "
             "metadata https://packages.debian.org/sid/i386/clang-tidy-19/filelist, "
@@ -366,11 +365,9 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
             "https://manpages.debian.org/trixie/clang-tidy/clang-tidy.1.en.html "
             "for the existing clang-tidy package/executable mapping."
         ),
-        "official_source_name": "Debian Package Search: clang-tidy",
-        "official_source_url": "https://packages.debian.org/clang-tidy",
-        "official_source_kind": "distro-package-index",
-        "verification_scope": "package-name-and-executable",
-        "verification_note": (
+        official_source_name="Debian Package Search: clang-tidy",
+        official_source_url="https://packages.debian.org/clang-tidy",
+        verification_note=(
             "Verified against official Debian package metadata "
             "https://packages.debian.org/clang-tidy, versioned filelist "
             "metadata https://packages.debian.org/sid/i386/clang-tidy-19/filelist, "
@@ -378,15 +375,11 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
             "https://manpages.debian.org/trixie/clang-tidy/clang-tidy.1.en.html: "
             "package name clang-tidy and executable clang-tidy."
         ),
-        "external_verification_required_for_new_mappings": False,
-        "release_blocking": False,
-        "blocker_reason": None,
-    },
-    ("deb", "cppcheck"): {
-        "evidence_source": "Debian official package metadata for cppcheck",
-        "evidence_source_type": "official-distro-metadata",
-        "evidence_status": "verified-official-source",
-        "evidence_note": (
+    ),
+    DebianOfficialEvidenceSpec(
+        tool_id="cppcheck",
+        evidence_source="Debian official package metadata for cppcheck",
+        evidence_note=(
             "Verified against official Debian package metadata "
             "https://packages.debian.org/cppcheck, filelist metadata "
             "https://packages.debian.org/sid/amd64/cppcheck/filelist, and "
@@ -394,11 +387,9 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
             "https://manpages.debian.org/unstable/cppcheck/cppcheck.1.en.html "
             "for the existing cppcheck package/executable mapping."
         ),
-        "official_source_name": "Debian Package Search: cppcheck",
-        "official_source_url": "https://packages.debian.org/cppcheck",
-        "official_source_kind": "distro-package-index",
-        "verification_scope": "package-name-and-executable",
-        "verification_note": (
+        official_source_name="Debian Package Search: cppcheck",
+        official_source_url="https://packages.debian.org/cppcheck",
+        verification_note=(
             "Verified against official Debian package metadata "
             "https://packages.debian.org/cppcheck, filelist metadata "
             "https://packages.debian.org/sid/amd64/cppcheck/filelist, and "
@@ -406,15 +397,11 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
             "https://manpages.debian.org/unstable/cppcheck/cppcheck.1.en.html: "
             "package name cppcheck and executable cppcheck."
         ),
-        "external_verification_required_for_new_mappings": False,
-        "release_blocking": False,
-        "blocker_reason": None,
-    },
-    ("deb", "clang-format"): {
-        "evidence_source": "Debian official package metadata for clang-format",
-        "evidence_source_type": "official-distro-metadata",
-        "evidence_status": "verified-official-source",
-        "evidence_note": (
+    ),
+    DebianOfficialEvidenceSpec(
+        tool_id="clang-format",
+        evidence_source="Debian official package metadata for clang-format",
+        evidence_note=(
             "Verified against official Debian package metadata "
             "https://packages.debian.org/clang-format and filelist metadata "
             "https://packages.debian.org/sid/amd64/clang-format/filelist, with "
@@ -422,11 +409,9 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
             "https://manpages.debian.org/testing/clang-format-15/clang-format-15.1 "
             "for the existing clang-format package/executable mapping."
         ),
-        "official_source_name": "Debian Package Search: clang-format",
-        "official_source_url": "https://packages.debian.org/clang-format",
-        "official_source_kind": "distro-package-index",
-        "verification_scope": "package-name-and-executable",
-        "verification_note": (
+        official_source_name="Debian Package Search: clang-format",
+        official_source_url="https://packages.debian.org/clang-format",
+        verification_note=(
             "Verified against official Debian package metadata "
             "https://packages.debian.org/clang-format and filelist metadata "
             "https://packages.debian.org/sid/amd64/clang-format/filelist, with "
@@ -434,15 +419,11 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
             "https://manpages.debian.org/testing/clang-format-15/clang-format-15.1: "
             "package name clang-format and executable clang-format."
         ),
-        "external_verification_required_for_new_mappings": False,
-        "release_blocking": False,
-        "blocker_reason": None,
-    },
-    ("deb", "checkstyle"): {
-        "evidence_source": "Debian official package metadata for checkstyle",
-        "evidence_source_type": "official-distro-metadata",
-        "evidence_status": "verified-official-source",
-        "evidence_note": (
+    ),
+    DebianOfficialEvidenceSpec(
+        tool_id="checkstyle",
+        evidence_source="Debian official package metadata for checkstyle",
+        evidence_note=(
             "Verified against official Debian package metadata "
             "https://packages.debian.org/checkstyle, source package metadata "
             "https://packages.debian.org/source/stable/checkstyle, tracker "
@@ -450,11 +431,9 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
             "metadata https://manpages.debian.org/testing/checkstyle/checkstyle.1.en.html "
             "for the existing checkstyle package/executable mapping."
         ),
-        "official_source_name": "Debian Package Search: checkstyle",
-        "official_source_url": "https://packages.debian.org/checkstyle",
-        "official_source_kind": "distro-package-index",
-        "verification_scope": "package-name-and-executable",
-        "verification_note": (
+        official_source_name="Debian Package Search: checkstyle",
+        official_source_url="https://packages.debian.org/checkstyle",
+        verification_note=(
             "Verified against official Debian package metadata "
             "https://packages.debian.org/checkstyle, source package metadata "
             "https://packages.debian.org/source/stable/checkstyle, tracker "
@@ -462,10 +441,33 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
             "metadata https://manpages.debian.org/testing/checkstyle/checkstyle.1.en.html: "
             "package name checkstyle and executable checkstyle."
         ),
+    ),
+)
+
+
+def _debian_official_evidence_entry(
+    spec: DebianOfficialEvidenceSpec,
+) -> dict[str, Any]:
+    """Build one official Debian evidence override without repeating constants."""
+    return {
+        "evidence_source": spec.evidence_source,
+        "evidence_source_type": "official-distro-metadata",
+        "evidence_status": "verified-official-source",
+        "evidence_note": spec.evidence_note,
+        "official_source_name": spec.official_source_name,
+        "official_source_url": spec.official_source_url,
+        "official_source_kind": "distro-package-index",
+        "verification_scope": "package-name-and-executable",
+        "verification_note": spec.verification_note,
         "external_verification_required_for_new_mappings": False,
         "release_blocking": False,
         "blocker_reason": None,
-    },
+    }
+
+
+OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
+    ("deb", spec.tool_id): _debian_official_evidence_entry(spec)
+    for spec in DEBIAN_OFFICIAL_EVIDENCE_SPECS
 }
 
 OS_PACKAGE_NAMES: dict[str, dict[str, tuple[str, ...]]] = {

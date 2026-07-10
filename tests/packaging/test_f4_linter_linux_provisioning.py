@@ -43,6 +43,15 @@ LINUX_ARTIFACT_IDS = (
     "nixos-package",
 )
 
+DEBIAN_OFFICIAL_EVIDENCE_KEYS = (
+    ("deb", "yamllint"),
+    ("deb", "shellcheck"),
+    ("deb", "clang-tidy"),
+    ("deb", "cppcheck"),
+    ("deb", "clang-format"),
+    ("deb", "checkstyle"),
+)
+
 
 @pytest.fixture
 def linux_helper(repo_root: Path) -> ModuleType:
@@ -269,17 +278,17 @@ def test_distro_evidence_scope_is_approved_package_mappings_only(
     ]
 
     assert {record.artifact_entry_id for record in matrix} == evidence_artifacts
-    assert [(record.artifact_entry_id, record.tool_id) for record in promoted] == [
-        ("deb", "yamllint"),
-        ("deb", "shellcheck"),
-        ("deb", "clang-tidy"),
-        ("deb", "cppcheck"),
-        ("deb", "clang-format"),
-        ("deb", "checkstyle"),
-    ]
-    assert all(
-        record.evidence_source_type == "official-distro-metadata" for record in promoted
+    assert [(record.artifact_entry_id, record.tool_id) for record in promoted] == list(
+        DEBIAN_OFFICIAL_EVIDENCE_KEYS
     )
+    for record in promoted:
+        assert record.evidence_record_id == (
+            f"official-distro-metadata:deb:{record.tool_id}"
+        )
+        assert record.evidence_source_type == "official-distro-metadata"
+        assert record.evidence_status == "verified-official-source"
+        assert record.official_source_kind == "distro-package-index"
+        assert record.verification_scope == "package-name-and-executable"
     assert all(
         record.evidence_status == "current-policy-baseline"
         for record in matrix
@@ -301,6 +310,15 @@ def test_distro_evidence_scope_is_approved_package_mappings_only(
             linux_helper.linux_distro_mapping_evidence_catalog_for_artifact(artifact_id)
             == ()
         )
+
+
+def test_debian_official_evidence_registry_is_exactly_expected(
+    linux_helper: ModuleType,
+) -> None:
+    registry_keys = tuple(linux_helper.OFFICIAL_DISTRO_EVIDENCE_BY_POLICY)
+
+    assert registry_keys == DEBIAN_OFFICIAL_EVIDENCE_KEYS
+    assert {artifact_id for artifact_id, _tool_id in registry_keys} == {"deb"}
 
 
 def test_every_full_required_tool_has_linux_policy_for_every_linux_artifact(
