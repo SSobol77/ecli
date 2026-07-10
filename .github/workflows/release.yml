@@ -466,8 +466,8 @@ jobs:
             releases/**/*.exe.sha256
           if-no-files-found: error
 
-  publish-pypi:
-    name: Publish to PyPI
+  validate-built-artifacts:
+    name: Validate built release artifacts
     runs-on: ubuntu-latest
     needs:
       - build-python
@@ -491,93 +491,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      - name: Report recovery PyPI policy
-        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_pypi != 'true' }}
-        run: |
-          echo "INFO: PyPI publish disabled for recovery run"
-
-      - name: Verify PyPI namespace ownership
-        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
-        run: |
-          set -e
-          name=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["name"])')
-          if [ "$name" != "ecli-editor" ]; then
-            echo "::error::pyproject.toml [project].name is '$name', expected 'ecli-editor'."
-            echo "::error::Reserved PyPI namespace is 'ecli-editor'. Either update pyproject.toml or reserve the new name first."
-            exit 1
-          fi
-          lookup=$(python3 -m pip index versions ecli-editor 2>&1 || true)
-          if ! echo "$lookup" | grep -q "Available versions"; then
-            echo "::error::PyPI project 'ecli-editor' lookup failed. Network issue or namespace deletion?"
-            echo "$lookup"
-            exit 1
-          fi
-          echo "::notice::PyPI namespace ecli-editor confirmed. Current versions:"
-          echo "$lookup"
-
-      - name: Download Python distributions
-        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
-        uses: actions/download-artifact@v4
-        with:
-          name: python-dist
-          path: dist
-
-      - name: Normalize and verify PyPI distributions
-        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
-        run: |
-          set -euo pipefail
-          echo "Downloaded Python distribution artifact layout:"
-          find dist -maxdepth 3 -type f -print | sort
-          mkdir -p dist-flat
-          find dist -maxdepth 3 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -exec cp {} dist-flat/ \;
-          rm -rf dist
-          mkdir -p dist
-          shopt -s nullglob
-          dists=(dist-flat/*)
-          if (( ${#dists[@]} == 0 )); then
-            echo "::error::No wheel or sdist files found in downloaded python-dist artifact."
-            exit 1
-          fi
-          mv "${dists[@]}" dist/
-          echo "Flattened PyPI distribution layout:"
-          find dist -maxdepth 1 -type f -print | sort
-          python3 -m pip install --upgrade twine
-          python3 -m twine check dist/*
-
-      - name: Publish to PyPI
-        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
-        # Pinned from pypa/gh-action-pypi-publish release/v1 on 2026-05-10.
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
-          attestations: false
-
-  publish-github-release:
-    name: Publish GitHub release
-    runs-on: ubuntu-latest
-    needs:
-      - build-python
-      - build-linux
-      - build-freebsd
-      - build-macos
-      - build-windows
-    if: |
-      always() &&
-      (github.event_name == 'push' || github.event.inputs.publish_github_release != 'false') &&
-      needs.build-python.result == 'success' &&
-      needs.build-linux.result == 'success' &&
-      needs.build-freebsd.result == 'success' &&
-      needs.build-macos.result == 'success' &&
-      needs.build-windows.result == 'success'
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
       - name: Read release metadata
         id: release_meta
         run: |
@@ -586,20 +499,27 @@ jobs:
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag=v${version}" >> "$GITHUB_OUTPUT"
 
+      - name: Install final artifact validation tooling
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cpio rpm
+          python3 -m pip install --upgrade twine
+
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
           path: release-inputs
           merge-multiple: true
 
-      - name: Assemble and verify exact 21 GitHub Release assets
+      - name: Assemble release assets and adjacent checksum evidence
         run: |
           set -euo pipefail
           shopt -s globstar nullglob
           version="${{ steps.release_meta.outputs.version }}"
           release_dir="releases/${version}"
           rm -rf "$release_dir"
-          mkdir -p "$release_dir/.checksums"
+          mkdir -p "$release_dir"
 
           copy_one() {
             local pattern="$1"
@@ -685,12 +605,163 @@ jobs:
 
           for asset in "$release_dir"/*; do
             test -f "$asset" || continue
-            (cd "$release_dir" && sha256sum "$(basename "$asset")" > ".checksums/$(basename "$asset").sha256")
+            (cd "$release_dir" && sha256sum "$(basename "$asset")" > "$(basename "$asset").sha256")
           done
 
+      - name: Validate final built artifacts
+        run: |
+          set -euo pipefail
+          make validate-built-artifacts MACOS_ASSERT_MODE=structural
+
+      - name: Stage checksum evidence and verify exact 21 GitHub Release assets
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          version="${{ steps.release_meta.outputs.version }}"
+          release_dir="releases/${version}"
+          mkdir -p "$release_dir/.checksums"
+          sidecars=( "$release_dir"/*.sha256 )
+          if (( ${#sidecars[@]} == 0 )); then
+            echo "::error::No checksum sidecars were generated for $release_dir"
+            exit 3
+          fi
+          for sidecar in "${sidecars[@]}"; do
+            mv "$sidecar" "$release_dir/.checksums/$(basename "$sidecar")"
+          done
           python3 scripts/verify_release_assets.py \
             --version "$version" \
             --f4-evidence-dir build/evidence/f4_linter_provisioning
+          find "$release_dir" -maxdepth 1 -type f -print | sort
+          find "$release_dir/.checksums" -maxdepth 1 -type f -print | sort
+
+      - name: Upload validated release directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: validated-release-assets
+          path: |
+            releases/${{ steps.release_meta.outputs.version }}/ecli_*
+            releases/${{ steps.release_meta.outputs.version }}/.checksums/*.sha256
+          include-hidden-files: true
+          if-no-files-found: error
+
+  publish-pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-latest
+    needs:
+      - validate-built-artifacts
+    if: |
+      always() &&
+      (github.event_name == 'push' || github.event.inputs.publish_pypi == 'true') &&
+      needs.validate-built-artifacts.result == 'success'
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Report recovery PyPI policy
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.publish_pypi != 'true' }}
+        run: |
+          echo "INFO: PyPI publish disabled for recovery run"
+
+      - name: Verify PyPI namespace ownership
+        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
+        run: |
+          set -e
+          name=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["name"])')
+          if [ "$name" != "ecli-editor" ]; then
+            echo "::error::pyproject.toml [project].name is '$name', expected 'ecli-editor'."
+            echo "::error::Reserved PyPI namespace is 'ecli-editor'. Either update pyproject.toml or reserve the new name first."
+            exit 1
+          fi
+          lookup=$(python3 -m pip index versions ecli-editor 2>&1 || true)
+          if ! echo "$lookup" | grep -q "Available versions"; then
+            echo "::error::PyPI project 'ecli-editor' lookup failed. Network issue or namespace deletion?"
+            echo "$lookup"
+            exit 1
+          fi
+          echo "::notice::PyPI namespace ecli-editor confirmed. Current versions:"
+          echo "$lookup"
+
+      - name: Download Python distributions
+        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: python-dist
+          path: dist
+
+      - name: Normalize and verify PyPI distributions
+        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
+        run: |
+          set -euo pipefail
+          echo "Downloaded Python distribution artifact layout:"
+          find dist -maxdepth 3 -type f -print | sort
+          mkdir -p dist-flat
+          find dist -maxdepth 3 -type f \( -name '*.whl' -o -name '*.tar.gz' \) -exec cp {} dist-flat/ \;
+          rm -rf dist
+          mkdir -p dist
+          shopt -s nullglob
+          dists=(dist-flat/*)
+          if (( ${#dists[@]} == 0 )); then
+            echo "::error::No wheel or sdist files found in downloaded python-dist artifact."
+            exit 1
+          fi
+          mv "${dists[@]}" dist/
+          echo "Flattened PyPI distribution layout:"
+          find dist -maxdepth 1 -type f -print | sort
+          python3 -m pip install --upgrade twine
+          python3 -m twine check dist/*
+
+      - name: Publish to PyPI
+        if: ${{ github.event_name == 'push' || github.event.inputs.publish_pypi == 'true' }}
+        # Pinned from pypa/gh-action-pypi-publish release/v1 on 2026-05-10.
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          attestations: false
+
+  publish-github-release:
+    name: Publish GitHub release
+    runs-on: ubuntu-latest
+    needs:
+      - validate-built-artifacts
+    if: |
+      always() &&
+      (github.event_name == 'push' || github.event.inputs.publish_github_release != 'false') &&
+      needs.validate-built-artifacts.result == 'success'
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Read release metadata
+        id: release_meta
+        run: |
+          set -euo pipefail
+          version="$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml","rb"))["project"]["version"])')"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${version}" >> "$GITHUB_OUTPUT"
+
+      - name: Download validated release directory
+        uses: actions/download-artifact@v4
+        with:
+          name: validated-release-assets
+          path: releases/${{ steps.release_meta.outputs.version }}
+
+      - name: Verify exact 21 GitHub Release assets before upload
+        run: |
+          set -euo pipefail
+          version="${{ steps.release_meta.outputs.version }}"
+          release_dir="releases/${version}"
+          python3 scripts/verify_release_assets.py \
+            --version "$version"
           find "$release_dir" -maxdepth 1 -type f -print | sort
           find "$release_dir/.checksums" -maxdepth 1 -type f -print | sort
 

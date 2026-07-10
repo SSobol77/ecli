@@ -22,17 +22,21 @@ See the LICENSE file in the project root for full license text.
 ## Process Stages
 
 1. Build platform artifacts
-2. Validate artifact contract and checksums
-3. Publish package artifacts
-4. Publish Python distribution (if enabled in workflow)
-5. Publish release notes and release assets
+2. Assemble current-version release artifacts with adjacent checksum evidence
+3. Run the built-artifact gate
+4. Stage checksum sidecars under `.checksums/` and verify the exact 21-asset set
+5. Publish package artifacts, release notes, and release assets
 
 ## Required Controls
 
 - Contract validation must happen before publish.
-- `make validate-gate2` is the required pre-publish validation gate.
+- `make validate-gate2` is the source and structural contract gate; it must not
+  inspect ignored historical release directories.
+- `make validate-built-artifacts` is the required built-artifact gate after the
+  current release directory is assembled with adjacent checksum sidecars and
+  before GitHub Release or PyPI publication can run.
 - `make validate-release-assets` is the exact 21 ECLI-owned GitHub Release asset
-  gate.
+  gate after checksum sidecars have been staged under `.checksums/`.
 - Missing required artifacts must block release.
 - Every official ECLI release uploads exactly 21 ECLI-owned physical GitHub
   Release assets, one per canonical matrix entry. Release publication is
@@ -103,6 +107,13 @@ artifact sets. When a complete wheel/sdist set and adjacent sidecars are present
 it delegates to `validate-pypi-contract`, which requires `twine` for strict PyPI
 wheel/sdist metadata validation. `twine` is declared only in release/development
 tooling dependencies, not in ECLI runtime dependencies.
+
+The canonical `Release` workflow runs `make validate-built-artifacts` in the
+`validate-built-artifacts` job after downloading all build outputs, assembling
+`releases/<version>/`, and generating adjacent `.sha256` sidecars. The workflow
+then moves those sidecars under `releases/<version>/.checksums/`, runs
+`scripts/verify_release_assets.py` for the final exact-21 contract, and only then
+allows GitHub Release or PyPI publication jobs to run.
 
 ## PyPI Namespace Pre-Reservation
 

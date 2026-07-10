@@ -1272,7 +1272,6 @@ validate-built-artifacts:
 	$(call validate_artifact_if_requested,$(FREEBSD_PKG_FILE),validate-freebsd-contract,FreeBSD)
 	$(call validate_artifact_if_requested,$(MACOS_PKG_FILE),validate-macos-contract,macOS)
 	$(call validate_artifact_if_requested,$(WIN_PKG_FILE),validate-windows-contract,Windows)
-	$(call validate_release_assets_if_present)
 	@echo "--> OK: built artifact validation completed"
 
 
