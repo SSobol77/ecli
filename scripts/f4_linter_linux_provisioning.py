@@ -1278,6 +1278,142 @@ def linux_distro_mapping_evidence_matrix(
     return tuple(records)
 
 
+def linux_official_distro_evidence_matrix() -> tuple[dict[str, Any], ...]:
+    """Return deterministic audit rows for configured official distro evidence."""
+    return tuple(
+        _official_distro_evidence_row(artifact_entry_id, tool_id, override)
+        for (
+            artifact_entry_id,
+            tool_id,
+        ), override in OFFICIAL_DISTRO_EVIDENCE_BY_POLICY.items()
+    )
+
+
+def _official_distro_evidence_row(
+    artifact_entry_id: str,
+    tool_id: str,
+    override: Mapping[str, Any],
+) -> dict[str, Any]:
+    source_artifact_id = _package_policy_artifact_id(artifact_entry_id)
+    return {
+        "artifact_entry_id": artifact_entry_id,
+        "tool_id": tool_id,
+        "expected_evidence_record_id": (
+            f"official-distro-metadata:{source_artifact_id}:{tool_id}"
+        ),
+        "evidence_source": override.get("evidence_source"),
+        "evidence_source_type": override.get("evidence_source_type"),
+        "evidence_status": override.get("evidence_status"),
+        "official_source_name": override.get("official_source_name"),
+        "official_source_url": override.get("official_source_url"),
+        "official_source_kind": override.get("official_source_kind"),
+        "verification_scope": override.get("verification_scope"),
+        "release_blocking": override.get("release_blocking"),
+        "external_verification_required_for_new_mappings": override.get(
+            "external_verification_required_for_new_mappings"
+        ),
+    }
+
+
+def linux_official_distro_evidence_summary() -> dict[str, Any]:
+    """Return deterministic counts for configured official distro evidence."""
+    rows = linux_official_distro_evidence_matrix()
+    return {
+        "official_override_count": len(rows),
+        "artifact_counts": _record_counts(row["artifact_entry_id"] for row in rows),
+        "evidence_status_counts": _record_counts(
+            row["evidence_status"] for row in rows
+        ),
+        "evidence_source_type_counts": _record_counts(
+            row["evidence_source_type"] for row in rows
+        ),
+        "official_source_kind_counts": _record_counts(
+            row["official_source_kind"] for row in rows
+        ),
+        "verification_scope_counts": _record_counts(
+            row["verification_scope"] for row in rows
+        ),
+        "release_blocking_count": sum(
+            1 for row in rows if row["release_blocking"] is True
+        ),
+        "non_debian_override_count": sum(
+            1 for row in rows if row["artifact_entry_id"] != "deb"
+        ),
+    }
+
+
+def linux_official_distro_evidence_drift_errors() -> list[str]:
+    """Return drift errors between official overrides and generated evidence."""
+    errors: list[str] = []
+    for row in linux_official_distro_evidence_matrix():
+        generated, missing_error = _generated_official_distro_evidence_record(row)
+        if missing_error is not None:
+            errors.append(missing_error)
+            continue
+        if generated is None:
+            continue
+        errors.extend(_official_distro_evidence_record_drift_errors(row, generated))
+    return errors
+
+
+def _generated_official_distro_evidence_record(
+    row: Mapping[str, Any],
+) -> tuple[LinuxDistroMappingEvidenceRecord | None, str | None]:
+    artifact_entry_id = str(row["artifact_entry_id"])
+    tool_id = str(row["tool_id"])
+    prefix = f"{artifact_entry_id}/{tool_id}"
+    try:
+        policies = linux_provisioning_policy_for_artifact(artifact_entry_id)
+    except (KeyError, ValueError):
+        return (
+            None,
+            f"{prefix}: official override for unknown artifact/tool policy",
+        )
+    matching_policy = next(
+        (policy for policy in policies if policy.tool_id == tool_id),
+        None,
+    )
+    if matching_policy is None or matching_policy.mechanism != "os-package-manager":
+        return (
+            None,
+            f"{prefix}: official override for unknown artifact/tool policy",
+        )
+
+    generated = linux_distro_mapping_evidence_for_policy(matching_policy)
+    if generated is None:
+        return (
+            None,
+            f"{prefix}: official override not reflected in generated distro evidence",
+        )
+    return generated, None
+
+
+def _official_distro_evidence_record_drift_errors(
+    row: Mapping[str, Any],
+    generated_record: Any,
+) -> list[str]:
+    data = _distro_evidence_record_mapping(generated_record)
+    prefix = f"{row['artifact_entry_id']}/{row['tool_id']}"
+    if data is None:
+        return [f"{prefix}: generated distro evidence is not an object"]
+
+    errors: list[str] = []
+    if data.get("evidence_record_id") != row.get("expected_evidence_record_id"):
+        errors.append(f"{prefix}: evidence_record_id mismatch")
+    for field in (
+        "evidence_source_type",
+        "evidence_status",
+        "official_source_kind",
+        "verification_scope",
+        "official_source_url",
+        "release_blocking",
+        "external_verification_required_for_new_mappings",
+    ):
+        if data.get(field) != row.get(field):
+            errors.append(f"{prefix}: {field} mismatch")
+    return errors
+
+
 def linux_distro_mapping_evidence_summary_for_artifact(
     artifact_entry_id: str,
     root: Path | None = None,

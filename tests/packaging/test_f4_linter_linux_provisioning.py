@@ -321,6 +321,72 @@ def test_debian_official_evidence_registry_is_exactly_expected(
     assert {artifact_id for artifact_id, _tool_id in registry_keys} == {"deb"}
 
 
+def test_official_distro_evidence_matrix_reports_debian_overrides(
+    linux_helper: ModuleType,
+) -> None:
+    rows = linux_helper.linux_official_distro_evidence_matrix()
+
+    assert len(rows) == 6
+    assert [(row["artifact_entry_id"], row["tool_id"]) for row in rows] == list(
+        DEBIAN_OFFICIAL_EVIDENCE_KEYS
+    )
+    for row in rows:
+        assert row["evidence_source_type"] == "official-distro-metadata"
+        assert row["evidence_status"] == "verified-official-source"
+        assert row["official_source_kind"] == "distro-package-index"
+        assert row["verification_scope"] == "package-name-and-executable"
+        assert row["expected_evidence_record_id"] == (
+            f"official-distro-metadata:deb:{row['tool_id']}"
+        )
+        assert row["release_blocking"] is False
+        assert row["external_verification_required_for_new_mappings"] is False
+
+
+def test_official_distro_evidence_summary_reports_current_counts(
+    linux_helper: ModuleType,
+) -> None:
+    summary = linux_helper.linux_official_distro_evidence_summary()
+
+    assert summary["official_override_count"] == 6
+    assert summary["artifact_counts"] == {"deb": 6}
+    assert summary["evidence_status_counts"] == {"verified-official-source": 6}
+    assert summary["evidence_source_type_counts"] == {
+        "official-distro-metadata": 6,
+    }
+    assert summary["official_source_kind_counts"] == {"distro-package-index": 6}
+    assert summary["verification_scope_counts"] == {
+        "package-name-and-executable": 6,
+    }
+    assert summary["release_blocking_count"] == 0
+    assert summary["non_debian_override_count"] == 0
+
+
+def test_official_distro_evidence_drift_errors_are_empty(
+    linux_helper: ModuleType,
+) -> None:
+    assert linux_helper.linux_official_distro_evidence_drift_errors() == []
+
+
+def test_official_distro_evidence_drift_comparison_rejects_mismatched_url(
+    linux_helper: ModuleType,
+) -> None:
+    row = linux_helper.linux_official_distro_evidence_matrix()[0]
+    generated = _evidence_record(
+        linux_helper.linux_distro_mapping_evidence_catalog_for_artifact("deb"),
+        "yamllint",
+    )._asdict()
+    generated["official_source_url"] = (
+        "https://packages.debian.org/source/stable/yamllint"
+    )
+
+    errors = linux_helper._official_distro_evidence_record_drift_errors(
+        row,
+        generated,
+    )
+
+    assert errors == ["deb/yamllint: official_source_url mismatch"]
+
+
 def test_every_full_required_tool_has_linux_policy_for_every_linux_artifact(
     linux_helper: ModuleType,
 ) -> None:
