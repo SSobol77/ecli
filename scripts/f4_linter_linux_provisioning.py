@@ -438,6 +438,34 @@ OFFICIAL_DISTRO_EVIDENCE_BY_POLICY: dict[tuple[str, str], dict[str, Any]] = {
         "release_blocking": False,
         "blocker_reason": None,
     },
+    ("deb", "checkstyle"): {
+        "evidence_source": "Debian official package metadata for checkstyle",
+        "evidence_source_type": "official-distro-metadata",
+        "evidence_status": "verified-official-source",
+        "evidence_note": (
+            "Verified against official Debian package metadata "
+            "https://packages.debian.org/checkstyle, source package metadata "
+            "https://packages.debian.org/source/stable/checkstyle, tracker "
+            "metadata https://tracker.debian.org/pkg/checkstyle, and manpage "
+            "metadata https://manpages.debian.org/testing/checkstyle/checkstyle.1.en.html "
+            "for the existing checkstyle package/executable mapping."
+        ),
+        "official_source_name": "Debian Package Search: checkstyle",
+        "official_source_url": "https://packages.debian.org/checkstyle",
+        "official_source_kind": "distro-package-index",
+        "verification_scope": "package-name-and-executable",
+        "verification_note": (
+            "Verified against official Debian package metadata "
+            "https://packages.debian.org/checkstyle, source package metadata "
+            "https://packages.debian.org/source/stable/checkstyle, tracker "
+            "metadata https://tracker.debian.org/pkg/checkstyle, and manpage "
+            "metadata https://manpages.debian.org/testing/checkstyle/checkstyle.1.en.html: "
+            "package name checkstyle and executable checkstyle."
+        ),
+        "external_verification_required_for_new_mappings": False,
+        "release_blocking": False,
+        "blocker_reason": None,
+    },
 }
 
 OS_PACKAGE_NAMES: dict[str, dict[str, tuple[str, ...]]] = {
