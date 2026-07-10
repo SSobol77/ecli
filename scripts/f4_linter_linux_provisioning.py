@@ -25,6 +25,7 @@ managers, shells, version probes, network requests, or upstream downloads.
 
 from __future__ import annotations
 
+import argparse
 import importlib
 import json
 import sys
@@ -122,6 +123,9 @@ LinuxDistroVerificationScope = Literal[
 
 LINUX_MANIFEST_SCHEMA_VERSION = 1
 LINUX_MANIFEST_FILENAME = "f4-linux-tools.json"
+EXIT_OK = 0
+EXIT_INVALID = 1
+EXIT_OFFICIAL_EVIDENCE_DRIFT = 2
 
 LINUX_PACKAGE_MANAGER_ARTIFACT_IDS: tuple[str, ...] = (
     "deb",
@@ -1354,6 +1358,17 @@ def linux_official_distro_evidence_drift_errors() -> list[str]:
             continue
         errors.extend(_official_distro_evidence_record_drift_errors(row, generated))
     return errors
+
+
+def linux_official_distro_evidence_audit_report() -> dict[str, Any]:
+    """Return a deterministic release-facing official evidence audit report."""
+    drift_errors = linux_official_distro_evidence_drift_errors()
+    return {
+        "summary": linux_official_distro_evidence_summary(),
+        "matrix": list(linux_official_distro_evidence_matrix()),
+        "drift_errors": drift_errors,
+        "ok": not drift_errors,
+    }
 
 
 def _generated_official_distro_evidence_record(
@@ -2780,3 +2795,59 @@ def _tool_path_errors(
     except (KeyError, TypeError, ValueError) as exc:
         errors.append(f"{prefix}: {exc}")
     return errors
+
+
+class _ContractArgumentParser(argparse.ArgumentParser):
+    def error(self, message: str) -> None:  # type: ignore[override]
+        self.print_usage(sys.stderr)
+        print(f"{self.prog}: error: {message}", file=sys.stderr)
+        raise SystemExit(EXIT_INVALID)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = _ContractArgumentParser(
+        prog="f4_linter_linux_provisioning.py",
+        description="Audit Linux F4 linter provisioning policy metadata.",
+    )
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument(
+        "--official-evidence-audit",
+        action="store_true",
+        help="print the official distro evidence audit report as JSON",
+    )
+    mode.add_argument(
+        "--check-official-evidence-drift",
+        action="store_true",
+        help="fail if official distro evidence drift is detected",
+    )
+    return parser
+
+
+def _official_evidence_drift_check_message(drift_errors: list[str]) -> str:
+    if not drift_errors:
+        return "PASS: Linux official distro evidence drift audit clean"
+    lines = ["FAIL: Linux official distro evidence drift detected"]
+    lines.extend(f"ERROR: {error}" for error in drift_errors)
+    return "\n".join(lines)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.official_evidence_audit:
+        print(
+            json.dumps(
+                linux_official_distro_evidence_audit_report(),
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return EXIT_OK
+
+    drift_errors = linux_official_distro_evidence_drift_errors()
+    message = _official_evidence_drift_check_message(drift_errors)
+    print(message, file=sys.stderr if drift_errors else sys.stdout)
+    return EXIT_OFFICIAL_EVIDENCE_DRIFT if drift_errors else EXIT_OK
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
