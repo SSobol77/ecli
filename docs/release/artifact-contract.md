@@ -418,6 +418,7 @@ scripts and release contract tests.
 | `scripts/check_log_invariant.py` | Read-only `git ls-files` log-location invariant |
 | `scripts/verify_artifact.py` | Structural SHA256 sidecar verifier; exit-code contract `0`-`5` preserved |
 | `scripts/verify_release_assets.py` | Read-only exact 21 ECLI-owned GitHub Release asset verifier; ignores `.checksums/` only when it is a directory |
+| `scripts/f4_linter_linux_provisioning.py` | Read-only Linux F4 provisioning manifest verifier and official distro evidence drift audit gate; `--check-official-evidence-drift` exits `2` on release-blocking drift |
 | `scripts/verify_runtime.py` | Cross-artifact launcher validation; exit codes (`0`/`2`/`3`/`4`/`5`/`6`) preserved |
 | `scripts/provision_f4_linters.py` | Provider-neutral F4 linter provisioning planner/evidence writer; dry-run by default, no network/upstream downloads unless explicitly allowed |
 | `scripts/verify_f4_linter_provisioning.py` | Read-only F4 linter provisioning evidence verifier for one artifact or all 21 canonical artifact entries |
