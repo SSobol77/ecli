@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from conftest import PathAssertion, RepoReader, TokenAssertion
@@ -108,6 +109,7 @@ WORKFLOW_CONTRACT = {
             "Build Python distributions",
             "Build Linux packages",
             "Build Windows artifacts",
+            "validate-built-artifacts",
             "verify_release_assets.py",
         ],
         "surface_docs": [
@@ -150,6 +152,76 @@ WORKFLOW_CONTRACT = {
         ],
     },
 }
+
+
+_JOB_HEADER_RE = re.compile(r"^  [A-Za-z0-9_-]+:\n", re.MULTILINE)
+
+
+def _job_block(workflow: str, job_name: str) -> str:
+    match = re.search(rf"^  {re.escape(job_name)}:\n", workflow, re.MULTILINE)
+    assert match is not None, f"job not found: {job_name}"
+    next_job = _JOB_HEADER_RE.search(workflow, match.end())
+    return (
+        workflow[match.start() :]
+        if next_job is None
+        else workflow[match.start() : next_job.start()]
+    )
+
+
+def _step_block(job: str, step_name: str) -> str:
+    start = job.index(f"- name: {step_name}")
+    next_step = job.find("\n      - name:", start + 1)
+    return job[start:] if next_step == -1 else job[start:next_step]
+
+
+def _job_if_condition(job: str) -> tuple[str, ...]:
+    match = re.search(r"^    if: \|\n(?P<body>(?:      .+\n)+)", job, re.MULTILINE)
+    assert match is not None
+    return tuple(line.removeprefix("      ") for line in match["body"].splitlines())
+
+
+_VALIDATE_BUILT_ARTIFACTS_IF = (
+    "always() &&",
+    "needs.build-python.result == 'success' &&",
+    "needs.build-linux.result == 'success' &&",
+    "needs.build-freebsd.result == 'success' &&",
+    "needs.build-macos.result == 'success' &&",
+    "needs.build-windows.result == 'success'",
+)
+
+_PUBLISH_PYPI_IF = (
+    "always() &&",
+    "(github.event_name == 'push' || github.event.inputs.publish_pypi == 'true') &&",
+    "needs.validate-built-artifacts.result == 'success'",
+)
+
+_PUBLISH_GITHUB_RELEASE_IF = (
+    "always() &&",
+    "(github.event_name == 'push' || github.event.inputs.publish_github_release != 'false') &&",
+    "needs.validate-built-artifacts.result == 'success'",
+)
+
+
+def _pypi_publication_allowed(
+    *,
+    event_name: str,
+    publish_pypi: str,
+    validation_result: str,
+) -> bool:
+    return validation_result == "success" and (
+        event_name == "push" or publish_pypi == "true"
+    )
+
+
+def _github_release_publication_allowed(
+    *,
+    event_name: str,
+    publish_github_release: str,
+    validation_result: str,
+) -> bool:
+    return validation_result == "success" and (
+        event_name == "push" or publish_github_release != "false"
+    )
 
 
 def test_declared_workflow_files_exist_and_are_non_empty(
@@ -327,9 +399,224 @@ def test_release_workflow_preserves_exact_21_asset_contract(
 
     # 6: the exact-21 release contract is unchanged -- the workflow still
     # assembles/verifies exactly 21 assets through the canonical verifier.
-    assert "Assemble and verify exact 21 GitHub Release assets" in release
+    assert "Stage checksum evidence and verify exact 21 GitHub Release assets" in (
+        release
+    )
+    assert "Verify exact 21 GitHub Release assets before upload" in release
     assert "exactly 21 physical GitHub Release" in release
     assert "verify_release_assets.py" in release
+
+
+def test_release_workflow_runs_built_artifact_gate_after_assembly(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+    validation_job = _job_block(release, "validate-built-artifacts")
+
+    download = validation_job.index("- name: Download all artifacts")
+    assembly = validation_job.index(
+        "- name: Assemble release assets and adjacent checksum evidence"
+    )
+    gate = validation_job.index("make validate-built-artifacts")
+    stage = validation_job.index(
+        "- name: Stage checksum evidence and verify exact 21 GitHub Release assets"
+    )
+
+    assert download < assembly < gate < stage
+    assert 'sha256sum "$(basename "$asset")" > "$(basename "$asset").sha256"' in (
+        validation_job
+    )
+    assert 'mv "$sidecar" "$release_dir/.checksums/$(basename "$sidecar")"' in (
+        validation_job
+    )
+
+
+def test_release_workflow_orders_publication_behind_built_artifact_gate(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+    pypi_job = _job_block(release, "publish-pypi")
+    github_job = _job_block(release, "publish-github-release")
+
+    assert "needs:\n      - validate-built-artifacts" in pypi_job
+    assert "needs.validate-built-artifacts.result == 'success'" in pypi_job
+    assert "needs:\n      - validate-built-artifacts" in github_job
+    assert "needs.validate-built-artifacts.result == 'success'" in github_job
+
+    verify = github_job.index(
+        "- name: Verify exact 21 GitHub Release assets before upload"
+    )
+    release_action = github_job.index("uses: softprops/action-gh-release@v2")
+    assert verify < release_action
+
+
+def test_release_workflow_publication_job_conditions_are_explicit(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+
+    assert (
+        _job_if_condition(_job_block(release, "validate-built-artifacts"))
+        == _VALIDATE_BUILT_ARTIFACTS_IF
+    )
+    assert _job_if_condition(_job_block(release, "publish-pypi")) == _PUBLISH_PYPI_IF
+    assert (
+        _job_if_condition(_job_block(release, "publish-github-release"))
+        == _PUBLISH_GITHUB_RELEASE_IF
+    )
+
+
+def test_release_workflow_publication_policy_matrix(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+    assert _job_if_condition(_job_block(release, "publish-pypi")) == _PUBLISH_PYPI_IF
+    assert (
+        _job_if_condition(_job_block(release, "publish-github-release"))
+        == _PUBLISH_GITHUB_RELEASE_IF
+    )
+
+    scenarios = (
+        (
+            "tag push",
+            "push",
+            "false",
+            "false",
+            True,
+            True,
+        ),
+        (
+            "workflow_dispatch publish_pypi=true",
+            "workflow_dispatch",
+            "true",
+            "false",
+            True,
+            False,
+        ),
+        (
+            "workflow_dispatch PyPI disabled, GitHub release enabled",
+            "workflow_dispatch",
+            "false",
+            "true",
+            False,
+            True,
+        ),
+        (
+            "workflow_dispatch both publication flags false",
+            "workflow_dispatch",
+            "false",
+            "false",
+            False,
+            False,
+        ),
+        (
+            "workflow_dispatch both publication flags true",
+            "workflow_dispatch",
+            "true",
+            "true",
+            True,
+            True,
+        ),
+    )
+
+    for (
+        case_name,
+        event_name,
+        publish_pypi,
+        publish_github_release,
+        expect_pypi,
+        expect_github_release,
+    ) in scenarios:
+        assert (
+            _pypi_publication_allowed(
+                event_name=event_name,
+                publish_pypi=publish_pypi,
+                validation_result="success",
+            )
+            is expect_pypi
+        ), case_name
+        assert (
+            _github_release_publication_allowed(
+                event_name=event_name,
+                publish_github_release=publish_github_release,
+                validation_result="success",
+            )
+            is expect_github_release
+        ), case_name
+
+
+def test_release_workflow_publication_jobs_require_validation_success(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+    pypi_job = _job_block(release, "publish-pypi")
+    github_job = _job_block(release, "publish-github-release")
+
+    assert "needs.validate-built-artifacts.result == 'success'" in pypi_job
+    assert "needs.validate-built-artifacts.result == 'success'" in github_job
+    assert not _pypi_publication_allowed(
+        event_name="push",
+        publish_pypi="true",
+        validation_result="failure",
+    )
+    assert not _github_release_publication_allowed(
+        event_name="push",
+        publish_github_release="true",
+        validation_result="failure",
+    )
+
+
+def test_built_artifact_gate_failure_is_not_masked(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+    validation_job = _job_block(release, "validate-built-artifacts")
+    gate_step = _step_block(validation_job, "Validate final built artifacts")
+
+    assert "make validate-built-artifacts" in gate_step
+    assert "set -euo pipefail" in gate_step
+    assert "|| true" not in gate_step
+    assert "continue-on-error" not in gate_step
+
+
+def test_source_only_ci_does_not_run_final_built_artifact_gate(
+    read_repo_text: RepoReader,
+) -> None:
+    for workflow_name in (
+        "ci.yml",
+        "pypi-validate.yml",
+        "windows-validate.yml",
+        "macos-validate.yml",
+    ):
+        workflow = read_repo_text(f".github/workflows/{workflow_name}")
+        assert "validate-built-artifacts" not in workflow
+
+
+def test_release_workflow_preserves_release_upload_asset_glob(
+    read_repo_text: RepoReader,
+) -> None:
+    release = read_repo_text(".github/workflows/release.yml")
+    github_job = _job_block(release, "publish-github-release")
+    release_step = _step_block(github_job, "Create or update GitHub Release")
+
+    assert "files: releases/${{ steps.release_meta.outputs.version }}/ecli_*" in (
+        release_step
+    )
+    assert "fail_on_unmatched_files: true" in release_step
+    assert ".sha256" not in release_step
+    assert "gh release upload" not in release
+    assert (
+        "path: |\n            releases/${{ steps.release_meta.outputs.version }}/ecli_*"
+        in (release)
+    )
+    assert "files: releases/${{ steps.release_meta.outputs.version }}/**" not in (
+        release
+    )
+    assert (
+        "path: |\n            releases/${{ steps.release_meta.outputs.version }}/**"
+        not in (release)
+    )
+    assert "releases/0.2.3" not in release
 
 
 def test_makefile_docker_package_targets_reset_release_ownership(

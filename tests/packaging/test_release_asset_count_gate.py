@@ -425,7 +425,9 @@ def test_validate_gate2_separates_source_and_built_artifact_checks(
 
     assert "$(call validate_pypi_artifacts_if_requested)" in built_artifacts
     assert "$(call validate_artifact_if_requested" in built_artifacts
-    assert "$(call validate_release_assets_if_present)" in built_artifacts
+    assert "$(call validate_release_assets_if_present)" not in built_artifacts
+    assert "validate-release-assets:" in makefile
+    assert 'if [ -d "$(RELEASE_DIR)" ]' in makefile
 
 
 def test_validate_gate2_requires_complete_artifact_sidecar_pairs(

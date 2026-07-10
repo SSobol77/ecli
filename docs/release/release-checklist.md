@@ -38,12 +38,18 @@ See the LICENSE file in the project root for full license text.
 - [ ] `make help`, `make help-full`, `make list-targets`, `make doctor`, and
       `make sysinfo` match current package surfaces and canonical Python
       scripts.
-- [ ] `make validate-gate2` passes before any publish step.
+- [ ] `make validate-gate2` passes as source and structural contract
+      validation; it does not inspect ignored historical release artifacts.
 - [ ] `make validate-official-evidence-drift` passes; this invokes
       `scripts/f4_linter_linux_provisioning.py --check-official-evidence-drift`
       and blocks release readiness if the Linux official distro evidence
       registry drifts from generated evidence.
-- [ ] `make validate-release-assets` passes against `releases/<version>/`.
+- [ ] The canonical `Release` workflow `validate-built-artifacts` job downloads
+      all build outputs, assembles `releases/<version>/`, generates adjacent
+      `.sha256` sidecars, runs `make validate-built-artifacts`, and is required
+      by both GitHub Release and PyPI publication jobs.
+- [ ] `make validate-release-assets` passes against `releases/<version>/` after
+      checksum sidecars are staged under `.checksums/`.
 - [ ] Required packaging scripts exist and are executable.
 - [ ] Active shell wrappers under `scripts/` are absent; Python entrypoints under
       `scripts/` are canonical. Windows PowerShell packaging
