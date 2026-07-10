@@ -160,6 +160,7 @@ help-full: help
 	@echo "  make validate-packaging       Packaging contract suite"
 	@echo "  make validate-release-contract Release/package matrix contract checks"
 	@echo "  make validate-release-assets  Exact 21 GitHub Release asset gate"
+	@echo "  make validate-official-evidence-drift"
 	@echo "  make validate-version-consistency"
 	@echo "  make validate-runtime-imports"
 	@echo "  make validate-pypi-contract"
@@ -1166,6 +1167,11 @@ validate-runtime-imports:
 	@$(PYTHON) scripts/check_runtime_imports.py
 	@echo "--> OK: production runtime imports"
 
+.PHONY: validate-official-evidence-drift
+validate-official-evidence-drift:
+	@$(UV) run python scripts/f4_linter_linux_provisioning.py --check-official-evidence-drift
+	@echo "--> OK: Linux official distro evidence drift gate"
+
 .PHONY: validate-pypi-contract
 validate-pypi-contract:
 	@test -f "$(PYPI_WHEEL_FILE)" || (echo "Missing $(PYPI_WHEEL_FILE)"; exit 2)
@@ -1209,7 +1215,7 @@ validate-windows-contract: package-windows-assert
 	@echo "--> OK: Windows contract"
 
 .PHONY: validate-gate2
-validate-gate2: validate-version-consistency validate-runtime-imports
+validate-gate2: validate-version-consistency validate-runtime-imports validate-official-evidence-drift
 	@if [ -f "$(PYPI_WHEEL_FILE)" ] || [ -f "$(PYPI_WHEEL_FILE).sha256" ] || [ -f "$(PYPI_SDIST_FILE)" ] || [ -f "$(PYPI_SDIST_FILE).sha256" ]; then \
 		$(MAKE) validate-pypi-contract; \
 	else \

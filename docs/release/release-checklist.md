@@ -39,6 +39,10 @@ See the LICENSE file in the project root for full license text.
       `make sysinfo` match current package surfaces and canonical Python
       scripts.
 - [ ] `make validate-gate2` passes before any publish step.
+- [ ] `make validate-official-evidence-drift` passes; this invokes
+      `scripts/f4_linter_linux_provisioning.py --check-official-evidence-drift`
+      and blocks release readiness if the Linux official distro evidence
+      registry drifts from generated evidence.
 - [ ] `make validate-release-assets` passes against `releases/<version>/`.
 - [ ] Required packaging scripts exist and are executable.
 - [ ] Active shell wrappers under `scripts/` are absent; Python entrypoints under
@@ -82,6 +86,11 @@ See the LICENSE file in the project root for full license text.
       21 deterministic `f4-linter-provisioning-<artifact-entry-id>.json`
       evidence files, and
       `scripts/verify_f4_linter_provisioning.py --all-artifacts` verifies them.
+- [ ] Linux official distro evidence drift audit remains clean:
+      `uv run python scripts/f4_linter_linux_provisioning.py --check-official-evidence-drift`
+      prints
+      `PASS: Linux official distro evidence drift audit clean` and exits `0`;
+      exit `2` is release-blocking drift.
 - [ ] F4 linter package-manager dependencies: package metadata asserts the
       dependency relationship and post-install executable availability for each
       required linter/toolchain dependency it delegates to the OS package

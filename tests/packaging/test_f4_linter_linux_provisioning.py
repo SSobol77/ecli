@@ -428,6 +428,101 @@ def test_official_distro_evidence_drift_check_cli_passes(
     assert result.stdout == "PASS: Linux official distro evidence drift audit clean\n"
 
 
+def test_validate_gate2_invokes_official_evidence_drift_gate(
+    read_repo_text: RepoReader,
+) -> None:
+    makefile = read_repo_text("Makefile")
+    target_start = makefile.index(".PHONY: validate-official-evidence-drift")
+    target_end = makefile.index(".PHONY: validate-pypi-contract")
+    target = makefile[target_start:target_end]
+
+    assert "validate-official-evidence-drift:" in target
+    assert (
+        "$(UV) run python scripts/f4_linter_linux_provisioning.py --check-official-evidence-drift"
+        in target
+    )
+    assert "provision_f4_linters.py" not in target
+    assert "build/evidence" not in target
+    assert "releases/" not in target
+    assert (
+        "validate-gate2: validate-version-consistency validate-runtime-imports validate-official-evidence-drift"
+        in makefile
+    )
+
+
+def test_make_official_evidence_drift_gate_passes_clean(
+    repo_root: Path,
+) -> None:
+    result = subprocess.run(
+        ["make", "validate-official-evidence-drift"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert "PASS: Linux official distro evidence drift audit clean" in result.stdout
+    assert "--> OK: Linux official distro evidence drift gate" in result.stdout
+
+
+def test_validate_gate2_propagates_official_evidence_drift_failure(
+    repo_root: Path,
+    tmp_path: Path,
+) -> None:
+    fake_python = tmp_path / "python-ok"
+    fake_python.write_text(
+        "#!/usr/bin/env python3\nimport sys\nsys.exit(0)\n",
+        encoding="utf-8",
+    )
+    fake_python.chmod(0o755)
+    uv_log = tmp_path / "uv-args.txt"
+    fake_uv = tmp_path / "uv-fail"
+    fake_uv.write_text(
+        "#!/usr/bin/env python3\n"
+        "import pathlib\n"
+        "import sys\n"
+        f"pathlib.Path({str(uv_log)!r}).write_text(' '.join(sys.argv[1:]), encoding='utf-8')\n"
+        "print('FAIL: Linux official distro evidence drift detected')\n"
+        "sys.exit(2)\n",
+        encoding="utf-8",
+    )
+    fake_uv.chmod(0o755)
+
+    result = subprocess.run(
+        [
+            "make",
+            "validate-gate2",
+            f"PYTHON={fake_python}",
+            f"UV={fake_uv}",
+        ],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert uv_log.read_text(encoding="utf-8") == (
+        "run python scripts/f4_linter_linux_provisioning.py "
+        "--check-official-evidence-drift"
+    )
+    assert "FAIL: Linux official distro evidence drift detected" in result.stdout
+
+
+def test_release_docs_reference_official_evidence_drift_gate(
+    read_repo_text: RepoReader,
+) -> None:
+    for path in (
+        "docs/release/release-checklist.md",
+        "docs/release/artifact-contract.md",
+        "docs/release/packaging-flows.md",
+    ):
+        text = read_repo_text(path)
+        assert "--check-official-evidence-drift" in text
+        assert "release" in text.lower()
+
+
 def test_official_distro_evidence_drift_comparison_rejects_mismatched_url(
     linux_helper: ModuleType,
 ) -> None:

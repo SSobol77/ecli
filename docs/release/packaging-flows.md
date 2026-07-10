@@ -70,6 +70,13 @@ package-manager or bundle installation remains the responsibility of each
 artifact-specific flow and must stay non-interactive for CI and unattended
 package-manager installs.
 
+Linux official distro evidence is release-gated by
+`make validate-official-evidence-drift`, which calls
+`uv run python scripts/f4_linter_linux_provisioning.py --check-official-evidence-drift`.
+The command is read-only: it does not write evidence files, download tools, or
+invoke package managers. Exit `0` means the official evidence registry matches
+generated distro evidence; exit `2` is release-blocking drift.
+
 ## Mandatory GitHub Release Assets
 
 ```text
