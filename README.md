@@ -51,9 +51,9 @@ See the LICENSE file in the project root for full license text.
 
 ## 🚀 About ECLI
 
-**ECLI** (Editor CLI) is a terminal-first engineering operations workbench. It combines a curses-based editor with right-side workflow panels and a typed service foundation for configuration, project discovery, command-plan previews,policy checks, audit logging, privileged-action refusal paths, and read-only system diagnostics.
+**ECLI** (Editor CLI) is a terminal-first engineering operations workbench. It combines a curses-based editor with right-side workflow panels and a typed service foundation for configuration, project discovery, command-plan previews, policy checks, audit logging, privileged-action refusal paths, and read-only system diagnostics.
 
-The v0.2.3 release is a Panel Console Stabilization layer on top of the Services Foundation. It keeps the Services Foundation editor behavior intact, rejects full PTY terminal emulation for ECLI 0.2.x, and replaces the fragile F11 terminal experiment with an ECLI-owned PySH Console Panel. PySH is used as a command execution backend only; this release does not execute remediation, apply command plans, launch VMLab runtimes, add QEMU/QMP runtime scope, migrate PySH source, or perform real privileged operations.
+The v0.2.4 release layers the Extensions Foundation, extension-backed TextMate rendering, the F4 Diagnostics/Linter architecture, and release gate hardening on top of the Services Foundation and v0.2.3 Panel Console Stabilization work. It keeps the existing editor and service-panel safety model intact while adding curated extension assets, deterministic syntax/theme adapters, F4 linter provisioning contracts, Linux official evidence drift checks, and separated release validation gates.
 
 ### ✨ Key Features
 
@@ -491,7 +491,7 @@ Master ECLI with these essential keyboard shortcuts. Press `F1` anytime inside t
 | `Insert` | Toggle Insert / Overwrite mode |
 | `F12` | Switch focus between editor and panels |
 
-The right side of the editor hosts workflow panels. The v0.2.3 panel-console stabilization keeps service panels read-only or preview-only: System Doctor does not mutate host state, Command Plan previews do not execute, the Services panel reports composition status, F11 opens or focuses the PySH Console Panel, and F12 switches focus between the editor and panels.
+The right side of the editor hosts workflow panels. The v0.2.4 release keeps service panels read-only or preview-only: System Doctor does not mutate host state, Command Plan previews do not execute, the Services panel reports composition status, F4 opens the Diagnostics/Linter panel, F11 opens or focuses the PySH Console Panel, and F12 switches focus between the editor and panels.
 
 ### Minimal Service CLI
 
@@ -572,11 +572,21 @@ Complete documentation is organized by audience:
 
 ## 🏗️ Architecture
 
-ECLI v0.2.3 keeps the existing editor/TUI behavior and Services Foundation infrastructure, then adds Panel Console Stabilization for the ECLI-owned PySH Console Panel:
+ECLI v0.2.4 keeps the existing editor/TUI behavior, Services Foundation infrastructure, and Panel Console Stabilization baseline, then adds the Extensions Foundation, TextMate-backed syntax rendering, and F4 Diagnostics/Linter architecture:
 
 * **Core Editor**: curses-based terminal editor with async task integration
 
 * **Right-Side Panels**: Help, Diagnostics/Lint, AI Code Assistant, System Doctor, Git, File Manager, Services, and Command Plan previews
+
+* **Extensions Layer**: curated data-only language and theme assets under `src/ecli/extensions/`, consumed through deterministic ECLI adapter code
+
+* **Syntax Service**: extension-backed language detection, TextMate grammar catalog lookup, scope rendering, and multiline comment/string protection
+
+* **Theme Registry**: extension-backed theme registry and bridge with numbered theme selection and migration compatibility
+
+* **F4 Diagnostics/Linter**: normalized diagnostics service, provider registry, Ruff reference provider, and linter microservice metadata under `src/ecli/extensions/linters/`
+
+* **F4 Provisioning Contracts**: OS/artifact-aware linter provisioning evidence gates, Linux official distro evidence, and exact 21-artifact coverage for release readiness
 
 * **PySH Console Panel**: F11 opens or focuses an ECLI-owned command console panel backed by PySH subprocess execution
 
@@ -596,7 +606,7 @@ ECLI v0.2.3 keeps the existing editor/TUI behavior and Services Foundation infra
 
 * **ServiceRegistry**: explicit composition root without global service-locator state
 
-**Safety boundaries for v0.2.3:**
+**Safety boundaries for v0.2.4:**
 
 * SystemDoctor is read-only.
 
@@ -606,11 +616,15 @@ ECLI v0.2.3 keeps the existing editor/TUI behavior and Services Foundation infra
 
 * Service panels are visible in the UI but do not execute remediation.
 
+* Imported extension assets are data-only; ECLI does not execute VS Code extension runtime code.
+
+* F4 provisioning evidence gates are release/packaging contracts and do not change F4 panel UI behavior.
+
 * Full PTY terminal emulation, VT parsing, xterm behavior, and raw interactive PySH inside curses are not included.
 
 * PySH is used as a command execution backend only; PySH source migration and monorepo conversion are not included.
 
-* VMLab runtime behavior, QEMU runtime scope, and QMP runtime scope are not included in v0.2.3.
+* VMLab runtime behavior, QEMU runtime scope, and QMP runtime scope are not included in v0.2.4.
 
 For detailed architecture information, see [Architecture Overview](https://github.com/SSobol77/ecli/blob/main/docs/architecture/current-architecture.md).
 
