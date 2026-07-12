@@ -177,6 +177,21 @@ Exact artifact names include the version and architecture.
 
 ### Debian / Ubuntu
 
+On Debian 13 (Trixie) amd64, the recommended full sequence is two stages:
+first provision the 19-tool F4 linter toolchain with the dedicated
+installer, then install the ECLI package (see `docs/install/debian.md`):
+
+```bash
+sudo python3 scripts/install_ecli_linters.py
+sudo apt install ./releases/0.2.4/ecli_0.2.4_linux_x86_64.deb
+```
+
+The `.deb` installs ECLI itself and its direct runtime dependencies only;
+it does not bundle or download linters. ECLI discovers installed linter
+executables through `PATH`, and F4 diagnostics list any missing tools.
+
+Installing only the package also works:
+
 ```bash
 sudo apt install ./ecli_<version>_linux_x86_64.deb
 ecli

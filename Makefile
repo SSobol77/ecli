@@ -720,63 +720,24 @@ release-appimage: _confirm-release-action
 	$(call block_partial_release)
 
 
-# Optional Linux Snap package surface.
-# Use:
-# Build a Snap package
-#  `make package-snap`            # Build snap (requires snapcraft)
-#
-# Verify produced artifacts
-#  `make show-snap-artifacts`
-#
-# Publish to Snap Store (requires authentication)
-#  `make release-snap`
-#
-# Note: Snap building requires snapcraft tool and assumes snapcraft.yaml exists
+# Legacy Linux Snap package surface: HARD-DISABLED.
+# Snap is not part of the canonical 21-artifact release contract
+# (docs/release/artifact-contract.md). The legacy targets are kept only as
+# explicit refusal stubs so stale automation fails fast instead of silently
+# producing a 22nd artifact. There is no snapcraft.yaml in this repository.
 # ---------------------------
 
-SNAP_VERSION  ?= $(PACKAGE_VERSION)
-SNAP_PKG_DIR  ?= $(RELEASE_DIR)
-SNAP_FILE     ?= $(SNAP_PKG_DIR)/ecli_$(SNAP_VERSION)_linux_$(LINUX_ARCH).snap
-SNAP_SHA_FILE ?= $(SNAP_FILE).sha256
+define snap_targets_disabled
+	@echo "ERROR: Snap targets are disabled." ; \
+	echo "Snap is not part of the canonical 21-artifact release contract" ; \
+	echo "(docs/release/artifact-contract.md). No Snap artifact may be" ; \
+	echo "built, verified, or published from this repository." ; \
+	exit 1
+endef
 
-.PHONY: package-snap
-package-snap: clean validate-runtime-imports
-	@command -v snapcraft >/dev/null 2>&1 || (echo "snapcraft not found. Install: sudo snap install snapcraft --classic"; exit 1)
-	@test -f snapcraft.yaml || (echo "snapcraft.yaml not found in project root"; exit 1)
-	@echo "--> Building Snap..."
-	snapcraft
-	@mkdir -p $(RELEASE_DIR)
-	@set -- *.snap; \
-	if [ "$$1" = "*.snap" ]; then \
-		echo "Snap build did not produce a .snap artifact"; \
-		exit 1; \
-	fi; \
-	if [ "$$#" -ne 1 ]; then \
-		echo "Expected exactly one .snap artifact, found $$#"; \
-		printf '%s\n' "$$@"; \
-		exit 1; \
-	fi; \
-	mv "$$1" "$(SNAP_FILE)"
-	@cd "$(SNAP_PKG_DIR)" && sha256sum "$$(basename "$(SNAP_FILE)")" > "$$(basename "$(SNAP_SHA_FILE)")"
-	$(MAKE) package-snap-assert
-
-.PHONY: package-snap-assert
-package-snap-assert:
-	$(call assert_current_release_file,$(SNAP_FILE))
-	$(call verify_sha256,$(SNAP_FILE))
-	@echo "--> OK: $(SNAP_FILE)"
-	@echo "--> OK: $(SNAP_SHA_FILE)"
-
-.PHONY: show-snap-artifacts
-show-snap-artifacts:
-	@echo "Version: $(SNAP_VERSION)"
-	@ls -lh $(RELEASE_DIR)/*.snap 2>/dev/null || echo "(no snap artifacts yet)"
-
-.PHONY: release-snap
-release-snap: package-snap-assert
-	@echo "--> Publishing to Snap Store (requires authentication)..."
-	@echo "    Run: snapcraft login"
-	@echo "    Then: snapcraft upload --release=stable $(RELEASE_DIR)/ecli_*.snap"
+.PHONY: package-snap package-snap-assert show-snap-artifacts release-snap
+package-snap package-snap-assert show-snap-artifacts release-snap:
+	$(call snap_targets_disabled)
 
 
 # Linux archive package surface.

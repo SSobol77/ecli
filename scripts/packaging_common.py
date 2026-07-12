@@ -56,9 +56,9 @@ def install_file(src: Path, dst: Path, mode: int) -> None:
     dst.chmod(mode)
 
 
-def gzip_file(path: Path, level: int = 9) -> Path:
+def gzip_file(path: Path, level: int = 9, mtime: int = 0) -> Path:
     gz = path.with_name(path.name + ".gz")
-    gz.write_bytes(gzip.compress(path.read_bytes(), compresslevel=level, mtime=0))
+    gz.write_bytes(gzip.compress(path.read_bytes(), compresslevel=level, mtime=mtime))
     path.unlink()
     return gz
 

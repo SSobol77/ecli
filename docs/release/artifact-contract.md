@@ -269,7 +269,6 @@ Current builder output forms before release normalization:
 - Slackware package: `ecli_<version>_slackware_<arch>.txz`
 - AppImage: `ecli_<version>_linux_<arch>.AppImage`
 - Linux tarball: `ecli_<version>_linux_<arch>.tar.gz`
-- Snap: `ecli_<version>_linux_<arch>.snap`
 - FreeBSD: `ecli_<version>_freebsd_<arch>.pkg`
 - Windows portable EXE: `ecli_<version>_win_<arch>.exe`
 - Windows NSIS installer EXE: `ecli_<version>_win_<arch>_setup.exe`

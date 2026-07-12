@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     ca-certificates \
     curl \
+    dpkg-dev \
     file \
     g++ \
     gcc \
@@ -39,6 +40,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libncursesw6 \
     libtinfo6 \
     libyaml-dev \
+    lintian \
     make \
     ncurses-bin \
     ncurses-term \

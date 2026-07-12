@@ -996,7 +996,11 @@ Every entry must be tested according to the existing release contract. Do not de
 
 Different artifact types may deliver linters differently, but every Full installer/provisioner path must first detect the OS/artifact context, then check for already-installed required tools before installing or bundling missing tools:
 
-- Debian/Ubuntu `.deb`: package dependencies or bundled tools.
+- Debian/Ubuntu `.deb`: two-stage model on Debian 13 — the standalone
+  linter installer (`scripts/install_ecli_linters.py`) provisions the
+  19-tool toolchain into `/opt/ecli/payload` first; the `.deb` installs
+  only ECLI itself and discovers tools through `PATH`
+  (see `docs/install/debian.md`).
 - RPM/openSUSE: package dependencies or bundled tools.
 - Arch: `depends`/`makedepends` or bundled tools.
 - Slackware: bundled tools or documented package metadata.
