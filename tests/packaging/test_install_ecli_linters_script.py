@@ -1322,8 +1322,21 @@ class TestVersionProbes:
         result = MOD.probe_tool(MOD.TOOLS_BY_NUMBER[13], {}, LogStub())
         assert result.status == "OK"
 
-    def test_probe_fails_for_missing_executable(self, probe_env):
+    def test_probe_fails_for_missing_executable(
+        self,
+        probe_env,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """The missing-tool probe must not inherit host-installed executables."""
+        monkeypatch.setattr(MOD, "PROBE_PATH", str(probe_env))
+        monkeypatch.setattr(
+            MOD,
+            "APPROVED_PATH_PREFIXES",
+            (f"{probe_env}/",),
+        )
+
         result = MOD.probe_tool(MOD.TOOLS_BY_NUMBER[5], {}, LogStub())
+
         assert result.status == "FAILED"
         assert "not found" in result.detail
 
