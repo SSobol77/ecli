@@ -16,6 +16,8 @@
 
 set -e
 
+# Idempotent, offline, APT-free. Never touches user configuration and
+# never modifies the linter payload under /opt/ecli/payload.
 if [ "$1" = "configure" ]; then
     echo "----------------------------------------------------------------------"
     echo "ECLI has been successfully installed."
@@ -26,6 +28,21 @@ if [ "$1" = "configure" ]; then
     echo
     echo "Please edit the '.env' file in that directory to add your API keys"
     echo "for AI features."
+    echo
+    # The F4 linter toolchain is provisioned separately (stage 1) by the
+    # standalone ECLI linter installer bundle. This machine may never have
+    # a repository checkout, so this message must never assume one is
+    # present -- see docs/install/debian.md for how to obtain the bundle.
+    # Its absence is not an error and must never fail this package's
+    # installation.
+    if [ -d /opt/ecli/payload/bin ]; then
+        echo "F4 linter payload detected at /opt/ecli/payload/bin."
+    else
+        echo "Note: the optional F4 linter toolchain is not installed."
+        echo "To provision it, obtain and run the ECLI linter installer:"
+        echo "  https://ecli.io  (see 'Linter installer' / docs/install/debian.md)"
+        echo "ECLI works without it; F4 diagnostics list any missing tools."
+    fi
     echo "----------------------------------------------------------------------"
 fi
 

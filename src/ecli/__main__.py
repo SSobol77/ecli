@@ -93,6 +93,7 @@ def _print_help() -> None:
         "Options:\n"
         "  -h, --help       Show this help and exit.\n"
         "  --version        Show version and exit.\n"
+        "  --f4-check       Verify F4 linter toolchain detection and exit.\n"
         "  --services       Print ServiceRegistry service status.\n"
         "  --doctor         Run read-only SystemDoctor diagnostics.\n"
         "  --plan-preview   Print a draft CommandPlan preview.\n"
@@ -113,6 +114,13 @@ try:
     if sys.argv[1:] == ["--version"]:
         _print_version()
         sys.exit(0)
+    if sys.argv[1:] == ["--f4-check"]:
+        # Headless F4 toolchain verification (no curses): proves inside the
+        # installed ECLI runtime that the provider layer initializes and
+        # all 19 tools resolve from approved managed/system paths.
+        from ecli.extensions.linters.core.toolchain_check import f4_check_main
+
+        sys.exit(f4_check_main())
 
     from ecli.cli import is_service_cli, run_service_cli
 

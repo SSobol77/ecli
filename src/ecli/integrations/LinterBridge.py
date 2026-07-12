@@ -45,6 +45,7 @@ from ecli.extensions.linters.cargo_clippy.provider import CargoClippyDiagnosticP
 from ecli.extensions.linters.clang_tidy.provider import ClangTidyDiagnosticProvider
 from ecli.extensions.linters.core.models import DiagnosticsSnapshot
 from ecli.extensions.linters.core.service import DiagnosticsService, initial_snapshot
+from ecli.extensions.linters.core.toolchain_check import log_toolchain_availability
 from ecli.extensions.linters.cppcheck.provider import CppcheckDiagnosticProvider
 from ecli.extensions.linters.hadolint.provider import HadolintDiagnosticProvider
 from ecli.extensions.linters.java_checkstyle.provider import (
@@ -125,6 +126,10 @@ class LinterBridge:
             except ImportError as e:
                 logging.error("Found 'lint_devops' but failed to import it: %s", e)
                 self.HAS_DEVOPS_LINTERS = False
+
+        # Startup F4 toolchain availability report: lists missing linter
+        # executables in the log instead of crashing (non-fatal by contract).
+        log_toolchain_availability(logger)
 
     def request_diagnostics_refresh(self, scope: str = "buffer") -> bool:
         """Schedule a bounded background diagnostics refresh."""

@@ -88,6 +88,13 @@ Chocolatey IDs are to be verified in packaging implementation.
 
 ## Debian / Ubuntu
 
+On Debian 13 amd64 the supported path is the official interactive
+installer, `sudo python3 scripts/install_ecli_linters.py`, which
+provisions all 19 tools from the committed lock
+`packaging/debian/ecli-linter-lock.json` into `/opt/ecli/payload`
+(see `docs/install/debian.md`). The manual strategies below remain valid
+for developer checkouts and custom environments.
+
 Debian 13 testing used a valid mixed user-space strategy: Ruff already in the
 venv; npm custom prefix under `~/.local/share/ecli-linters/npm-global` for
 Biome and markdownlint-cli2; dedicated venvs for yamllint and Python-delivered

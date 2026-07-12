@@ -1,0 +1,10 @@
+{
+  "name": "ecli-markdownlint-cli2-payload",
+  "version": "0.2.4",
+  "private": true,
+  "description": "Pinned markdownlint-cli2 payload for the ECLI Debian 13 linter installer. Installed into /opt/ecli/payload/packages/nodejs with 'npm ci --omit=dev' using the committed package-lock.json. markdownlint-cli2 0.22.1 is the newest release supporting Node.js >=20 (Debian 13 ships nodejs 20.19.x).",
+  "license": "GPL-2.0-only",
+  "dependencies": {
+    "markdownlint-cli2": "0.22.1"
+  }
+}
